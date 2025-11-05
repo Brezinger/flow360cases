@@ -1,0 +1,257 @@
+# GBT design
+
+DESPMTR elevDefl 0
+DESPMTR fuseRadius 45
+
+
+#-----------------------
+# 1) sketch of main body
+#-----------------------
+skbeg  0        0       0
+sslope 0        1       0
+spline 4        14.5    0
+spline 12.82    27.06   0
+spline 24.72    36.77   0
+spline 38.79    42.9    0
+spline 54       fuseRadius      0
+sslope 1  0  0
+linseg 623      fuseRadius      0
+linseg 623      45.53   0
+linseg 628.5    46.50   0
+linseg 672      46.50   0
+linseg 680.51   44.89   0
+linseg 707.51   44.89   0
+linseg 756.51   38.78   0
+linseg 756.51   0       0
+linseg 0        0       0
+skend
+
+REVOLVE 0 0 0 1 0 0 360
+
+attribute faceName $mainBody
+
+# imprint for antenna
+BOX 291 44 -7.5 100 10 15
+attribute faceName $mainBody
+STORE $cutbox_antenna 0 1
+SUBTRACT
+
+
+RESTORE $cutbox_antenna
+MIRROR 0 1 0
+SUBTRACT
+
+attribute faceName $mainBody
+
+SELECT EDGE 756 757 -40 40 -40 40
+ATTRIBUTE edgeName $trailingEdge
+
+STORE $main_body
+
+#-------------------------
+# 2) tail fin base element
+#-------------------------
+skbeg 0 0 0 
+cirarc 0.289 1.282 0 1.101 2.316 0
+cirarc 7.618 5.980 0 14.985 7.250 0
+linseg 48.485 7.250 0
+cirarc 51.759 7.051 0 54.985 6.456 0
+linseg 54.985 0 0
+linseg 0 0 0
+skend
+STORE $base_sketch_top_right 0 1
+
+mirror 0 1 0
+REORDER 0 1
+RESTORE $base_sketch_top_right
+UNION
+
+STORE $base_sketch_top
+
+skbeg 0 0 0 
+cirarc 0.289 1.282 0 1.101 2.316 0
+cirarc 7.618 5.980 0 14.985 7.250 0
+linseg 57.58 7.250 0
+linseg 57.585 7.250 0
+linseg 57.585 0 0
+linseg 0 0 0
+skend
+STORE $base_sketch_bot_right
+
+# make right part
+RESTORE $base_sketch_bot_right
+TRANSLATE 0 0 17.21
+RESTORE $base_sketch_top_right
+TRANSLATE 0 0 63.75
+RULE
+attribute faceName $tailFin
+STORE $base_element_right
+
+# make left part
+RESTORE $base_sketch_bot_right
+mirror 0 1 0
+REORDER 0 1
+TRANSLATE 0 0 17.21
+RESTORE $base_sketch_top_right
+mirror 0 1 0
+REORDER 0 1
+TRANSLATE 0 0 63.75
+RULE
+attribute faceName $tailFin
+STORE $base_element_left 0 1
+
+RESTORE $base_element_right
+UNION
+
+SELECT EDGE 56.285 6.853 40.48
+ATTRIBUTE edgeName $trailingEdge
+SELECT EDGE 56.285 -6.853 40.48
+ATTRIBUTE edgeName $trailingEdge
+SELECT EDGE 0 0 30
+ATTRIBUTE edgeName $leadingEdge
+
+STORE $base_element
+
+# -----------
+# 3) tail fin
+# -----------
+UDPRIM NACA thickness 0.12 camber 0.00
+SCALE 55.733
+BOX 55 -1 -1 2 2 2
+SUBTRACT
+STORE $tailFoil 0 1
+TRANSLATE 0 0 63.75
+
+RESTORE $tailFoil
+TRANSLATE 0 0 124.25
+RULE
+
+# attribution
+attribute faceName $tailFin
+
+SELECT EDGE 0 0 100
+ATTRIBUTE edgeName $leadingEdge
+
+SELECT EDGE 55 0.01 100
+ATTRIBUTE edgeName $trailingEdge
+
+SELECT EDGE 55 -0.01 100
+ATTRIBUTE edgeName $trailingEdge
+
+
+STORE $fin
+
+# --------------------------------
+# 4) deflect tail fin and assemble
+# --------------------------------
+RESTORE $main_body
+PATBEG i 4
+   RESTORE $base_element
+   RESTORE $fin
+   TRANSLATE -11.55 0 0
+   ROTATEZ elevDefl*2*(1/2-mod(floor(i/2),2)) 0 0
+   TRANSLATE 11.55 0 0
+   UNION
+   TRANSLATE 690.5 0 0
+   ROTATEX -45+(i-1)*90 0 0
+   UNION
+PATEND
+STORE $gbt
+
+
+
+
+# ---------------
+# 5) make antenna
+# ---------------
+# antenna base
+BOX 0 0 -7.5 76.50 6.1 15
+attribute faceName $antenna
+# chamfer
+BOX 0 0 -7.5 -10 -10 15
+ROTATEZ 45 0 0
+TRANSLATE 0 4 0
+SUBTRACT
+attribute faceName $antenna
+STORE $antenna_base
+# antenna "wing"
+#--- skbeg 0 0 0
+#---    sslope 0 0 0.1
+#---    spline 0.062 0 0.156
+#---    spline 0.194 0 0.252
+#---    cirarc 13.654 0 3.175 27.114 0 0.252
+#---    spline 27.209 0 0.193
+#---    spline 27.280 0 0.108
+#---    spline 27.309 0 0
+#---    sslope 0 0 -0.1
+#--- skend
+skbeg -0.346 0 0
+   cirarc 13.654 0 3.175 27.654 0 0.
+skend
+STORE $antenna_profile 0 1
+mirror 0 0 1
+RESTORE $antenna_profile
+JOIN
+STORE $antenna_profile 0 1
+ELEVATE
+TRANSLATE 19.745 0 0
+STORE $antenna_profile_inside
+RESTORE $antenna_profile
+
+ELEVATE
+TRANSLATE 45.709 -25.966 0
+RESTORE $antenna_profile_inside
+RULE
+
+SELECT EDGE -.5+19.745 30+19.745 -1 1 -15 15 # select by bbox
+ATTRIBUTE edgeName $antenna_fillet_inside
+SELECT EDGE -.5+45.709 30+45.709 -1-25.966 1-25.966 -15 15 # select by bbox
+ATTRIBUTE edgeName $antenna_fillet_tip   
+
+RESTORE $antenna_base
+UNION
+
+SELECT EDGE -.5+19.745 30+19.745 -1 1 -15 15 # select by bbox
+FILLET 3 @sellist 1
+
+SELECT FACE -1 80 -30 10 -10 10
+attribute faceName $antenna
+
+#--- SELECT EDGE 50 75 -26 0.5 -0.5 0.5
+#--- FILLET 0.3 @sellist 1
+#--- 
+#--- SELECT EDGE 14 47 -26 0.5 -0.5 0.5
+#--- FILLET 0.3 @sellist 1
+
+SELECT EDGE 50 75 -26 0.1 -0.1 0.1
+ATTRIBUTE edgeName $trailingEdge
+
+SELECT EDGE 14.5 46 -26 0.1 -0.1 0.1
+ATTRIBUTE edgeName $leadingEdge
+
+# make left antenna
+STORE $antenna 0 1
+TRANSLATE 308.1 -44-6.1 0
+RESTORE $gbt
+UNION
+
+# make right antenna
+RESTORE $antenna
+TRANSLATE 308.1 -44-6.1 0
+MIRROR 0 1 0
+UNION
+
+STORE $gbt 0 1
+
+dump GBT.stp
+
+
+# cut in half
+BOX -1 0 -500 1002 -1000 1000
+ATTRIBUTE faceName $symmPlane
+SUBTRACT
+
+dump GBT_half.stp
+
+END
+|||
