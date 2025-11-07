@@ -27,8 +27,7 @@ linseg 0        0       0
 skend
 
 REVOLVE 0 0 0 1 0 0 45
-SELECT EDGE 18 2 18 9 1
-ATTRIBUTE edgeName $fuseLongEdges
+
 STORE $main_body
 
 MARK
@@ -39,8 +38,6 @@ PATBEG i 8
 PATEND 
    
 UNION 1
-
-END
 
    
 SELECT FACE 54 760 -47 47 -47 47
@@ -313,4 +310,4 @@ SUBTRACT
 dump GBT_half.stp
 
 END
-|||||||||||||||||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
