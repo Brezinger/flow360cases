@@ -16,7 +16,7 @@ spline 38.79    42.9    0
 spline 54       fuseRadius      0
 sslope 1  0  0
 linseg 623      fuseRadius      0
-linseg 623      45.53   0
+#linseg 623      45.53   0
 linseg 628.5    46.50   0
 linseg 672      46.50   0
 linseg 680.51   44.89   0
@@ -26,25 +26,58 @@ linseg 756.51   0       0
 linseg 0        0       0
 skend
 
-REVOLVE 0 0 0 1 0 0 360
+REVOLVE 0 0 0 1 0 0 45
+SELECT EDGE 18 2 18 9 1
+ATTRIBUTE edgeName $fuseLongEdges
+STORE $main_body
 
+MARK
+
+PATBEG i 8
+   RESTORE $main_body
+   ROTATEX 45*i 0 0 
+PATEND 
+   
+UNION 1
+
+END
+
+   
+SELECT FACE 54 760 -47 47 -47 47
 attribute faceName $mainBody
+
+SELECT FACE -1 55 -47 47 -47 47
+ATTRIBUTE faceName $fuseNoseFace
+
+
 
 # imprint for antenna
-BOX 291 44 -7.5 100 10 15
-attribute faceName $mainBody
-STORE $cutbox_antenna 0 1
-SUBTRACT
-
-
-RESTORE $cutbox_antenna
-MIRROR 0 1 0
-SUBTRACT
-
-attribute faceName $mainBody
+#BOX 291 44 -7.5 100 10 15
+#attribute faceName $mainBody
+#STORE $cutbox_antenna 0 1
+#SUBTRACT
+#RESTORE $cutbox_antenna
+#MIRROR 0 1 0
+#SUBTRACT
+#attribute faceName $mainBody
 
 SELECT EDGE 756 757 -40 40 -40 40
-ATTRIBUTE edgeName $trailingEdge
+ATTRIBUTE edgeName $fuseTrailingEdge
+
+SELECT EDGE 622 624 -47 47 -47 47
+ATTRIBUTE edgeName $fuseCollarEdge
+
+SELECT EDGE 628 629 -47 47 -47 47
+ATTRIBUTE edgeName $fuseCollarEdge
+
+SELECT EDGE 671 673 -47 47 -47 47
+ATTRIBUTE edgeName $fuseCollarEdge
+
+SELECT EDGE 680 681 -47 47 -47 47
+ATTRIBUTE edgeName $fuseCollarEdge
+
+SELECT EDGE 707 708 -47 47 -47 47
+ATTRIBUTE edgeName $fuseCollarEdge
 
 STORE $main_body
 
@@ -153,11 +186,27 @@ PATBEG i 4
    TRANSLATE 11.55 0 0
    UNION
    TRANSLATE 690.5 0 0
+   SELECT EDGE 690 750 -100 100 124 125
+   ATTRIBUTE edgeName $finEndEdges
+   SELECT EDGE 690 750 -100 100 63 64
+   ATTRIBUTE edgeName $finEndEdges
    ROTATEX -45+(i-1)*90 0 0
    UNION
+   #SELECT EDGE 690 750 
 PATEND
 STORE $gbt
 
+SELECT EDGE 690 750 20 40 18 38
+ATTRIBUTE edgeName $finEndEdges
+
+SELECT EDGE 690 750 -40 -20 18 38
+ATTRIBUTE edgeName $finEndEdges
+
+SELECT EDGE 690 750 -40 -20 -38 -18
+ATTRIBUTE edgeName $finEndEdges
+
+SELECT EDGE 690 750 20 40 -38 -18
+ATTRIBUTE edgeName $finEndEdges
 
 
 
@@ -203,10 +252,12 @@ TRANSLATE 45.709 -25.966 0
 RESTORE $antenna_profile_inside
 RULE
 
+
+
 SELECT EDGE -.5+19.745 30+19.745 -1 1 -15 15 # select by bbox
-ATTRIBUTE edgeName $antenna_fillet_inside
+ATTRIBUTE edgeName $finEndEdges
 SELECT EDGE -.5+45.709 30+45.709 -1-25.966 1-25.966 -15 15 # select by bbox
-ATTRIBUTE edgeName $antenna_fillet_tip   
+ATTRIBUTE edgeName $finEndEdges   
 
 RESTORE $antenna_base
 UNION
@@ -243,15 +294,23 @@ UNION
 
 STORE $gbt 0 1
 
-dump GBT.stp
+# select xy plane edges
+#SELECT EDGE -1 380 -.1 fuseRadius+0.1 -0.1 0.1
+#ATTRIBUTE edgeName $xyEdges
+#SELECT EDGE 380 800 -.1 55 -0.1 0.1
+#ATTRIBUTE edgeName $xyEdges
 
+dump GBT.stp
 
 # cut in half
 BOX -1 0 -500 1002 -1000 1000
 ATTRIBUTE faceName $symmPlane
 SUBTRACT
 
+#SELECT EDGE -1 800 -1 1 -100 100
+#ATTRIBUTE edgeName $symmEdges
+
 dump GBT_half.stp
 
 END
-|||
+|||||||||||||||||||||||||||||||||||||||||||||||||||||
