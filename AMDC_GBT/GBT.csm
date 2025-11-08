@@ -28,6 +28,13 @@ skend
 
 REVOLVE 0 0 0 1 0 0 45
 
+PATBEG i 7
+   SELECT EDGE 18 2 18 i+3 1
+   ATTRIBUTE edgeName $anisoEdges
+   SELECT EDGE 18 1 18 i+3 1
+   ATTRIBUTE edgeName $anisoEdges
+PATEND 
+
 STORE $main_body
 
 MARK
@@ -38,15 +45,14 @@ PATBEG i 8
 PATEND 
    
 UNION 1
-
+ 
    
 SELECT FACE 54 760 -47 47 -47 47
 attribute faceName $mainBody
 
 SELECT FACE -1 55 -47 47 -47 47
 ATTRIBUTE faceName $fuseNoseFace
-
-
+   
 
 # imprint for antenna
 #BOX 291 44 -7.5 100 10 15
@@ -58,24 +64,27 @@ ATTRIBUTE faceName $fuseNoseFace
 #SUBTRACT
 #attribute faceName $mainBody
 
-SELECT EDGE 756 757 -40 40 -40 40
-ATTRIBUTE edgeName $fuseTrailingEdge
-
+PATBEG i 8   
+ SELECT EDGE 18 3 18 4 i
+ ATTRIBUTE edgeName $fuseRearEdge
+PATEND
+   
 SELECT EDGE 622 624 -47 47 -47 47
-ATTRIBUTE edgeName $fuseCollarEdge
+ATTRIBUTE edgeName $fuseRearEdge
 
 SELECT EDGE 628 629 -47 47 -47 47
-ATTRIBUTE edgeName $fuseCollarEdge
+ATTRIBUTE edgeName $fuseRearEdge
 
 SELECT EDGE 671 673 -47 47 -47 47
-ATTRIBUTE edgeName $fuseCollarEdge
+ATTRIBUTE edgeName $fuseRearEdge
 
 SELECT EDGE 680 681 -47 47 -47 47
-ATTRIBUTE edgeName $fuseCollarEdge
+ATTRIBUTE edgeName $fuseRearEdge
 
 SELECT EDGE 707 708 -47 47 -47 47
-ATTRIBUTE edgeName $fuseCollarEdge
+ATTRIBUTE edgeName $fuseRearEdge
 
+   
 STORE $main_body
 
 #-------------------------
@@ -249,8 +258,6 @@ TRANSLATE 45.709 -25.966 0
 RESTORE $antenna_profile_inside
 RULE
 
-
-
 SELECT EDGE -.5+19.745 30+19.745 -1 1 -15 15 # select by bbox
 ATTRIBUTE edgeName $finEndEdges
 SELECT EDGE -.5+45.709 30+45.709 -1-25.966 1-25.966 -15 15 # select by bbox
@@ -293,9 +300,42 @@ STORE $gbt 0 1
 
 # select xy plane edges
 #SELECT EDGE -1 380 -.1 fuseRadius+0.1 -0.1 0.1
-#ATTRIBUTE edgeName $xyEdges
-#SELECT EDGE 380 800 -.1 55 -0.1 0.1
-#ATTRIBUTE edgeName $xyEdges
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 380 700 -.1 55 -0.1 0.1
+#ATTRIBUTE edgeName $anisoEdges
+
+#SELECT EDGE 101
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 72
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 53
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 38
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 37
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 49
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 65
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 92
+#ATTRIBUTE edgeName $anisoEdges
+
+#SELECT EDGE 78
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 68
+#ATTRIBUTE edgeName $anisoEdges
+#SELECT EDGE 47
+#ATTRIBUTE edgeName $anisoEdges
+
+#SELECT NODE 0 0 0
+#ATTRIBUTE nodeName $origin
+
+
+#UDPRIM editAttr filename <<
+#EDGE ADJ2FACE faceName=$fuseNoseFace
+#SET edgeName=$anisoEdges
+#>>  
 
 dump GBT.stp
 
@@ -304,10 +344,15 @@ BOX -1 0 -500 1002 -1000 1000
 ATTRIBUTE faceName $symmPlane
 SUBTRACT
 
-#SELECT EDGE -1 800 -1 1 -100 100
-#ATTRIBUTE edgeName $symmEdges
+PATBEG i 7
+   SELECT EDGE 18 11-i 151 4 1
+   SELECT EDGE 18 11-i 151 4 2
+PATEND
+
+SELECT EDGE -1 800 -1 1 -100 100
+ATTRIBUTE edgeName $anisoEdges 
 
 dump GBT_half.stp
 
 END
-||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+||||||||||||||
