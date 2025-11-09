@@ -1,6 +1,7 @@
 # GBT design
 
 DESPMTR elevDefl 0
+DESPMTR halfModel 1
 DESPMTR fuseRadius 45
 
 
@@ -339,20 +340,24 @@ STORE $gbt 0 1
 
 dump GBT.stp
 
-# cut in half
-BOX -1 0 -500 1002 -1000 1000
-ATTRIBUTE faceName $symmPlane
-SUBTRACT
+IFTHEN halfModel EQ 1
 
-PATBEG i 7
-   SELECT EDGE 18 11-i 151 4 1
-   SELECT EDGE 18 11-i 151 4 2
-PATEND
+   # cut in half
+   BOX -1 0 -500 1002 -1000 1000
+   ATTRIBUTE faceName $symmPlane
+   SUBTRACT
 
-SELECT EDGE -1 800 -1 1 -100 100
-ATTRIBUTE edgeName $anisoEdges 
+   PATBEG i 7
+      SELECT EDGE 18 11-i 151 4 1
+      SELECT EDGE 18 11-i 151 4 2
+   PATEND
 
-dump GBT_half.stp
+   SELECT EDGE -1 800 -1 1 -100 100
+   ATTRIBUTE edgeName $anisoEdges 
+
+   dump GBT_half.stp
+
+ENDIF
 
 END
-||||||||||||||
+||||||||||||||||||
