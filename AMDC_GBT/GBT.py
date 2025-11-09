@@ -1,8 +1,8 @@
 # Import necessary modules from the Flow360 library
-import copy
 import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation as R
+from matplotlib.pyplot import show
 
 import flow360 as fl
 from flow360 import u
@@ -12,6 +12,7 @@ async_flag = False
 
 # global parameters
 half_model = True
+wall_model_flag = False  # True for wall-modeled, False for wall-resolved
 elev_deflection_deg = 0  # Elevator deflection in degrees
 U_inf = 120            # Free stream velocity
 alpha_deg = 10         # Angle of attack in degrees
@@ -19,7 +20,12 @@ beta_deg = 0           # Angle of sideslip in degrees
 altitude = 500# Sideslip angle in degrees
 # mesh parameters
 surf_mesh_refine_factor = 1.0  # Surface mesh size multiplier
-first_layer_thickness = 0.0001 * u.m  # First layer thickness for boundary layer meshing
+target_yplus_wall_modeled = 30.0  # Target y-plus value for wall-resolved meshing
+global_y1 = 2.85e-6 * u.m  # First layer thickness for boundary layer meshing (wall-resolved)
+nose_y1 = 2e-6 * u.m
+tail_fin_y1 = 2.5e-6 * u.m
+antenna_y1 = 5e-6 * u.m
+
 # solver parameters
 n_timesteps = 1000
 surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec"]
@@ -33,6 +39,13 @@ r_fuse = 45
 ###############################
 # Preface: Create a new project
 ###############################
+
+if wall_model_flag:
+    global_y1 *= target_yplus_wall_modeled
+    nose_y1 *= target_yplus_wall_modeled
+    tail_fin_y1 *= target_yplus_wall_modeled
+    antenna_y1 *= target_yplus_wall_modeled
+
 gbt_folder = fl.Folder.create("GBT").submit()
 #gbt_folder = fl.Folder.get("folder-ee329f80-9142-496f-938c-15b650fdebc2")
 
@@ -67,7 +80,7 @@ mesh_defaults = fl.MeshingDefaults(surface_edge_growth_rate=1.2,
                                    surface_max_edge_length=surf_mesh_refine_factor * 7 * u.mm,
                                    curvature_resolution_angle=surf_mesh_refine_factor * 5 * u.deg,
                                    boundary_layer_growth_rate=1.2,
-                                   boundary_layer_first_layer_thickness=first_layer_thickness)
+                                   boundary_layer_first_layer_thickness=global_y1)
 
 # 3c) Rotation region
 # None..
@@ -79,7 +92,7 @@ msh_data = {'refinement name': ["LE", "TE", "fin_root_tip", "fuse_aniso_edges", 
             "mesh size": [surf_mesh_refine_factor * 0.055 * u.mm,  # Leading edge refinement
                           surf_mesh_refine_factor * 0.085 * u.mm,  # Trailing edge refinement
                           surf_mesh_refine_factor * 0.06 * u.mm,  # Vertical fin root/tip refinement
-                          surf_mesh_refine_factor * 2.5 * u.mm,  # Fuselage anisotropic edge refinement
+                          surf_mesh_refine_factor * 2. * u.mm,  # Fuselage anisotropic edge refinement
                           surf_mesh_refine_factor * 0.5 * u.mm,  # Fuselage rear refinement
                           ]}
 df_mesh_refinement = pd.DataFrame(msh_data)
@@ -149,7 +162,7 @@ for i in range(2*(1 + int(not half_model))):
     angle = np.deg2rad(angle_deg)
 
     first_axis = np.array([1, 0, 0])
-    second_axis = np.array([0, 1, 0])
+    second_axis = np.array([0, 0, 1])
 
     r_1 = R.from_euler('x', angle_deg, degrees=True)
 
@@ -157,9 +170,9 @@ for i in range(2*(1 + int(not half_model))):
                                          axes=[tuple(r_1.apply(first_axis)), tuple(r_1.apply(second_axis))],
                                          center=(690.5 + l_box / 2, r_box * np.cos(angle), r_box * np.sin(angle)) * u.mm,
                                          size=(l_box, b_box, h_box) * u.mm)
-    wake_box_ref = fl.UniformRefinement(name="fin_box_refinement_front{0:d}".format(i), entities=[copy.deepcopy(fin_box),],
-                                        spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
-    refinements.append(wake_box_ref)
+    #wake_box_ref = fl.UniformRefinement(name="fin_box_refinement_front{0:d}".format(i), entities=[fin_box,],
+    #                                    spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
+    #refinements.append(wake_box_ref)
     # second, larger fin box
 
     r_2 = R.from_euler('xy', [angle_deg, -alpha_deg], degrees=True)
@@ -169,10 +182,10 @@ for i in range(2*(1 + int(not half_model))):
                                          center=(690.5 + 55 + 55 * np.cos(np.deg2rad(alpha_deg)),
                                                  r_box * np.cos(angle),
                                                  r_box * np.sin(angle) + 55 * np.sin(np.deg2rad(alpha_deg))) * u.mm,
-                                         size=(l_box2, b_box, h_box) * u.mm)
-    wake_box_ref2 = fl.UniformRefinement(name="fin_box_refinement_rear{0:d}".format(i), entities=[fin_box2],
+                                         size=(l_box2, h_box, b_box) * u.mm)
+    wake_box_ref = fl.UniformRefinement(name="fin_box_refinement{0:d}".format(i), entities=[fin_box, fin_box2],
                                         spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
-    refinements.append(wake_box_ref2)
+    refinements.append(wake_box_ref)
 
 # make mesh parameters
 mesh_params = fl.MeshingParams(defaults=mesh_defaults,
@@ -191,7 +204,7 @@ wall_surfaces = [geo["mainBody"], geo["fuseNoseFace"], geo["antenna"], geo["tail
 with fl.SI_unit_system:
     # Set up the main simulation parameters
     params = fl.SimulationParams(meshing=mesh_params,
-                                 reference_geometry=fl.ReferenceGeometry(),
+                                 reference_geometry=ref_geometry,
                                  operating_condition=condition,
                                  time_stepping=fl.Steady(max_steps=n_timesteps),
                                  models=[fl.Wall(surfaces=wall_surfaces, use_wall_function=wall_func_flag),
@@ -200,16 +213,27 @@ with fl.SI_unit_system:
                                  outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests),
                                           fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
                                                           output_fields=vol_output_requests)]
+
                                  )
 
 ###############################
 # 5) Generate mesh and run case
 ###############################
+project.model_construct(params=params)
+
+
 project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False)
 
-project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False, raise_on_error=True)
+#project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False, raise_on_error=True)
 
 # Step 5: Run the simulation case with the specified parameters
-#project.run_case(params=params, name="GBT Case")
+project.run_case(params=params, name="GBT Case")
+
+case = project.case
+case.wait()
+
+total_forces = case.results.total_forces.as_dataframe()
+total_forces.plot("pseudo_step", ["CL", "CD"], ylim=[-5, 15])
+show()
 
 print("done")
