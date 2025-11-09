@@ -186,10 +186,11 @@ def main():
                                                      r_box * np.cos(angle),
                                                      r_box * np.sin(angle) + 55 * np.sin(alpha)) * u.mm,
                                              size=(l_box*1.05, h_box, b_box) * u.mm)
+        box_list.append(fin_box)
 
-        wake_box_ref = fl.UniformRefinement(name="fin_box_refinement{0:d}".format(i), entities=[fin_box],
-                                            spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
-        refinements.append(wake_box_ref)
+    wake_box_ref = fl.UniformRefinement(name="fin_box_refinement", entities=box_list,
+                                        spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
+    refinements.append(wake_box_ref)
 
     # antenna volumetric refinement
     l_ant_cyl = 380
