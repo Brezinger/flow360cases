@@ -8,22 +8,31 @@ from matplotlib.pyplot import show
 import flow360 as fl
 from flow360 import u
 
+def mod_csm_file(path, elev_deflection_deg=10, half_model=True):
+    # modify csm file to set elevator deflection
+    with open(path, "r") as f:
+        csm_data = f.readlines()
+        csm_data[2] = "DESPMTR elevDefl {0:d}\n".format(elev_deflection_deg)
+        csm_data[3] = "DESPMTR halfModel {0:d}\n".format(half_model)
+    with open(path, "w") as f:
+        f.writelines(csm_data)
 
 def main():
     # global flags
     async_flag = False
-    run_flag = False
+    run_flag = True
 
     # global parameters
-    half_model = True              # True for wall-modeled, False for wall-resolved
+    half_model = True                   # True for wall-modeled, False for wall-resolved
     elev_deflection_deg = 0             # Elevator deflection in degrees
     wall_func_flag = False
+    solver_tolerance = 1.e-6            # Navier-Stokes and turbulence model solver tolerance
     U_inf = 120                         # Free stream velocity
-    alpha_deg = 0                      # Angle of attack in degrees
+    alpha_deg = 0                       # Angle of attack in degrees
     beta_deg = 0                        # Angle of sideslip in degrees
     altitude = 500                      # Sideslip angle in degrees
     # mesh parameters
-    surf_mesh_lvl = 0
+    surf_mesh_lvl = 2
     surf_mesh_refine_factor = 2**(surf_mesh_lvl/2)       # Surface mesh size multiplier
     target_yplus_wall_modeled = 30.0    # Target y-plus value for wall-resolved meshing
     global_y1 = 2.85e-6 * u.m           # First layer thickness for boundary layer meshing (wall-resolved)
@@ -40,6 +49,9 @@ def main():
     l_fuse = 756.51
     r_fuse = 45
 
+    mod_csm_file(path="C:/git/flow360cases/AMDC_GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
+                 half_model=half_model)
+
     ###############################
     # Preface: Create a new project
     ###############################
@@ -53,11 +65,11 @@ def main():
     alpha = np.deg2rad(alpha_deg)
     beta = np.deg2rad(beta_deg)
 
-    gbt_folder = fl.Folder.create("GBT U{0:d}_AOA{1:d}_delta{2:.2f}_mshlvl{3:d}".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl)).submit()
+    gbt_folder = fl.Folder.create("GBT U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl)).submit()
     #gbt_folder = fl.Folder.get("folder-ee329f80-9142-496f-938c-15b650fdebc2")
 
     # This initializes a project with the specified geometry and assigns it a name.
-    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT U{0:d}_AOA{1:d}_delta{2:.2f}_mshlvl{3:d}".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl),
+    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl),
                                        folder=gbt_folder, length_unit="mm", run_async=async_flag)
     geo = project.geometry  # Access the geometry of the project
 
@@ -165,7 +177,7 @@ def main():
             i_box += 1
 
     # make tail fin refinement
-    h_box = 5 * 55 * 0.12
+    h_box = 115 #5 * 55 * 0.12  # set to 115 to account for flow360 bug
     l_box = 4 * 55
     b_box = 115
     r_box = (45 + 125) / 2
@@ -180,13 +192,13 @@ def main():
         rot = R.from_euler('xy', [angle_deg, -alpha_deg], degrees=True)
 
         # fin box
-        fin_box = fl.Box.from_principal_axes(name="fin_box{0:d}".format(i),
+        box_list.append(fl.Box.from_principal_axes(name="fin_box{0:d}".format(i),
                                              axes=[tuple(rot.apply(first_axis)), tuple(rot.apply(second_axis))],
                                              center=(690.5 + 55 + 55 * np.cos(alpha),
                                                      r_box * np.cos(angle),
                                                      r_box * np.sin(angle) + 55 * np.sin(alpha)) * u.mm,
                                              size=(l_box*1.05, h_box, b_box) * u.mm)
-        box_list.append(fin_box)
+        )
 
     wake_box_ref = fl.UniformRefinement(name="fin_box_refinement", entities=box_list,
                                         spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
@@ -213,28 +225,34 @@ def main():
     ###########################
     # 4) Flow solver parameters
     ###########################
-    ref_geometry = fl.ReferenceGeometry(moment_center=(416., 0, 0) * u.mm, moment_length=(756.5, 90, 90) * u.mm,
+    l_tot = 756.5         # total length of the GBT model
+    b_fin_half_diag = 124 # diagonal half span of the tail fin
+    b_fin_y = b_fin_half_diag * 2 / np.sqrt(2)
+    moment_ref_lengths = (b_fin_y, l_tot, b_fin_y)
+    moment_center_x = 416. # x reference location for moments
+    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 0, 0) * u.mm,
+                                        moment_length=moment_ref_lengths * u.mm,
                                         area=45**2 * np.pi * u.mm**2)
 
     wall_surfaces = [geo["mainBody"], geo["fuseNoseFace"], geo["antenna"], geo["tailFin"]]
 
-    turbulence_model = fl.KOmegaSST()
-    #turbulence_model = fl.SpalartAllmaras()
+    navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=solver_tolerance)
+    turbulence_solver = fl.KOmegaSST(absolute_tolerance=solver_tolerance)
+    #turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=solver_tolerance)
+
 
     with fl.SI_unit_system:
         # Set up the main simulation parameters
         params = fl.SimulationParams(meshing=mesh_params,
                                      reference_geometry=ref_geometry,
                                      operating_condition=condition,
-
                                      time_stepping=fl.Steady(max_steps=n_timesteps),
                                      models=[fl.Wall(surfaces=wall_surfaces, use_wall_function=wall_func_flag),
                                              fl.Freestream(surfaces=[far_field_zone.farfield]),
                                              # Define what sort of physical model of a fluid we will use
-                                             fl.Fluid(
-                                                 navier_stokes_solver=fl.NavierStokesSolver(),
-                                                 turbulence_model_solver=turbulence_model,
-                                             ),
+                                             fl.Fluid(navier_stokes_solver=navier_stokes_solver,
+                                                      turbulence_model_solver=turbulence_solver,
+                                                     ),
                                              fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes])],
                                      outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests),
                                               fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
@@ -245,7 +263,7 @@ def main():
     ###############################
     # 5) Generate mesh and run case
     ###############################
-    project.model_construct(params=params)
+    #project.model_construct(params=params)
 
     # Step 5: Run the simulation case with the specified parameters
     if not run_flag:
@@ -253,14 +271,14 @@ def main():
         #project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False,
         # raise_on_error=True)
     else:
-        project.run_case(params=params, name="GBT Case")
+        project.run_case(params=params, name="GBT case U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}_total_forces.csv".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl))
 
         case = project.case
         case.wait()
 
         total_forces = case.results.total_forces.as_dataframe()
         total_forces.plot("pseudo_step", ["CL", "CD"], ylim=[-5, 15])
-        total_forces.to_csv("U{0:d}_AOA{1:d}_delta{2:.2f}_mshlvl{3:d}_total_forces.csv".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl))
+        total_forces.to_csv("U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}_total_forces.csv".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl))
         show()
 
     print("done")
