@@ -1,61 +1,83 @@
 # Import necessary modules from the Flow360 library
-import pickle
+import os
+from itertools import product
 import numpy as np
 import pandas as pd
+from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
-from matplotlib.pyplot import show
 
 import flow360 as fl
 from flow360 import u
 
-def mod_csm_file(path, elev_deflection_deg=10, half_model=True):
+def mod_csm_file(path, elev_deflection_deg=0., half_model=True):
     # modify csm file to set elevator deflection
     with open(path, "r") as f:
         csm_data = f.readlines()
-        csm_data[2] = "DESPMTR elevDefl {0:d}\n".format(elev_deflection_deg)
-        csm_data[3] = "DESPMTR halfModel {0:d}\n".format(half_model)
+        csm_data[2] = "DESPMTR elevDefl {0:.3f}\n".format(elev_deflection_deg)
+        csm_data[3] = "DESPMTR halfModel {0:.3f}\n".format(half_model)
     with open(path, "w") as f:
         f.writelines(csm_data)
 
-def main():
+def define_and_run(elev_deflection_deg=0., U_inf = 270, alpha_deg=0., beta_deg=0., half_model=True, y1_fac=1.,
+                   surf_mesh_lvl=0, flow360folder=None, results_path=None, run_flag = False):
+    """
+
+    :param elev_deflection_deg: Elevator deflection in degrees
+    :param U_inf:               Free stream velocity
+    :param alpha_deg:           Angle of attack in degrees
+    :param beta_deg:            Sideslip angle in degrees
+    :param half_model:          Half model flag. True for half-model, False for full model
+    :param y1_fac:              first layer thickness scaling factor
+    :param surf_mesh_lvl:       Mesh refinement level
+    :param flow360folder:       Flow360 folder to put the case in
+    :param results_path:        Path to store results
+    :param run_flag:            Flag, determines, if simulation is only set-up (False) or also run (True)
+    :return:
+    """
+    #  #  #
     # global flags
     async_flag = False
-    run_flag = True
-
     # global parameters
-    half_model = True                   # True for wall-modeled, False for wall-resolved
-    wall_func_flag = False
-    solver_tolerance = 1.e-6            # Navier-Stokes and turbulence model solver tolerance
-    elev_deflection_deg = 0  # Elevator deflection in degrees
-    U_inf = 270                         # Free stream velocity
-    alpha_deg = 0                       # Angle of attack in degrees
-    beta_deg = 0                        # Angle of sideslip in degrees
+    wall_func_flag = False              # True for wall-modeled, False for wall-resolved
     altitude = 500                      # Sideslip angle in degrees
     # mesh parameters
-    surf_mesh_lvl = 0
     surf_mesh_refine_factor = 2**(surf_mesh_lvl/2)       # Surface mesh size multiplier
-    target_yplus_wall_modeled = 30.0    # Target y-plus value for wall-resolved meshing
-    factor_y1 = 0.4709                     # global first layer thickness scaling factor
-    global_y1 = factor_y1 * 2.85e-6 * u.m           # First layer thickness for boundary layer meshing (wall-resolved)
-    nose_y1 = factor_y1 * 2e-6 * u.m
-    tail_fin_y1 = factor_y1 * 2.5e-6 * u.m
-    antenna_y1 = factor_y1 * 5e-6 * u.m
+    target_yplus_wall_modeled = 100.0    # Target y-plus value for wall-resolved meshing
+
+    # First layer volumetric mesh thicknesses
+    global_y1 = y1_fac * 2.85e-6 * u.m           # First layer thickness for boundary layer meshing (wall-resolved)
+    nose_y1 = y1_fac * 2e-6 * u.m
+    tail_fin_y1 = y1_fac * 2.5e-6 * u.m
+    antenna_y1 = y1_fac * 5e-6 * u.m
 
     # solver parameters
-    n_timesteps = 1000
+    ns_solver_tolerance = 1.e-6            # Navier-Stokes and turbulence model solver tolerance
+    turb_solver_tolerance = 1.e-5          # turbulence model solver tolerance
+    n_timesteps = 1500
     surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec"]
-    vol_output_requests = ["primitiveVars", "qcriterion", "mut", "T", "vorticity"]
+    vol_output_requests = ["primitiveVars", "qcriterion", "mut", "T", "vorticity", "Mach"]
 
     # global fixed parameters
     l_fuse = 756.51
     r_fuse = 45
 
-    mod_csm_file(path="C:/git/flow360cases/AMDC_GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
-                 half_model=half_model)
+    sim_name = "U{0:d}_AOA{1:d}".format(int(U_inf), int(alpha_deg))
+    if beta_deg != 0.:
+        sim_name += "_beta{0:d}".format(int(beta_deg))
+    sim_name += "_delta{0:.1f}".format(elev_deflection_deg)
+    if surf_mesh_lvl != 0:
+        sim_name += "_mshlvl{0:d}".format(surf_mesh_lvl)
+    if not half_model:
+        sim_name += "_fullmodel"
+
 
     ###############################
     # Preface: Create a new project
     ###############################
+
+    # first modify csm file to set elevator deflection and half-model flag
+    mod_csm_file(path="C:/git/flow360cases/AMDC_GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
+                 half_model=half_model)
 
     if wall_func_flag:
         global_y1 *= target_yplus_wall_modeled
@@ -66,12 +88,10 @@ def main():
     alpha = np.deg2rad(alpha_deg)
     beta = np.deg2rad(beta_deg)
 
-    gbt_folder = fl.Folder.create("GBT U{0:d}_AOA{1:d}_delta{2:.1f}".format(U_inf, alpha_deg, elev_deflection_deg)).submit()
-    #gbt_folder = fl.Folder.get("folder-ee329f80-9142-496f-938c-15b650fdebc2")
-
     # This initializes a project with the specified geometry and assigns it a name.
-    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT U{0:d}_AOA{1:d}_delta{2:.1f}".format(U_inf, alpha_deg, elev_deflection_deg),
-                                       folder=gbt_folder, length_unit="mm", run_async=async_flag)
+    #gbt_folder = fl.Folder.get(folder.id)
+    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT " + sim_name,
+                                       folder=flow360folder, length_unit="mm", run_async=async_flag)
     geo = project.geometry  # Access the geometry of the project
 
     # Display available groupings in the geometry (helpful for identifying group names)
@@ -231,16 +251,22 @@ def main():
     b_fin_y = b_fin_half_diag * 2 / np.sqrt(2)
     moment_ref_lengths = (b_fin_y, l_tot, b_fin_y)
     moment_center_x = 416. # x reference location for moments
-    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 0, 0) * u.mm,
+    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 1.e-6, 0) * u.mm,
                                         moment_length=moment_ref_lengths * u.mm,
                                         area=45**2 * np.pi * u.mm**2)
 
     wall_surfaces = [geo["mainBody"], geo["fuseNoseFace"], geo["antenna"], geo["tailFin"]]
 
-    navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=solver_tolerance)
-    turbulence_solver = fl.KOmegaSST(absolute_tolerance=solver_tolerance)
-    #turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=solver_tolerance)
+    navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=ns_solver_tolerance)
+    turbulence_solver = fl.KOmegaSST(absolute_tolerance=turb_solver_tolerance)
+    #turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=turb_solver_tolerance)
 
+    fl_models = [fl.Wall(surfaces=wall_surfaces, use_wall_function=wall_func_flag),
+                         fl.Freestream(surfaces=[far_field_zone.farfield]),
+                         fl.Fluid(navier_stokes_solver=navier_stokes_solver, turbulence_model_solver=turbulence_solver)]
+
+    if half_model:
+        fl_models.append(fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes]))
 
     with fl.SI_unit_system:
         # Set up the main simulation parameters
@@ -248,13 +274,7 @@ def main():
                                      reference_geometry=ref_geometry,
                                      operating_condition=condition,
                                      time_stepping=fl.Steady(max_steps=n_timesteps),
-                                     models=[fl.Wall(surfaces=wall_surfaces, use_wall_function=wall_func_flag),
-                                             fl.Freestream(surfaces=[far_field_zone.farfield]),
-                                             # Define what sort of physical model of a fluid we will use
-                                             fl.Fluid(navier_stokes_solver=navier_stokes_solver,
-                                                      turbulence_model_solver=turbulence_solver,
-                                                     ),
-                                             fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes])],
+                                     models=fl_models,
                                      outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests),
                                               fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
                                                               output_fields=vol_output_requests)]
@@ -271,18 +291,111 @@ def main():
         project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False)
         #project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False,
         # raise_on_error=True)
+        return project.id
     else:
-        project.run_case(params=params, name="GBT case U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}_total_forces.csv".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl))
+        project.run_case(params=params, name="GBT_case_" + sim_name)
 
         case = project.case
         case.wait()
 
+        results = case.results
+        results.download(surface=True, volume=True, total_forces=True, nonlinear_residuals=True,
+                         destination=os.path.join(results_path, case.name))
+
         total_forces = case.results.total_forces.as_dataframe()
-        total_forces.plot("pseudo_step", ["CL", "CD"], ylim=[-5, 15])
-        total_forces.to_csv("U{0:d}_AOA{1:d}_delta{2:.1f}_mshlvl{3:d}_total_forces.csv".format(U_inf, alpha_deg, elev_deflection_deg, surf_mesh_lvl))
-        show()
+
+        return total_forces
 
     print("done")
+
+def main():
+    mshlvl = 0
+    run=True
+    n_test_cases = None
+
+    results_dir = "F:/WDIR/flow360"
+
+    U_inf_range = np.linspace(100, 250, 4)
+
+    # symmetric study
+    half_model = True
+    alpha_deg_range = np.linspace(0, 10, 3)
+    beta_deg_range = [0.]
+    elev_deflection_deg_range = np.linspace(-10, 10, 9)
+
+    """# asymmetic study
+    half_model = False
+    alpha_deg_range = [5.,]
+    beta_deg_range = [3.]
+    elev_deflection_deg_range = [0.]"""
+
+
+    if np.all(np.array(beta_deg_range) == 0):
+        study_name = "GBT_parametric_study"
+    else:
+        study_name = "GBT_asym_parametric_study"
+
+    # initialize results DataFrame
+    cols=['U_inf', 'alpha_deg', 'beta_deg', 'elev_deflection_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
+    df_results = pd.DataFrame(columns=cols)
+    df_results[cols[:4]] = list(product(U_inf_range, alpha_deg_range, beta_deg_range, elev_deflection_deg_range))
+
+    # drop negative elevator deflections for alpha = 0
+    df_results = df_results.drop(df_results[(df_results['alpha_deg'] == 0) & (df_results['elev_deflection_deg'] < 0)].index).reset_index(drop=True)
+
+    if n_test_cases is not None:
+        df_results = df_results.iloc[:n_test_cases]   # limit number of runs for testing
+
+    # create folders for airspeeds and AOA
+    # create folder in ROOT level
+    folder_toplvl = fl.Folder.create(study_name).submit()
+    folders = []
+    for U in U_inf_range:
+        # create folder inside the above folder
+        folder_U = fl.Folder.create("U_inf {0:d}".format(int(U)), parent_folder=folder_toplvl).submit()
+        subfolders = []
+        for alpha in alpha_deg_range:
+            folder_AOA = fl.Folder.create("alpha {0:02d}".format(int(alpha)), parent_folder=folder_U).submit()
+            subfolders.append(folder_AOA)
+        folders.append(subfolders)
+
+    for i, row in df_results.iterrows():
+        U_inf = row['U_inf']
+        alpha_deg = row['alpha_deg']
+        beta_deg = row['beta_deg']
+        elev_deflection_deg = row['elev_deflection_deg']
+        y1_fac = [1.1844737563130825, 0.8128532205843816, 0.6222968313782434, 0.5058359835452612]
+        y1_interp = interp1d(np.linspace(100, 250, 4), y1_fac, kind='cubic', fill_value="extrapolate")
+
+        curr_folder = folders[list(U_inf_range).index(U_inf)][list(alpha_deg_range).index(alpha_deg)]
+        res = define_and_run(elev_deflection_deg=elev_deflection_deg, U_inf=U_inf, alpha_deg=alpha_deg,
+                             beta_deg=beta_deg, half_model=half_model, y1_fac=y1_interp(U_inf), surf_mesh_lvl=mshlvl,
+                             flow360folder=curr_folder, results_path=results_dir, run_flag=run)
+
+        if run:
+            # extract CL, CD, CMY from results as moving average over last 20 timesteps
+            CL_avg = res['CL'].tail(20).mean()
+            CD_avg = res['CD'].tail(20).mean()
+            CFx = res['CFx'].tail(20).mean()
+            CFy = res['CFy'].tail(20).mean()
+            CFz = res['CFz'].tail(20).mean()
+            CMx_avg = res['CMx'].tail(20).mean()
+            CMy_avg = res['CMy'].tail(20).mean()
+            CMz_avg = res['CMz'].tail(20).mean()
+            df_results.loc[i, 'CL'] = CL_avg
+            df_results.loc[i, 'CD'] = CD_avg
+            df_results.loc[i, 'CMx'] = CMx_avg
+            df_results.loc[i, 'CMy'] = CMy_avg
+            df_results.loc[i, 'CMz'] = CMz_avg
+            df_results.loc[i, 'CFx'] = CFx
+            df_results.loc[i, 'CFy'] = CFy
+            df_results.loc[i, 'CFz'] = CFz
+
+    # write df_results to csv
+    if run:
+        df_results.to_csv(study_name + ".csv", index=False)
+    pass
+
 
 if __name__ == "__main__":
     main()

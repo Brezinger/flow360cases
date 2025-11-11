@@ -1,7 +1,7 @@
 # GBT design
 
-DESPMTR elevDefl 0
-DESPMTR halfModel 1
+DESPMTR elevDefl 0.000
+DESPMTR halfModel 1.000
 DESPMTR fuseRadius 45
 
 

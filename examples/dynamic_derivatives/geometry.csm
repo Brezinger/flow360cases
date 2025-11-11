@@ -1,0 +1,21 @@
+udprim naca series 0012
+rotatex 90 0 0
+translate 0 -1 0
+
+udprim naca series 0012
+rotatex 90 0 0
+translate 0 1 0
+
+blend "-1;1" "-1;1"
+attribute faceName $wing
+attribute groupName $wing
+
+udparg edgeAttr attrname $edgeName attrstr $leadingEdge
+udprim edgeAttr xyzs 0;-1;0;0;1;0
+
+udparg edgeAttr attrname $edgeName attrstr $trailingEdge
+udprim edgeAttr xyzs 1;-1;0.1;1;1;0.1
+udparg edgeAttr attrname $edgeName attrstr $trailingEdge
+udprim edgeAttr xyzs 1;-1;-0.1;1;1;-0.1
+
+translate -0.25 0 0
