@@ -306,34 +306,42 @@ def define_and_run(elev_deflection_deg=0., U_inf = 270, alpha_deg=0., beta_deg=0
 
         return total_forces
 
-    print("done")
 
 def main():
-    mshlvl = 0
+    mshlvl = 3
     run=True
     n_test_cases = None
 
     results_dir = "F:/WDIR/flow360"
 
-    U_inf_range = np.linspace(100, 250, 4)
+
 
     # symmetric study
+    """
+    U_inf_range = np.linspace(100, 250, 4)
     half_model = True
     alpha_deg_range = np.linspace(0, 10, 3)
     beta_deg_range = [0.]
-    elev_deflection_deg_range = np.linspace(-10, 10, 9)
+    elev_deflection_deg_range = np.linspace(-10, 10, 9)"""
 
     """# asymmetic study
+    U_inf_range = np.linspace(100, 250, 4)
     half_model = False
     alpha_deg_range = [5.,]
     beta_deg_range = [3.]
     elev_deflection_deg_range = [0.]"""
 
+    half_model = False
+    U_inf_range = [100.]
+    alpha_deg_range = [10., ]
+    beta_deg_range = [0.]
+    elev_deflection_deg_range = [0.]
+
 
     if np.all(np.array(beta_deg_range) == 0):
-        study_name = "GBT_parametric_study"
+        study_name = "GBT_parametric_halfmodel_study"
     else:
-        study_name = "GBT_asym_parametric_study"
+        study_name = "GBT_asym_parametric_halfmodel_study"
 
     # initialize results DataFrame
     cols=['U_inf', 'alpha_deg', 'beta_deg', 'elev_deflection_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]

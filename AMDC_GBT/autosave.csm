@@ -1,0 +1,216 @@
+# autosave.csm written by ocsmSave (v1.26)
+
+# Constant, Design, and Output Parameters:
+DESPMTR   elevDefl       0.00000
+DESPMTR   halfModel       0.00000
+DESPMTR   fuseRadius      45.00000
+
+# Global Attributes:
+
+# Branches:
+SKBEG     0   0   0   0
+   SSLOPE    0   1   0
+   SPLINE    4   14.5   0
+   SPLINE    12.82   27.06   0
+   SPLINE    24.72   36.77   0
+   SPLINE    38.79   42.9   0
+   SPLINE    54   fuseRadius   0
+   SSLOPE    1   0   0
+   LINSEG    623   fuseRadius   0
+   LINSEG    628.5   46.50   0
+   LINSEG    672   46.50   0
+   LINSEG    680.51   44.89   0
+   LINSEG    707.51   44.89   0
+   LINSEG    756.51   38.78   0
+   LINSEG    756.51   0   0
+   LINSEG    0   0   0
+SKEND     0
+REVOLVE   0   0   0   1   0   0   45
+PATBEG    i   7
+   SELECT    EDGE   18   2   18   i+3   1
+ATTRIBUTE edgeName   $anisoEdges
+   SELECT    EDGE   18   1   18   i+3   1
+ATTRIBUTE edgeName   $anisoEdges
+PATEND
+STORE     $main_body   0   0
+MARK
+PATBEG    i   8
+   RESTORE   $main_body   0
+   ROTATEX   45*i   0   0
+PATEND
+UNION     1   0   0
+SELECT    FACE   54   760   -47   47   -47   47
+ATTRIBUTE faceName   $mainBody
+SELECT    FACE   -1   55   -47   47   -47   47
+ATTRIBUTE faceName   $fuseNoseFace
+PATBEG    i   8
+   SELECT    EDGE   18   3   18   4   i
+ATTRIBUTE edgeName   $fuseRearEdge
+PATEND
+SELECT    EDGE   622   624   -47   47   -47   47
+ATTRIBUTE edgeName   $fuseRearEdge
+SELECT    EDGE   628   629   -47   47   -47   47
+ATTRIBUTE edgeName   $fuseRearEdge
+SELECT    EDGE   671   673   -47   47   -47   47
+ATTRIBUTE edgeName   $fuseRearEdge
+SELECT    EDGE   680   681   -47   47   -47   47
+ATTRIBUTE edgeName   $fuseRearEdge
+SELECT    EDGE   707   708   -47   47   -47   47
+ATTRIBUTE edgeName   $fuseRearEdge
+STORE     $main_body   0   0
+SKBEG     0   0   0   0
+   CIRARC    0.289   1.282   0   1.101   2.316   0
+   CIRARC    7.618   5.980   0   14.985   7.250   0
+   LINSEG    48.485   7.250   0
+   CIRARC    51.759   7.051   0   54.985   6.456   0
+   LINSEG    54.985   0   0
+   LINSEG    0   0   0
+SKEND     0
+STORE     $base_sketch_top_right   0   1
+MIRROR    0   1   0   0
+REORDER   0   1
+RESTORE   $base_sketch_top_right   0
+UNION     0   0   0
+STORE     $base_sketch_top   0   0
+SKBEG     0   0   0   0
+   CIRARC    0.289   1.282   0   1.101   2.316   0
+   CIRARC    7.618   5.980   0   14.985   7.250   0
+   LINSEG    57.58   7.250   0
+   LINSEG    57.585   7.250   0
+   LINSEG    57.585   0   0
+   LINSEG    0   0   0
+SKEND     0
+STORE     $base_sketch_bot_right   0   0
+RESTORE   $base_sketch_bot_right   0
+TRANSLATE 0   0   17.21
+RESTORE   $base_sketch_top_right   0
+TRANSLATE 0   0   63.75
+RULE      0   0   0
+ATTRIBUTE faceName   $tailFin
+STORE     $base_element_right   0   0
+RESTORE   $base_sketch_bot_right   0
+MIRROR    0   1   0   0
+REORDER   0   1
+TRANSLATE 0   0   17.21
+RESTORE   $base_sketch_top_right   0
+MIRROR    0   1   0   0
+REORDER   0   1
+TRANSLATE 0   0   63.75
+RULE      0   0   0
+ATTRIBUTE faceName   $tailFin
+STORE     $base_element_left   0   1
+RESTORE   $base_element_right   0
+UNION     0   0   0
+SELECT    EDGE   56.285   6.853   40.48
+ATTRIBUTE edgeName   $trailingEdge
+SELECT    EDGE   56.285   -6.853   40.48
+ATTRIBUTE edgeName   $trailingEdge
+SELECT    EDGE   0   0   30
+ATTRIBUTE edgeName   $leadingEdge
+STORE     $base_element   0   0
+UDPRIM    NACA   thickness   0.12   camber   0.00
+SCALE     55.733   0   0   0
+BOX       55   -1   -1   2   2   2
+SUBTRACT  none   1   0   0
+STORE     $tailFoil   0   1
+TRANSLATE 0   0   63.75
+RESTORE   $tailFoil   0
+TRANSLATE 0   0   124.25
+RULE      0   0   0
+ATTRIBUTE faceName   $tailFin
+SELECT    EDGE   0   0   100
+ATTRIBUTE edgeName   $leadingEdge
+SELECT    EDGE   55   0.01   100
+ATTRIBUTE edgeName   $trailingEdge
+SELECT    EDGE   55   -0.01   100
+ATTRIBUTE edgeName   $trailingEdge
+STORE     $fin   0   0
+RESTORE   $main_body   0
+PATBEG    i   4
+   RESTORE   $base_element   0
+   RESTORE   $fin   0
+   TRANSLATE -11.55   0   0
+   ROTATEZ   elevDefl*2*(1/2-mod(floor(i/2),2))   0   0
+   TRANSLATE 11.55   0   0
+   UNION     0   0   0
+   TRANSLATE 690.5   0   0
+   SELECT    EDGE   690   750   -100   100   124   125
+ATTRIBUTE edgeName   $finEndEdges
+   SELECT    EDGE   690   750   -100   100   63   64
+ATTRIBUTE edgeName   $finEndEdges
+   ROTATEX   -45+(i-1)*90   0   0
+   UNION     0   0   0
+PATEND
+STORE     $gbt   0   0
+SELECT    EDGE   690   750   20   40   18   38
+ATTRIBUTE edgeName   $finEndEdges
+SELECT    EDGE   690   750   -40   -20   18   38
+ATTRIBUTE edgeName   $finEndEdges
+SELECT    EDGE   690   750   -40   -20   -38   -18
+ATTRIBUTE edgeName   $finEndEdges
+SELECT    EDGE   690   750   20   40   -38   -18
+ATTRIBUTE edgeName   $finEndEdges
+BOX       0   0   -7.5   76.50   6.1   15
+ATTRIBUTE faceName   $antenna
+BOX       0   0   -7.5   -10   -10   15
+ROTATEZ   45   0   0
+TRANSLATE 0   4   0
+SUBTRACT  none   1   0   0
+ATTRIBUTE faceName   $antenna
+STORE     $antenna_base   0   0
+SKBEG     -0.346   0   0   0
+   CIRARC    13.654   0   3.175   27.654   0   0.
+SKEND     0
+STORE     $antenna_profile   0   1
+MIRROR    0   0   1   0
+RESTORE   $antenna_profile   0
+JOIN     0    0
+STORE     $antenna_profile   0   1
+ELEVATE   0
+TRANSLATE 19.745   0   0
+STORE     $antenna_profile_inside   0   0
+RESTORE   $antenna_profile   0
+ELEVATE   0
+TRANSLATE 45.709   -25.966   0
+RESTORE   $antenna_profile_inside   0
+RULE      0   0   0
+SELECT    EDGE   -.5+19.745   30+19.745   -1   1   -15   15
+ATTRIBUTE edgeName   $finEndEdges
+SELECT    EDGE   -.5+45.709   30+45.709   -1-25.966   1-25.966   -15   15
+ATTRIBUTE edgeName   $finEndEdges
+RESTORE   $antenna_base   0
+UNION     0   0   0
+SELECT    EDGE   -.5+19.745   30+19.745   -1   1   -15   15
+FILLET    3   @sellist   1
+SELECT    FACE   -1   80   -30   10   -10   10
+ATTRIBUTE faceName   $antenna
+SELECT    EDGE   50   75   -26   0.1   -0.1   0.1
+ATTRIBUTE edgeName   $trailingEdge
+SELECT    EDGE   14.5   46   -26   0.1   -0.1   0.1
+ATTRIBUTE edgeName   $leadingEdge
+STORE     $antenna   0   1
+TRANSLATE 308.1   -44-6.1   0
+RESTORE   $gbt   0
+UNION     0   0   0
+RESTORE   $antenna   0
+TRANSLATE 308.1   -44-6.1   0
+MIRROR    0   1   0   0
+UNION     0   0   0
+STORE     $gbt   0   1
+DUMP      GBT.stp   0   0   0   .   0
+IFTHEN    halfModel   EQ   1   and   0   eq   0
+   BOX       -1   0   -500   1002   -1000   1000
+ATTRIBUTE faceName   $symmPlane
+   SUBTRACT  none   1   0   0
+   PATBEG    i   7
+      SELECT    EDGE   18   11-i   151   4   1
+      SELECT    EDGE   18   11-i   151   4   2
+   PATEND
+   SELECT    EDGE   -1   800   -1   1   -100   100
+ATTRIBUTE edgeName   $anisoEdges
+   DUMP      GBT_half.stp   0   0   0   .   0
+ENDIF
+SKBEG     0   0   0   1
+SKEND     0
+
+END
