@@ -1,9 +1,6 @@
 # Import necessary modules from the Flow360 library
-import pickle
 import numpy as np
-import pandas as pd
 from scipy.spatial.transform import Rotation as R
-from matplotlib.pyplot import show
 
 import flow360 as fl
 from flow360 import u
@@ -12,7 +9,6 @@ from flow360 import u
 def main():
     # global flags
     async_flag = False
-    run_flag = False
 
     # global parameters
     solver_tolerance = 1.e-6            # Navier-Stokes and turbulence model solver tolerance
@@ -22,20 +18,15 @@ def main():
     beta_deg = 0                        # Angle of sideslip in degrees
     altitude = 500                      # Sideslip angle in degrees
     # mesh parameters
-    surf_mesh_lvl = 0
+
     global_y1 = 2.85e-6 * u.m           # First layer thickness for boundary layer meshing (wall-resolved)
-    nose_y1 = 2e-6 * u.m
-    tail_fin_y1 = 2.5e-6 * u.m
-    antenna_y1 = 5e-6 * u.m
 
     # solver parameters
     n_timesteps = 1000
     surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec"]
     vol_output_requests = ["primitiveVars", "qcriterion", "mut", "T", "vorticity"]
 
-    # global fixed parameters
-    l_fuse = 756.51
-    r_fuse = 45
+
 
 
     ###############################
@@ -43,14 +34,12 @@ def main():
     ###############################
 
     alpha = np.deg2rad(alpha_deg)
-    beta = np.deg2rad(beta_deg)
 
     vol_box_mwe_folder = fl.Folder.create("Vol_Box_MWE").submit()
-    #vol_box_mwe_folder = fl.Folder.get("folder-ee329f80-9142-496f-938c-15b650fdebc2")
 
     # This initializes a project with the specified geometry and assigns it a name.
     project = fl.Project.from_geometry("C:/git/flow360cases/examples/Xwing.csm", name="Xwing Vol Box MWE",
-                                       folder=vol_box_mwe_folder, length_unit="mm", run_async=async_flag)
+                                       folder=vol_box_mwe_folder, length_unit="m", run_async=async_flag)
     geo = project.geometry  # Access the geometry of the project
     geo.group_faces_by_tag("faceName")
 
@@ -79,87 +68,15 @@ def main():
     # None..
 
     # 3d) Mesh refinements
-
-
     refinements = []
 
-    """# Height-based edge refinement
-    
-    surf_msh_data = {'refinement name': ["LE", "TE", "fin_root_tip", "fuse_aniso_edges", "fuse_rear_refinement"],
-                     "geo_item": [geo["leadingEdge"], geo["trailingEdge"], geo["finEndEdges"], geo["anisoEdges"], geo["fuseRearEdge"]],
-                     "mesh size": [0.055 * u.mm,  # Leading edge refinement
-                              0.085 * u.mm,  # Trailing edge refinement
-                              0.06 * u.mm,  # Vertical fin root/tip refinement
-                              2. * u.mm,  # Fuselage anisotropic edge refinement
-                              0.5 * u.mm,  # Fuselage rear refinement
-                              ]}
-    df_mesh_refinement = pd.DataFrame(surf_msh_data)
-    
-    for idx, data in df_mesh_refinement.iterrows():
-        edge_refinement = fl.SurfaceEdgeRefinement(name=data.iloc[0],
-            edges=[data.iloc[1]],
-            method=fl.HeightBasedRefinement(value=data.iloc[2]),
-        )
-        refinements.append(edge_refinement)
-
-    tail_fin_ref = fl.SurfaceRefinement(name="tail_fin",
-                                        faces=[geo["tailFin"]],
-                                        max_edge_length=1.1 * u.mm
-                                        )
-    refinements.append(tail_fin_ref)
-
-    fuse_nose_ref = fl.SurfaceRefinement(name="fuse_nose",
-                                        faces=[geo["fuseNoseFace"]],
-                                        max_edge_length=2.5 * u.mm
-                                        )
-    refinements.append(fuse_nose_ref)
-
-    # first layer refinements
-    fuse_nose_ref = fl.BoundaryLayer(faces=[geo["fuseNoseFace"], ], first_layer_thickness=nose_y1)
-    refinements.append(fuse_nose_ref)
-    fin_ref = fl.BoundaryLayer(faces=[geo["tailFin"], geo["antenna"]], first_layer_thickness=tail_fin_y1)
-    refinements.append(fin_ref)
-
-    # Volume refinement at tail
-    tail_cyl = fl.Cylinder(name="tail_cyl_refinement", center=(l_fuse*3/2, 0, 0) * fl.u.mm,
-                           axis=(1, 0, 0),
-                           outer_radius=2*r_fuse * fl.u.mm,
-                           height=3*l_fuse * fl.u.mm,
-    )
-
-    fuse_center_wake_refinement = fl.UniformRefinement(name="fuse_center_wake_refinement", entities=[tail_cyl],
-        spacing=7 * 3**(1/2) * u.mm  # Finer spacing for wake resolution
-    )
-    refinements.append(fuse_center_wake_refinement)
-
-    if alpha_deg !=0:
-        i_box = 0
-        l_tot = 3*l_fuse
-        h_box = 4*r_fuse
-        while True:
-            x0 = i_box * 4 * r_fuse / np.tan(alpha)
-            l_box = l_tot - x0
-            if l_box <= 0:
-                break
-            x_center = x0 + l_box / 2
-            z_center = h_box * i_box + h_box / 2
-
-            # Volume refinement box to capture the wake at non-zero AoA
-            wake_box = fl.Box.from_principal_axes(name="skew_wake_box_{0:d}".format(i_box),  axes=[(1, 0, 0), (0, 0, 1)],
-                                       center=(x_center, 0, z_center) * fl.u.mm,
-                                       size=(l_box, h_box, h_box) * fl.u.mm,
-                                       )
-            wake_box_ref = fl.UniformRefinement(name="fuse_wake_box_refinement_{0:d}".format(i_box), entities=[wake_box],
-                                 spacing=7 * 3 ** (1 / 2) * u.mm)  # Finer spacing for wake resolution
-            refinements.append(wake_box_ref)
-            i_box += 1
-    """
-
     # make tail fin refinement
-    h_box = 115 #5 * 55 * 0.12  # set to 115 to account for flow360 bug
-    l_box = 4 * 55
-    b_box = 115
-    r_box = (45 + 125) / 2
+    chord = 3530  # chord length of the wing
+    t_rel = 0.1  # relative thickness of the wing
+    h_box = 5 * chord * t_rel
+    l_box = 4 * chord
+    b_box = 7000.0  # spanwise box size
+    r_box = (1315 + 8000) / 2
     box_list = []
     angles_deg = [-20, 20, 160, 200]
     for i, angle_deg in enumerate(angles_deg):
@@ -173,7 +90,7 @@ def main():
         # fin box
         box_list.append(fl.Box.from_principal_axes(name="fin_box{0:d}".format(i),
                                              axes=[tuple(rot.apply(first_axis)), tuple(rot.apply(second_axis))],
-                                             center=(690.5 + 55 + 55 * np.cos(alpha),
+                                             center=(-chord*1.05 + l_box/2,
                                                      r_box * np.cos(angle),
                                                      r_box * np.sin(angle) + 55 * np.sin(alpha)) * u.mm,
                                              size=(l_box*1.05, h_box, b_box) * u.mm)
@@ -183,42 +100,23 @@ def main():
                                         spacing=1.1 * 3 ** (1 / 2) * u.mm)
     refinements.append(wake_box_ref)
 
-    # antenna volumetric refinement
-    """l_ant_cyl = 380
-    antenna_cylinder = fl.Cylinder(name="antenna_tip_cylinder", center=(367 + l_ant_cyl / 2 * np.cos(alpha),
-                                                                           76,
-                                                                           l_ant_cyl / 2 * np.sin(alpha)) * fl.u.mm,
-                                   axis=(np.cos(alpha), 0, np.sin(alpha)),
-                                   outer_radius=20 * fl.u.mm,
-                                   height=(l_ant_cyl + 30) * fl.u.mm)
-    antenna_refinement = fl.UniformRefinement(name="antenna_tip_refinement", entities=[antenna_cylinder],
-                                              spacing=1.1 * 3 ** (1 / 2) * u.mm)
-    refinements.append(antenna_refinement)"""
-
     # make mesh parameters
     mesh_params = fl.MeshingParams(defaults=mesh_defaults,
                                    volume_zones=[far_field_zone],
                                    refinements=refinements)
 
-
     ###########################
     # 4) Flow solver parameters
     ###########################
-    l_tot = 756.5         # total length of the GBT model
-    b_fin_half_diag = 124 # diagonal half span of the tail fin
-    b_fin_y = b_fin_half_diag * 2 / np.sqrt(2)
-    moment_ref_lengths = (b_fin_y, l_tot, b_fin_y)
-    moment_center_x = 416. # x reference location for moments
-    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 0, 0) * u.mm,
-                                        moment_length=moment_ref_lengths * u.mm,
-                                        area=45**2 * np.pi * u.mm**2)
+    moment_ref_lengths = (1, 1, 1)
+    ref_geometry = fl.ReferenceGeometry(moment_center=(0, 0, 0) * u.m,
+                                        moment_length=moment_ref_lengths * u.m,
+                                        area=10 * u.m**2)
 
     wall_surfaces = [geo["mainBody"]]
 
-
     navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=solver_tolerance)
     turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=solver_tolerance)
-
 
     with fl.SI_unit_system:
         # Set up the main simulation parameters
@@ -231,8 +129,7 @@ def main():
                                              # Define what sort of physical model of a fluid we will use
                                              fl.Fluid(navier_stokes_solver=navier_stokes_solver,
                                                       turbulence_model_solver=turbulence_solver,
-                                                     ),
-                                             fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes])],
+                                                     ),],
                                      outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests),
                                               fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
                                                               output_fields=vol_output_requests)]
@@ -245,7 +142,6 @@ def main():
     #project.model_construct(params=params)
 
     # Step 5: Run the simulation case with the specified parameters
-
     project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False)
 
     print("done")
