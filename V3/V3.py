@@ -570,10 +570,10 @@ def main():
 
     # proj_step_file = "Ventus_Original_WKS.stp"
     #proj_step_file = "Ventus_Original_WK2.stp"
-    #proj_step_file = "Ventus3_FlapletV2_WKS.stp"
+    proj_step_file = "Ventus3_FlapletV2_WKS.stp"
     # proj_step_file = "Ventus3_FlapletV2_WK2.stp"
 
-    proj_id = "prj-c6babf81-d21a-4715-a36c-b9190be22783" # orig WKS
+    # proj_id = "prj-c6babf81-d21a-4715-a36c-b9190be22783" # orig WKS
     # proj_id = "" # orig WK+2
     # proj_id = "" # Flaplet WKS
     # proj_id = "" # Flaplet WK+2
