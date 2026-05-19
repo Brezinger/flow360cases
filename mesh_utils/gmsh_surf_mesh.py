@@ -4,7 +4,7 @@ import argparse
 import json
 import math
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -95,15 +95,57 @@ def _curve_spec_discretization(
     entry: dict[str, Any],
     index: int,
     spec_count: int,
+    curve_ids: int | list[int],
 ) -> tuple[int, str, float]:
-    n_pts = int(_per_spec_value(entry, "n_pts", index, spec_count))
     mesh_type = str(_per_spec_value(entry, "type", index, spec_count, "Progression"))
-    coef = float(_per_spec_value(entry, "Parameter", index, spec_count, 1.0))
+    mesh_size_mode = str(
+        _per_spec_value(entry, "mesh size mode", index, spec_count, "npts")
+    ).lower()
+
+    if mesh_size_mode in ("npts", "n_pts", "points"):
+        n_pts = int(_per_spec_value(entry, "n_pts", index, spec_count))
+        coef = float(_per_spec_value(entry, "Parameter", index, spec_count, 1.0))
+    elif mesh_size_mode in ("ele size", "element size", "element_size"):
+        if mesh_type.lower() != "progression":
+            raise ValueError(
+                f"Element-size mode currently requires Progression, got "
+                f"{mesh_type!r} in {entry.get('name', entry)!r}."
+            )
+
+        curve_length = _curve_group_length(curve_ids)
+        target_size_1 = float(
+            _per_spec_value(entry, "target ele size 1", index, spec_count)
+        )
+        target_size_2 = float(
+            _per_spec_value(entry, "target ele size 2", index, spec_count)
+        )
+        n_pts, coef = _progression_from_endpoint_sizes(
+            curve_length, target_size_1, target_size_2
+        )
+    else:
+        raise ValueError(
+            f"Unsupported mesh size mode {mesh_size_mode!r} in "
+            f"{entry.get('name', entry)!r}."
+        )
 
     if n_pts < 2:
         raise ValueError(f"Transfinite curve point count must be >= 2: {entry}")
 
     return n_pts, mesh_type, coef
+
+
+def _entry_mesh_size_mode(entry: dict[str, Any], index: int, spec_count: int) -> str:
+    return str(
+        _per_spec_value(entry, "mesh size mode", index, spec_count, "npts")
+    ).lower()
+
+
+def _uses_element_size_mode(entry: dict[str, Any], spec_count: int) -> bool:
+    return any(
+        _entry_mesh_size_mode(entry, index, spec_count)
+        in ("ele size", "element size", "element_size")
+        for index in range(spec_count)
+    )
 
 
 def _as_vector(value: Sequence[float]) -> list[float]:
@@ -117,6 +159,76 @@ def _as_vector(value: Sequence[float]) -> list[float]:
 
 def _curve_length(curve_id: int) -> float:
     return gmsh.model.occ.getMass(1, abs(curve_id))
+
+
+def _curve_group_length(curve_ids: int | list[int]) -> float:
+    return sum(_curve_length(curve_id) for curve_id in _as_list(curve_ids))
+
+
+def _progression_sum(first_size: float, ratio: float, n_elements: int) -> float:
+    if n_elements <= 0:
+        return 0.0
+    if abs(ratio - 1.0) < 1e-14:
+        return n_elements * first_size
+    return first_size * (ratio**n_elements - 1.0) / (ratio - 1.0)
+
+
+def _progression_length_error(
+    curve_length: float,
+    target_size_1: float,
+    target_size_2: float,
+    n_elements: int,
+) -> float:
+    if n_elements == 1:
+        estimated_length = 0.5 * (target_size_1 + target_size_2)
+    else:
+        ratio = (target_size_2 / target_size_1) ** (1.0 / (n_elements - 1))
+        estimated_length = _progression_sum(target_size_1, ratio, n_elements)
+    return abs(estimated_length - curve_length)
+
+
+def _progression_from_endpoint_sizes(
+    curve_length: float,
+    target_size_1: float,
+    target_size_2: float,
+) -> tuple[int, float]:
+    if curve_length <= 0.0:
+        raise ValueError(f"Curve length must be positive, got {curve_length}.")
+    if target_size_1 <= 0.0 or target_size_2 <= 0.0:
+        raise ValueError(
+            f"Target element sizes must be positive, got "
+            f"{target_size_1} and {target_size_2}."
+        )
+
+    if abs(target_size_1 - target_size_2) < 1e-14:
+        n_elements = max(1, round(curve_length / target_size_1))
+        return n_elements + 1, 1.0
+
+    upper = 2
+    while (
+        _progression_length_error(
+            curve_length, target_size_1, target_size_2, upper
+        )
+        > _progression_length_error(
+            curve_length, target_size_1, target_size_2, upper + 1
+        )
+        and upper < 100000
+    ):
+        upper *= 2
+
+    upper = min(max(upper * 2, 4), 100000)
+    n_elements = min(
+        range(1, upper + 1),
+        key=lambda candidate: _progression_length_error(
+            curve_length, target_size_1, target_size_2, candidate
+        ),
+    )
+
+    if n_elements == 1:
+        return 2, 1.0
+
+    coef = (target_size_2 / target_size_1) ** (1.0 / (n_elements - 1))
+    return n_elements + 1, coef
 
 
 def _progression_node_positions(n_pts: int, coef: float, invert: bool) -> list[float]:
@@ -369,7 +481,7 @@ def _iter_traced_curve_specs(
         curve_ids = [curve_id for curve_id, _ in group]
         invert_directions = [invert_direction for _, invert_direction in group]
         n_pts, mesh_type, coef = _curve_spec_discretization(
-            entry, spec_index, spec_count
+            entry, spec_index, spec_count, curve_ids
         )
 
         user_invert_direction = _per_spec_value(
@@ -430,7 +542,7 @@ def _iter_curve_specs(
         zip(curve_ids, invert_direction)
     ):
         n_pts, mesh_type, coef = _curve_spec_discretization(
-            entry, spec_index, spec_count
+            entry, spec_index, spec_count, spec_curve_ids
         )
         yield CurveSpec(
             spec_curve_ids, spec_invert_direction, n_pts, mesh_type, coef
@@ -487,7 +599,24 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
     for section_name in ("chordwise_curve_sequences", "spanwise_curve_sequences"):
         section = mesh_def.get(section_name, {})
         for entry in _iter_curve_entries(section):
-            for curve_spec in _iter_curve_specs(entry):
+            curve_specs = list(_iter_curve_specs(entry))
+            if (
+                section_name == "spanwise_curve_sequences"
+                and curve_specs
+                and _uses_element_size_mode(entry, len(curve_specs))
+            ):
+                first_spec = curve_specs[0]
+                curve_specs = [
+                    replace(
+                        curve_spec,
+                        n_pts=first_spec.n_pts,
+                        mesh_type=first_spec.mesh_type,
+                        coef=first_spec.coef,
+                    )
+                    for curve_spec in curve_specs
+                ]
+
+            for curve_spec in curve_specs:
                 for curve_id, curve_n_pts, invert in _curve_node_counts(
                     curve_spec.curve_ids,
                     curve_spec.invert_directions,

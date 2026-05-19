@@ -1,354 +1,697 @@
-﻿{
+{
   "chordwise_curve_sequences": [
     {
-      "name": "upper surf rear",
-      "type": "Progression",
-      "Parameter": 1.05,
-      "invert_direction": false,
-      "n_pts": 26,
+      "name": "airfoil loop 1",
       "curve_ids": [
         112,
-        97,
-        82,
-        66,
-        49,
-        35,
-        12,
-        11
+        115,
+        117,
+        119,
+        121,
+        123,
+        124
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
       ]
     },
     {
-      "name": "upper surf center",
-      "type": "Progression",
-      "Parameter": 1,
-      "invert_direction": false,
-      "n_pts": 232,
+      "name": "airfoil loop 2",
       "curve_ids": [
-        115,
+        97,
         100,
+        [
+          103,
+          102
+        ],
+        105,
+        107,
+        109,
+        110
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        [
+          true,
+          true
+        ],
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "airfoil loop 3",
+      "curve_ids": [
+        82,
         85,
+        [
+          88,
+          87
+        ],
+        90,
+        92,
+        94,
+        95
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        [
+          true,
+          true
+        ],
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "airfoil loop 4",
+      "curve_ids": [
+        66,
         [
           70,
           69
         ],
+        [
+          73,
+          72
+        ],
+        75,
+        77,
+        79,
+        80
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        [
+          true,
+          true
+        ],
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "airfoil loop 5",
+      "curve_ids": [
+        49,
         [
           55,
           54,
           53,
           52
         ],
+        57,
+        59,
+        61,
+        63,
+        64
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "airfoil loop 6",
+      "curve_ids": [
+        35,
         38,
+        40,
+        42,
+        44,
+        46,
+        47
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "airfoil loop 7",
+      "curve_ids": [
+        12,
         [
           16,
           18,
           19
-        ]
-      ]
-    },
-    {
-      "name": "upper surf forward",
-      "type": "Progression",
-      "Parameter": 1.05,
-      "invert_direction": [
-        true,
-        [
-          true,
-          true
         ],
-        [
-          true,
-          true
-        ],
-        [
-          true,
-          true
-        ],
-        true,
-        true,
-        true,
-        true
-      ],
-      "n_pts": 42,
-      "curve_ids": [
-        117,
-        [
-          103,
-          102
-        ],
-        [
-          88,
-          87
-        ],
-        [
-          73,
-          72
-        ],
-        57,
-        40,
         22,
-        7
-      ],
-      "_start_pt": 50,
-      "_v_pointing": [
-        1.0,
-        0.0,
-        0.0
-      ],
-      "_n_subcurvs": [
-        1,
-        2,
-        2,
-        2,
-        1,
-        1,
-        1,
-        1
-      ]
-    },
-    {
-      "name": "lower surf forward",
-      "type": "Progression",
-      "Parameter": 1.05,
-      "invert_direction": false,
-      "n_pts": 42,
-      "curve_ids": [
-        119,
-        105,
-        90,
-        75,
-        59,
-        42,
         23,
-        6
-      ]
-    },
-    {
-      "name": "lower surf center",
-      "type": "Progression",
-      "Parameter": 1,
-      "invert_direction": false,
-      "n_pts": 232,
-      "curve_ids": [
-        121,
-        107,
-        92,
-        77,
-        61,
-        44,
         [
           26,
           28,
           29
-        ]
-      ]
-    },
-    {
-      "name": "lower surf rear",
-      "type": "Progression",
-      "Parameter": 1.05,
-      "invert_direction": true,
-      "n_pts": 26,
-      "curve_ids": [
-        123,
-        109,
-        94,
-        79,
-        63,
-        46,
+        ],
         32,
+        33
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1,
+        1.05,
+        1.05,
+        1,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        232,
+        42,
+        42,
+        232,
+        26,
+        13
+      ]
+    },
+    {
+      "name": "flaplet tip airfoil loop",
+      "curve_ids": [
         11,
-        2
-      ]
-    },
-    {
-      "name": "blunt trailing edge",
-      "type": "Progression",
-      "Parameter": 1.05,
-      "invert_direction": false,
-      "n_pts": 13,
-      "curve_ids": [
-        124,
-        110,
-        95,
-        80,
-        64,
-        47,
-        33,
-        31,
-        1
-      ]
-    },
-    {
-      "name": "flaplet tip 1",
-      "type": "Progression",
-      "Parameter": 1.0,
-      "invert_direction": false,
-      "n_pts": 7,
-      "curve_ids": [
         10,
-        3
-      ]
-    },
-    {
-      "name": "flaplet tip 2",
-      "type": "Progression",
-      "Parameter": 1.0,
-      "invert_direction": false,
-      "n_pts": 19,
-      "curve_ids": [
         9,
-        4
-      ]
-    },
-    {
-      "name": "flaplet tip 3",
-      "type": "Progression",
-      "Parameter": 1.0,
-      "invert_direction": false,
-      "n_pts": 208,
-      "curve_ids": [
         8,
-        5
+        7,
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ],
+      "type": [
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression",
+        "Progression"
+      ],
+      "Parameter": [
+        1.05,
+        1.0,
+        1.0,
+        1.0,
+        1.05,
+        1.05,
+        1.0,
+        1.0,
+        1.0,
+        1.05,
+        1.05
+      ],
+      "invert_direction": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      "n_pts": [
+        26,
+        7,
+        19,
+        208,
+        42,
+        42,
+        208,
+        19,
+        7,
+        26,
+        13
       ]
     }
   ],
-
   "spanwise_curve_sequences": [
-      {
-        "name": "Trapezoid 1",
-        "type": "Progression",
-        "Parameter": 1.005,
-        "invert_direction": false,
-        "mesh size mode": "ele size",
-        "target ele size 1": 60,
-        "target ele size 2": 60,
-        "n_pts": 100,
-        "curve_ids": [113, 111, 114, 116, 118, 120, 122]
-      },
-      {
-        "name": "Trapezoid 2",
-        "type": "Progression",
-        "Parameter": 1.0,
-        "invert_direction": false,
-        "mesh size mode": "ele size",
-        "target ele size 1": 60,
-        "target ele size 2": 60,
-        "n_pts": 100,
-        "curve_ids": [98, 96, 99, 101, 104, 106, 108]
-      },
-      {
-        "name": "Trapezoid 3",
-        "type": "Progression",
-        "Parameter": 1.0,
-        "invert_direction": false,
-        "mesh size mode": "ele size",
-        "target ele size 1": 60,
-        "target ele size 2": 15,
-        "n_pts": 100,
-        "curve_ids": [83, 81, 84, 86, 89, 91, 93]
-      },
-      {
-        "name": "Intermediate section",
-        "type": "Progression",
-        "Parameter": 1.0,
-        "invert_direction": false,
-        "mesh size mode": "npts",
-        "target ele size 1": 60,
-        "target ele size 2": 60,
-        "n_pts": 2,
-        "curve_ids": [67, 65, 68, 71, 74, 76, 78]
-      },
-      {
-        "name": "Trapezoid 4a",
-        "type": "Progression",
-        "Parameter": 1.0,
-        "invert_direction": false,
-        "mesh size mode": "ele size",
-        "target ele size 1": 15,
-        "target ele size 2": 15,
-        "n_pts": 50,
-        "curve_ids": [50, 48, 51, 56, 58, 60, 62]
-      },
-      {
-        "name": "Trapezoid 4b",
-        "type": "Progression",
-        "Parameter": 1.0,
-        "invert_direction": true,
-        "mesh size mode": "ele size",
-        "target ele size 1": 10,
-        "target ele size 2": 15,
-        "n_pts": 50,
-        "curve_ids": [36, 34, 37, 39, 41, 43, 45]
-      },
-      {
-        "name": "Flaplet",
-        "type": "Progression",
-        "Parameter": 1.05,
-        "invert_direction": true,
-        "mesh size mode": "ele size",
-        "target ele size 1": 0.36,
-        "target ele size 2": 10,
-        "n_pts": 200,
-        "curve_ids": [13, 14, 15, 17, 20, 21, 24, 25, 27, 30, 31]
-      }
+    {
+      "name": "Trapezoid 1",
+      "type": "Progression",
+      "Parameter": 1.005,
+      "invert_direction": false,
+      "mesh size mode": "ele size",
+      "target ele size 1": 60,
+      "target ele size 2": 60,
+      "n_pts": 100,
+      "curve_ids": [
+        113,
+        111,
+        114,
+        116,
+        118,
+        120,
+        122
+      ]
+    },
+    {
+      "name": "Trapezoid 2",
+      "type": "Progression",
+      "Parameter": 1.0,
+      "invert_direction": false,
+      "mesh size mode": "ele size",
+      "target ele size 1": 60,
+      "target ele size 2": 60,
+      "n_pts": 100,
+      "curve_ids": [
+        98,
+        96,
+        99,
+        101,
+        104,
+        106,
+        108
+      ]
+    },
+    {
+      "name": "Trapezoid 3",
+      "type": "Progression",
+      "Parameter": 1.0,
+      "invert_direction": false,
+      "mesh size mode": "ele size",
+      "target ele size 1": 60,
+      "target ele size 2": 15,
+      "n_pts": 100,
+      "curve_ids": [
+        83,
+        81,
+        84,
+        86,
+        89,
+        91,
+        93
+      ]
+    },
+    {
+      "name": "Intermediate section",
+      "type": "Progression",
+      "Parameter": 1.0,
+      "invert_direction": false,
+      "mesh size mode": "npts",
+      "target ele size 1": 60,
+      "target ele size 2": 60,
+      "n_pts": 2,
+      "curve_ids": [
+        67,
+        65,
+        68,
+        71,
+        74,
+        76,
+        78
+      ]
+    },
+    {
+      "name": "Trapezoid 4a",
+      "type": "Progression",
+      "Parameter": 1.0,
+      "invert_direction": false,
+      "mesh size mode": "ele size",
+      "target ele size 1": 15,
+      "target ele size 2": 15,
+      "n_pts": 50,
+      "curve_ids": [
+        50,
+        48,
+        51,
+        56,
+        58,
+        60,
+        62
+      ]
+    },
+    {
+      "name": "Trapezoid 4b",
+      "type": "Progression",
+      "Parameter": 1.0,
+      "invert_direction": true,
+      "mesh size mode": "ele size",
+      "target ele size 1": 10,
+      "target ele size 2": 15,
+      "n_pts": 50,
+      "curve_ids": [
+        36,
+        34,
+        37,
+        39,
+        41,
+        43,
+        45
+      ]
+    },
+    {
+      "name": "Flaplet",
+      "type": "Progression",
+      "Parameter": 1.05,
+      "invert_direction": true,
+      "mesh size mode": "ele size",
+      "target ele size 1": 0.36,
+      "target ele size 2": 10,
+      "n_pts": 200,
+      "curve_ids": [
+        13,
+        14,
+        15,
+        17,
+        20,
+        21,
+        24,
+        25,
+        27,
+        30,
+        31
+      ]
+    }
   ],
-
   "transfinite_surfaces": [
-      {
-        "id": 35,
-        "Arrangement": "left",
-        "boundary points": [49, 51, 42, 40]
-      },
-	  {
-        "id": 36,
-        "Arrangement": "left",
-        "boundary points": [51, 52, 44, 42]
-      },
-	  {
-        "id": 48,
-        "Arrangement": "left",
-        "boundary points": [66, 65, 57, 58]
-      },
-	  {
-        "id": 43,
-        "Arrangement": "left",
-        "boundary points": [59, 60, 52, 51]
-      },
-      {
-        "id": 49,
-        "Arrangement": "left",
-        "boundary points": [65, 59, 67, 57]
-      },
-      {
-        "id": 50,
-        "Arrangement": "left",
-        "boundary points": [67, 68, 60, 59]
-      },
-	  {
-        "id": 14,
-        "Arrangement": "left",
-        "boundary points": [23, 25, 16, 13]
-      },
-	  {
-        "id": 17,
-        "Arrangement": "left",
-        "boundary points": [28, 27, 18, 21]
-      },
-	  {
-        "id": 21,
-        "Arrangement": "left",
-        "boundary points": [30, 32, 25, 23]
-      },
-	  {
-        "id": 28,
-        "Arrangement": "left",
-        "boundary points": [40, 42, 32, 30]
-      },
-	  {
-        "id": 29,
-        "Arrangement": "left",
-        "boundary points": [42, 44, 36, 32]
-      }
-    ],
-  "unstructured_surfaces": [1, 55]
+    {
+      "id": 35,
+      "Arrangement": "left",
+      "boundary points": [
+        49,
+        51,
+        42,
+        40
+      ]
+    },
+    {
+      "id": 36,
+      "Arrangement": "left",
+      "boundary points": [
+        51,
+        52,
+        44,
+        42
+      ]
+    },
+    {
+      "id": 48,
+      "Arrangement": "left",
+      "boundary points": [
+        66,
+        65,
+        57,
+        58
+      ]
+    },
+    {
+      "id": 43,
+      "Arrangement": "left",
+      "boundary points": [
+        59,
+        60,
+        52,
+        51
+      ]
+    },
+    {
+      "id": 49,
+      "Arrangement": "left",
+      "boundary points": [
+        65,
+        59,
+        67,
+        57
+      ]
+    },
+    {
+      "id": 50,
+      "Arrangement": "left",
+      "boundary points": [
+        67,
+        68,
+        60,
+        59
+      ]
+    },
+    {
+      "id": 14,
+      "Arrangement": "left",
+      "boundary points": [
+        23,
+        25,
+        16,
+        13
+      ]
+    },
+    {
+      "id": 17,
+      "Arrangement": "left",
+      "boundary points": [
+        28,
+        27,
+        18,
+        21
+      ]
+    },
+    {
+      "id": 21,
+      "Arrangement": "left",
+      "boundary points": [
+        30,
+        32,
+        25,
+        23
+      ]
+    },
+    {
+      "id": 28,
+      "Arrangement": "left",
+      "boundary points": [
+        40,
+        42,
+        32,
+        30
+      ]
+    },
+    {
+      "id": 29,
+      "Arrangement": "left",
+      "boundary points": [
+        42,
+        44,
+        36,
+        32
+      ]
+    }
+  ],
+  "unstructured_surfaces": [
+    1,
+    55
+  ]
 }
