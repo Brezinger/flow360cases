@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import warnings
@@ -36,6 +37,13 @@ class CurveSpec:
     n_pts: int
     mesh_type: str
     coef: float
+
+
+@dataclass(frozen=True)
+class TracedLoop:
+    curve_ids: list[int]
+    points: list[int]
+    blunt_curve_id: int
 
 
 def _as_bool(value: Any) -> bool:
@@ -155,6 +163,48 @@ def _as_vector(value: Sequence[float]) -> list[float]:
     if math.sqrt(sum(component * component for component in vector)) <= 0.0:
         raise ValueError("Tracing vector must be non-zero.")
     return vector
+
+
+def _vector_norm(vector: Sequence[float]) -> float:
+    return math.sqrt(sum(component * component for component in vector))
+
+
+def _normalized(vector: Sequence[float]) -> list[float]:
+    norm = _vector_norm(vector)
+    if norm <= 0.0:
+        raise ValueError("Cannot normalize a zero vector.")
+    return [component / norm for component in vector]
+
+
+def _dot(vector_a: Sequence[float], vector_b: Sequence[float]) -> float:
+    return sum(a * b for a, b in zip(vector_a, vector_b))
+
+
+def _cross(vector_a: Sequence[float], vector_b: Sequence[float]) -> list[float]:
+    return [
+        vector_a[1] * vector_b[2] - vector_a[2] * vector_b[1],
+        vector_a[2] * vector_b[0] - vector_a[0] * vector_b[2],
+        vector_a[0] * vector_b[1] - vector_a[1] * vector_b[0],
+    ]
+
+
+def _point_coord(point_id: int) -> list[float]:
+    return [float(value) for value in gmsh.model.getValue(0, int(point_id), [0])]
+
+
+def _point_vector(start_point: int, end_point: int) -> list[float]:
+    start_coord = _point_coord(start_point)
+    end_coord = _point_coord(end_point)
+    return [end_coord[index] - start_coord[index] for index in range(3)]
+
+
+def _other_curve_point(curve_id: int, point_id: int) -> int:
+    endpoints = _curve_endpoints(curve_id)
+    if point_id == endpoints[0]:
+        return endpoints[1]
+    if point_id == endpoints[1]:
+        return endpoints[0]
+    raise ValueError(f"Point {point_id} is not on curve {curve_id}.")
 
 
 def _curve_length(curve_id: int) -> float:
@@ -380,7 +430,11 @@ def _iter_surface_entries(
 
 def _has_trace_definition(entry: dict[str, Any]) -> bool:
     trace_keys = {"start_pt", "v_pointing", "n_subcurvs"}
+    trigger_keys = {"start_pt", "v_pointing"}
     present_keys = trace_keys.intersection(entry)
+
+    if not trigger_keys.intersection(entry):
+        return False
 
     if present_keys and present_keys != trace_keys:
         missing_keys = sorted(trace_keys - present_keys)
@@ -455,6 +509,424 @@ def _trace_surface_edge_curves(
         pointing = best_vector
 
     return traced_curves
+
+
+def _adjacent_curve_ids(point_id: int) -> list[int]:
+    adjacent_curves, _ = gmsh.model.getAdjacencies(0, int(point_id))
+    return [int(curve_id) for curve_id in adjacent_curves]
+
+
+def _select_adjacent_curve(
+    point_id: int,
+    direction: Sequence[float],
+    excluded_curves: set[int],
+    *,
+    min_score: float = 0.0,
+    reject_direction: Sequence[float] | None = None,
+    reject_alignment: float = 0.5,
+) -> tuple[int, int, list[float]] | None:
+    direction = _normalized(direction)
+    best_curve = None
+    best_next_point = None
+    best_vector = None
+    best_score = min_score
+    reject_unit = (
+        _normalized(reject_direction) if reject_direction is not None else None
+    )
+
+    for curve_id in _adjacent_curve_ids(point_id):
+        if abs(curve_id) in excluded_curves:
+            continue
+
+        next_point = _other_curve_point(curve_id, point_id)
+        curve_vector = _point_vector(point_id, next_point)
+        curve_norm = _vector_norm(curve_vector)
+        if curve_norm <= 0.0:
+            continue
+
+        curve_unit = _normalized(curve_vector)
+        if (
+            reject_unit is not None
+            and abs(_dot(curve_unit, reject_unit)) > reject_alignment
+        ):
+            continue
+
+        score = _dot(curve_unit, direction)
+        if score > best_score:
+            best_curve = curve_id
+            best_next_point = next_point
+            best_vector = curve_vector
+            best_score = score
+
+    if best_curve is None or best_next_point is None or best_vector is None:
+        return None
+
+    return best_curve, best_next_point, best_vector
+
+
+def _connecting_curve(point_a: int, point_b: int) -> int | None:
+    adjacent_a = {abs(curve_id) for curve_id in _adjacent_curve_ids(point_a)}
+    for curve_id in _adjacent_curve_ids(point_b):
+        if abs(curve_id) in adjacent_a:
+            return abs(curve_id)
+    return None
+
+
+def _trace_airfoil_loop(
+    start_point: int,
+    chordwise_direction: Sequence[float],
+    blunt_direction: Sequence[float],
+    spanwise_direction: Sequence[float],
+    excluded_curves: set[int],
+) -> TracedLoop:
+    current_point = int(start_point)
+    pointing = _as_vector(chordwise_direction)
+    curve_ids = []
+    points = [current_point]
+    local_excluded = set(excluded_curves)
+
+    while True:
+        if curve_ids:
+            blunt_curve = _connecting_curve(current_point, start_point)
+            if blunt_curve is not None and blunt_curve not in local_excluded:
+                blunt_vector = _point_vector(current_point, start_point)
+                if (
+                    abs(_dot(_normalized(blunt_vector), _normalized(blunt_direction)))
+                    > 0.2
+                ):
+                    return TracedLoop(curve_ids, points, blunt_curve)
+
+        selected = _select_adjacent_curve(
+            current_point,
+            pointing,
+            local_excluded,
+            min_score=-1.0,
+            reject_direction=spanwise_direction,
+            reject_alignment=0.85,
+        )
+        if selected is None:
+            raise ValueError(
+                f"Could not continue airfoil loop trace from point {current_point}."
+            )
+
+        curve_id, next_point, curve_vector = selected
+        curve_ids.append(curve_id)
+        points.append(next_point)
+        local_excluded.add(abs(curve_id))
+        current_point = next_point
+        pointing = curve_vector
+
+
+def _curve_group_size(curve_group: int | list[int]) -> int:
+    if isinstance(curve_group, int):
+        return 1
+    return len(curve_group)
+
+
+def _group_traced_curves(
+    traced_curve_ids: list[int],
+    template_entry: dict[str, Any],
+) -> list[int | list[int]]:
+    if "n_subcurvs" in template_entry:
+        group_sizes = [int(group_size) for group_size in template_entry["n_subcurvs"]]
+    elif "curve_ids" in template_entry:
+        group_sizes = [
+            _curve_group_size(curve_group)
+            for curve_group in template_entry["curve_ids"]
+        ]
+    else:
+        group_sizes = [1] * len(traced_curve_ids)
+
+    expected_curve_count = sum(group_sizes)
+    if expected_curve_count != len(traced_curve_ids):
+        raise ValueError(
+            f"Automatic trace for {template_entry.get('name', template_entry)!r} "
+            f"found {len(traced_curve_ids)} curves, but the template groups "
+            f"require {expected_curve_count}."
+        )
+
+    grouped_curves = []
+    index = 0
+    for group_size in group_sizes:
+        group = traced_curve_ids[index : index + group_size]
+        index += group_size
+        grouped_curves.append(group[0] if group_size == 1 else group)
+    return grouped_curves
+
+
+def _trace_spanwise_curves(
+    point_ids: list[int],
+    directions: list[list[float]],
+    excluded_curves: set[int],
+) -> tuple[list[int], list[int], list[list[float]]]:
+    curve_ids = []
+    next_points = []
+    next_directions = []
+
+    for index, point_id in enumerate(point_ids):
+        direction = directions[min(index, len(directions) - 1)]
+        selected = _select_adjacent_curve(point_id, direction, excluded_curves)
+        if selected is None:
+            continue
+
+        curve_id, next_point, curve_vector = selected
+        curve_ids.append(curve_id)
+        next_points.append(next_point)
+        next_directions.append(curve_vector)
+
+    return curve_ids, next_points, next_directions
+
+
+def _automatic_config(mesh_def: dict[str, Any]) -> dict[str, Any] | None:
+    config = mesh_def.get("automatic_curve_sequences")
+    if config is None:
+        return None
+    if config is True:
+        return {}
+    if not isinstance(config, dict):
+        raise TypeError("automatic_curve_sequences must be an object or true.")
+    if config.get("enabled", True) is False:
+        return None
+    return config
+
+
+def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
+    config = _automatic_config(mesh_def)
+    if config is None:
+        return mesh_def
+
+    start_point = int(config.get("start_pt", config.get("start point", 66)))
+    chordwise_direction = _as_vector(
+        config.get(
+            "chordwise_direction",
+            config.get("v_chordwise", [-1.0, 0.0, 0.0]),
+        )
+    )
+    spanwise_direction = _as_vector(
+        config.get(
+            "spanwise_direction",
+            config.get("v_spanwise", [0.0, 1.0, 0.0]),
+        )
+    )
+    blunt_direction = _as_vector(
+        config.get(
+            "blunt_te_direction",
+            config.get("v_blunt_te", [0.0, 0.0, -1.0]),
+        )
+    )
+
+    chordwise_templates = [
+        copy.deepcopy(entry)
+        for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+    ]
+    spanwise_templates = [
+        copy.deepcopy(entry)
+        for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", []))
+    ]
+    if not chordwise_templates:
+        raise ValueError("Automatic curve discovery requires chordwise templates.")
+
+    auto_mesh_def = copy.deepcopy(mesh_def)
+    used_curves: set[int] = set()
+    chordwise_entries = []
+    spanwise_entries = []
+    loop_start_point = start_point
+    spanwise_directions = [spanwise_direction]
+
+    for loop_index, chordwise_template in enumerate(chordwise_templates):
+        if loop_index > 0 and spanwise_directions:
+            first_chord = _select_adjacent_curve(
+                loop_start_point, chordwise_direction, used_curves
+            )
+            if first_chord is None:
+                raise ValueError(
+                    f"Could not identify first chordwise curve at point "
+                    f"{loop_start_point}."
+                )
+            first_chord_vector = _point_vector(
+                loop_start_point,
+                _other_curve_point(first_chord[0], loop_start_point),
+            )
+            cross_blunt_direction = _cross(first_chord_vector, spanwise_directions[0])
+            if _vector_norm(cross_blunt_direction) > 0.0:
+                blunt_direction = cross_blunt_direction
+
+        traced_loop = _trace_airfoil_loop(
+            loop_start_point,
+            chordwise_direction,
+            blunt_direction,
+            spanwise_directions[0] if spanwise_directions else spanwise_direction,
+            used_curves,
+        )
+        traced_curve_ids = traced_loop.curve_ids + [traced_loop.blunt_curve_id]
+        used_curves.update(abs(curve_id) for curve_id in traced_curve_ids)
+
+        chordwise_entry = copy.deepcopy(chordwise_template)
+        chordwise_entry["curve_ids"] = _group_traced_curves(
+            traced_curve_ids, chordwise_template
+        )
+        chordwise_entries.append(chordwise_entry)
+
+        if loop_index >= len(spanwise_templates):
+            break
+
+        spanwise_curve_ids, next_points, next_directions = _trace_spanwise_curves(
+            traced_loop.points, spanwise_directions, used_curves
+        )
+        if not spanwise_curve_ids:
+            break
+
+        used_curves.update(abs(curve_id) for curve_id in spanwise_curve_ids)
+        spanwise_entry = copy.deepcopy(spanwise_templates[loop_index])
+        spanwise_entry["curve_ids"] = spanwise_curve_ids
+        spanwise_entries.append(spanwise_entry)
+
+        loop_start_point = next_points[0]
+        spanwise_directions = next_directions or [spanwise_direction]
+
+    auto_mesh_def["chordwise_curve_sequences"] = chordwise_entries
+    auto_mesh_def["spanwise_curve_sequences"] = spanwise_entries
+    return auto_mesh_def
+
+
+def _flatten_curve_group(curve_group: int | list[int]) -> list[int]:
+    if isinstance(curve_group, int):
+        return [curve_group]
+    return [int(curve_id) for curve_id in curve_group]
+
+
+def _entry_curve_groups(entry: dict[str, Any]) -> list[list[int]]:
+    return [_flatten_curve_group(group) for group in entry["curve_ids"]]
+
+
+def _ordered_group_point_pairs(
+    curve_groups: list[list[int]],
+) -> list[tuple[list[int], int, int]]:
+    first_curve = curve_groups[0][0]
+    last_curve = curve_groups[-1][-1]
+    first_endpoints = set(_curve_endpoints(first_curve))
+    last_endpoints = set(_curve_endpoints(last_curve))
+    shared_points = first_endpoints.intersection(last_endpoints)
+    current_point = next(iter(shared_points)) if shared_points else _curve_endpoints(first_curve)[0]
+
+    group_point_pairs = []
+    for curve_group in curve_groups:
+        group_start = current_point
+        for curve_id in curve_group:
+            current_point = _other_curve_point(curve_id, current_point)
+        group_point_pairs.append((curve_group, group_start, current_point))
+
+    return group_point_pairs
+
+
+def _flat_group_point_pairs(
+    curve_groups: list[list[int]],
+) -> list[tuple[list[int], int, int]]:
+    flat_groups = [[curve_id] for curve_group in curve_groups for curve_id in curve_group]
+    return _ordered_group_point_pairs(flat_groups)
+
+
+def _surface_boundary_curve_map() -> dict[frozenset[int], int]:
+    surface_map = {}
+    for _, surface_id in gmsh.model.getEntities(2):
+        boundary_curves = frozenset(_surface_boundary_curves(surface_id))
+        surface_map[boundary_curves] = surface_id
+    return surface_map
+
+
+def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
+    curve_map = {}
+    for curve_id in curve_ids:
+        point_a, point_b = _curve_endpoints(curve_id)
+        curve_map[point_a] = curve_id
+        curve_map[point_b] = curve_id
+    return curve_map
+
+
+def _automatic_surfaces_enabled(mesh_def: dict[str, Any]) -> bool:
+    if "automatic_transfinite_surfaces" in mesh_def:
+        return bool(mesh_def["automatic_transfinite_surfaces"])
+    return _automatic_config(mesh_def) is not None
+
+
+def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, Any]:
+    if not _automatic_surfaces_enabled(mesh_def):
+        return mesh_def
+
+    chordwise_entries = list(
+        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+    )
+    spanwise_entries = list(
+        _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", []))
+    )
+    if len(chordwise_entries) < 2 or not spanwise_entries:
+        return mesh_def
+
+    surface_map = _surface_boundary_curve_map()
+    transfinite_surfaces = []
+    transfinite_surface_ids = set()
+
+    for span_index, spanwise_entry in enumerate(spanwise_entries):
+        if span_index + 1 >= len(chordwise_entries):
+            break
+
+        loop_a_groups = _entry_curve_groups(chordwise_entries[span_index])
+        loop_b_groups = _entry_curve_groups(chordwise_entries[span_index + 1])
+
+        if len(loop_a_groups) == len(loop_b_groups):
+            loop_a_pairs = _ordered_group_point_pairs(loop_a_groups)
+            loop_b_pairs = _ordered_group_point_pairs(loop_b_groups)
+        else:
+            loop_a_pairs = _flat_group_point_pairs(loop_a_groups)
+            loop_b_pairs = _flat_group_point_pairs(loop_b_groups)
+
+        if len(loop_a_pairs) != len(loop_b_pairs):
+            raise ValueError(
+                f"Cannot pair chordwise groups for spanwise section "
+                f"{spanwise_entry.get('name', span_index)!r}: "
+                f"{len(loop_a_pairs)} vs {len(loop_b_pairs)}."
+            )
+
+        span_map = _spanwise_curve_map(_as_list(spanwise_entry["curve_ids"]))
+
+        for (curves_a, start_a, end_a), (curves_b, start_b, end_b) in zip(
+            loop_a_pairs, loop_b_pairs
+        ):
+            span_start = span_map.get(start_a)
+            span_end = span_map.get(end_a)
+            if span_start is None or span_end is None:
+                raise ValueError(
+                    f"Could not find spanwise bounds for chordwise panel "
+                    f"{curves_a} in {spanwise_entry.get('name', span_index)!r}."
+                )
+
+            boundary_curves = frozenset(curves_a + curves_b + [span_start, span_end])
+            surface_id = surface_map.get(boundary_curves)
+            if surface_id is None:
+                raise ValueError(
+                    f"Could not find surface bounded by curves "
+                    f"{sorted(boundary_curves)}."
+                )
+
+            corner_start_b = _other_curve_point(span_start, start_a)
+            corner_end_b = _other_curve_point(span_end, end_a)
+            boundary_points = [start_a, corner_start_b, corner_end_b, end_a]
+            transfinite_surfaces.append(
+                {
+                    "id": surface_id,
+                    "Arrangement": "left",
+                    "boundary points": boundary_points,
+                }
+            )
+            transfinite_surface_ids.add(surface_id)
+
+    all_surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    auto_mesh_def = copy.deepcopy(mesh_def)
+    auto_mesh_def["transfinite_surfaces"] = transfinite_surfaces
+    auto_mesh_def["unstructured_surfaces"] = sorted(
+        all_surface_ids - transfinite_surface_ids
+    )
+    return auto_mesh_def
 
 
 def _iter_traced_curve_specs(
@@ -761,6 +1233,8 @@ def generate_surface_mesh(
         gmsh.model.occ.importShapes(str(step_file))
         gmsh.model.occ.synchronize()
 
+        mesh_def = apply_automatic_curve_sequences(mesh_def)
+        mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
         complete_surface_boundary_curves(mesh_def, curve_constraints)
         apply_transfinite_surfaces(mesh_def)
