@@ -320,7 +320,7 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
 
     # solver parameters
     surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec", "mutRatio", "solutionTransition"]
-    vol_output_requests = ["primitiveVars", "Cp", "Cpt", "qcriterion", "mutRatio", "solutionTransition"]
+    vol_output_requests = ["primitiveVars", "Cp", "qcriterion", "mut", "solutionTransition", "T", "vorticity"]
 
     if name is not None:
         sim_name = name + " "
@@ -528,7 +528,7 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
                                      operating_condition=condition,
                                      time_stepping=fl.Steady(max_steps=n_timesteps),
                                      models=fl_models,
-                                     outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests),
+                                     outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests, write_single_file=True),
                                               fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
                                                               output_fields=vol_output_requests)]
 

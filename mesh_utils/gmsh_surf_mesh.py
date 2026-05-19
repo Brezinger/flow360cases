@@ -4,8 +4,9 @@ import argparse
 import json
 import math
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import gmsh
 
@@ -16,7 +17,9 @@ DEFAULT_STEP_FILE = Path(
     r"\01_Projekte\04_Flaplets\03_CAD\Aerodynamikmodelle"
     r"\Ventus3 FlapletV2\WKS\Ventus3_FlapletV2_WKS.stp"
 )
-DEFAULT_MESH_DEF_FILE = DEFAULT_STEP_FILE.with_name("msh_def.json")
+DEFAULT_MESH_DEF_FILE = (
+    Path(__file__).resolve().parent.parent / "V3" / "msh_def_FlapletV2_WKS.json"
+)
 
 
 class CurveConstraint:
@@ -24,6 +27,15 @@ class CurveConstraint:
         self.n_pts = n_pts
         self.mesh_type = mesh_type
         self.coef = coef
+
+
+@dataclass(frozen=True)
+class CurveSpec:
+    curve_ids: int | list[int]
+    invert_directions: bool | list[bool]
+    n_pts: int
+    mesh_type: str
+    coef: float
 
 
 def _as_bool(value: Any) -> bool:
@@ -50,6 +62,57 @@ def _as_bool_list(value: bool | list[bool], n_items: int) -> list[bool]:
         )
 
     return result
+
+
+def _is_list_value(value: Any) -> bool:
+    return isinstance(value, list)
+
+
+def _per_spec_value(
+    entry: dict[str, Any],
+    key: str,
+    index: int,
+    spec_count: int,
+    default: Any = None,
+) -> Any:
+    if key not in entry:
+        return default
+
+    value = entry[key]
+    if not _is_list_value(value):
+        return value
+
+    if len(value) != spec_count:
+        raise ValueError(
+            f"{key} length {len(value)} does not match curve/group count "
+            f"{spec_count} in {entry.get('name', entry)!r}."
+        )
+
+    return value[index]
+
+
+def _curve_spec_discretization(
+    entry: dict[str, Any],
+    index: int,
+    spec_count: int,
+) -> tuple[int, str, float]:
+    n_pts = int(_per_spec_value(entry, "n_pts", index, spec_count))
+    mesh_type = str(_per_spec_value(entry, "type", index, spec_count, "Progression"))
+    coef = float(_per_spec_value(entry, "Parameter", index, spec_count, 1.0))
+
+    if n_pts < 2:
+        raise ValueError(f"Transfinite curve point count must be >= 2: {entry}")
+
+    return n_pts, mesh_type, coef
+
+
+def _as_vector(value: Sequence[float]) -> list[float]:
+    vector = [float(item) for item in value]
+    if len(vector) != 3:
+        raise ValueError(f"Expected a 3D vector, got {value!r}.")
+    if math.sqrt(sum(component * component for component in vector)) <= 0.0:
+        raise ValueError("Tracing vector must be non-zero.")
+    return vector
 
 
 def _curve_length(curve_id: int) -> float:
@@ -100,9 +163,13 @@ def _distribution_node_positions(
     entry: dict[str, Any],
     n_pts: int,
     invert_group: bool,
+    mesh_type: str | None = None,
+    coef: float | None = None,
 ) -> list[float]:
-    mesh_type = str(entry.get("type", "Progression")).lower()
-    coef = float(entry.get("Parameter", 1.0))
+    mesh_type = str(
+        mesh_type if mesh_type is not None else entry.get("type", "Progression")
+    ).lower()
+    coef = float(coef if coef is not None else entry.get("Parameter", 1.0))
 
     if mesh_type == "progression":
         return _progression_node_positions(n_pts, coef, invert_group)
@@ -127,6 +194,8 @@ def _curve_node_counts(
     invert_directions: bool | list[bool],
     n_pts: int,
     entry: dict[str, Any],
+    mesh_type: str | None = None,
+    coef: float | None = None,
 ) -> list[tuple[int, int, bool]]:
     curve_group = _as_list(curve_ids)
     invert_group = _as_bool_list(invert_directions, len(curve_group))
@@ -149,7 +218,9 @@ def _curve_node_counts(
     # The first sub-curve defines the virtual grouped curve direction. The
     # per-sub-curve booleans are still applied below when setting Gmsh's local
     # progression coefficient on each CAD curve.
-    node_positions = _distribution_node_positions(entry, n_pts, invert_group[0])
+    node_positions = _distribution_node_positions(
+        entry, n_pts, invert_group[0], mesh_type, coef
+    )
     split_indices = [0]
     accumulated_length = 0.0
 
@@ -174,9 +245,148 @@ def _curve_node_counts(
     ]
 
 
-def _iter_curve_entries(section: dict[str, Any]) -> Iterable[dict[str, Any]]:
+def _iter_curve_entries(
+    section: dict[str, Any] | list[dict[str, Any]],
+) -> Iterable[dict[str, Any]]:
+    if isinstance(section, list):
+        yield from section
+        return
+
     for key in ("rows", "columns"):
         yield from section.get(key, [])
+
+
+def _iter_surface_entries(
+    section: dict[str, Any] | list[dict[str, Any]],
+) -> Iterable[dict[str, Any]]:
+    if isinstance(section, list):
+        yield from section
+        return
+
+    yield from section.get("surfaces", [])
+
+
+def _has_trace_definition(entry: dict[str, Any]) -> bool:
+    trace_keys = {"start_pt", "v_pointing", "n_subcurvs"}
+    present_keys = trace_keys.intersection(entry)
+
+    if present_keys and present_keys != trace_keys:
+        missing_keys = sorted(trace_keys - present_keys)
+        raise ValueError(
+            f"Incomplete traced curve definition in {entry.get('name', entry)!r}; "
+            f"missing {missing_keys}."
+        )
+
+    return bool(present_keys)
+
+
+def _oriented_curve_endpoints(curve_id: int) -> tuple[int, int]:
+    boundary = gmsh.model.getBoundary([(1, abs(curve_id))], oriented=True)
+    points = [abs(tag) for dim, tag in boundary if dim == 0]
+    if len(points) != 2:
+        raise ValueError(f"Curve {curve_id} does not have exactly two endpoints.")
+    return points[0], points[1]
+
+
+def _trace_surface_edge_curves(
+    start_pt: int,
+    v_pointing: Sequence[float],
+) -> list[tuple[int, bool]]:
+    current_pt = int(start_pt)
+    current_coord = gmsh.model.getValue(0, current_pt, [0])
+    pointing = _as_vector(v_pointing)
+    traced_curves = []
+    visited_curves = set()
+
+    while True:
+        adjacent_curves, _ = gmsh.model.getAdjacencies(0, current_pt)
+        best_curve = None
+        best_next_pt = None
+        best_vector = None
+        best_dot = 0.0
+
+        for adjacent_curve in adjacent_curves:
+            curve_id = int(adjacent_curve)
+            if abs(curve_id) in visited_curves:
+                continue
+
+            endpoints = _curve_endpoints(curve_id)
+            if current_pt not in endpoints:
+                continue
+
+            next_pt = endpoints[1] if endpoints[0] == current_pt else endpoints[0]
+            next_coord = gmsh.model.getValue(0, next_pt, [0])
+            adjacent_vector = [
+                next_coord[index] - current_coord[index] for index in range(3)
+            ]
+            dot_product = sum(
+                adjacent_vector[index] * pointing[index] for index in range(3)
+            )
+
+            if dot_product > best_dot:
+                best_curve = curve_id
+                best_next_pt = next_pt
+                best_vector = adjacent_vector
+                best_dot = dot_product
+
+        if best_curve is None or best_next_pt is None or best_vector is None:
+            break
+
+        natural_start, natural_end = _oriented_curve_endpoints(best_curve)
+        invert_direction = not (
+            natural_start == current_pt and natural_end == best_next_pt
+        )
+        traced_curves.append((best_curve, invert_direction))
+        visited_curves.add(abs(best_curve))
+        current_pt = best_next_pt
+        current_coord = gmsh.model.getValue(0, current_pt, [0])
+        pointing = best_vector
+
+    return traced_curves
+
+
+def _iter_traced_curve_specs(
+    entry: dict[str, Any],
+) -> Iterable[CurveSpec]:
+    traced_curves = _trace_surface_edge_curves(entry["start_pt"], entry["v_pointing"])
+    n_subcurvs = [int(value) for value in entry["n_subcurvs"]]
+
+    if any(value < 1 for value in n_subcurvs):
+        raise ValueError(f"n_subcurvs values must be >= 1: {entry!r}")
+
+    expected_curve_count = sum(n_subcurvs)
+    if expected_curve_count != len(traced_curves):
+        raise ValueError(
+            f"Trace from point {entry['start_pt']} produced {len(traced_curves)} "
+            f"curves, but n_subcurvs requests {expected_curve_count}: {n_subcurvs}."
+        )
+
+    index = 0
+    spec_count = len(n_subcurvs)
+    for spec_index, group_size in enumerate(n_subcurvs):
+        group = traced_curves[index : index + group_size]
+        index += group_size
+        curve_ids = [curve_id for curve_id, _ in group]
+        invert_directions = [invert_direction for _, invert_direction in group]
+        n_pts, mesh_type, coef = _curve_spec_discretization(
+            entry, spec_index, spec_count
+        )
+
+        user_invert_direction = _per_spec_value(
+            entry, "invert_direction", spec_index, spec_count, False
+        )
+        user_invert_group = _as_bool_list(user_invert_direction, group_size)
+        invert_directions = [
+            bool(inferred) != bool(user_invert)
+            for inferred, user_invert in zip(invert_directions, user_invert_group)
+        ]
+
+        if group_size == 1:
+            yield CurveSpec(
+                curve_ids[0], invert_directions[0], n_pts, mesh_type, coef
+            )
+        else:
+            yield CurveSpec(curve_ids, invert_directions, n_pts, mesh_type, coef)
 
 
 def _legacy_invert_direction(entry: dict[str, Any]) -> bool:
@@ -192,22 +402,39 @@ def _legacy_invert_direction(entry: dict[str, Any]) -> bool:
 
 def _iter_curve_specs(
     entry: dict[str, Any],
-) -> Iterable[tuple[int | list[int], bool | list[bool]]]:
+) -> Iterable[CurveSpec]:
+    if _has_trace_definition(entry):
+        yield from _iter_traced_curve_specs(entry)
+        return
+
     curve_ids = entry["curve_ids"]
+    spec_count = len(curve_ids)
 
     if "invert_direction" in entry:
         invert_direction = entry["invert_direction"]
         if isinstance(invert_direction, bool):
-            invert_direction = [invert_direction] * len(curve_ids)
-        elif len(invert_direction) != len(curve_ids):
+            invert_direction = [invert_direction] * spec_count
+        elif len(invert_direction) == spec_count:
+            pass
+        elif spec_count == 1:
+            invert_direction = [invert_direction]
+        else:
             raise ValueError(
                 f"invert_direction length {len(invert_direction)} does not match "
                 f"curve_ids length {len(curve_ids)} in {entry.get('name', entry)!r}."
             )
     else:
-        invert_direction = [_legacy_invert_direction(entry)] * len(curve_ids)
+        invert_direction = [_legacy_invert_direction(entry)] * spec_count
 
-    yield from zip(curve_ids, invert_direction)
+    for spec_index, (spec_curve_ids, spec_invert_direction) in enumerate(
+        zip(curve_ids, invert_direction)
+    ):
+        n_pts, mesh_type, coef = _curve_spec_discretization(
+            entry, spec_index, spec_count
+        )
+        yield CurveSpec(
+            spec_curve_ids, spec_invert_direction, n_pts, mesh_type, coef
+        )
 
 
 def _curve_coef(mesh_type: str, base_coef: float, invert: bool) -> float:
@@ -260,26 +487,26 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
     for section_name in ("chordwise_curve_sequences", "spanwise_curve_sequences"):
         section = mesh_def.get(section_name, {})
         for entry in _iter_curve_entries(section):
-            n_pts = int(entry["n_pts"])
-            mesh_type = str(entry.get("type", "Progression"))
-            coef = float(entry.get("Parameter", 1.0))
-
-            if n_pts < 2:
-                raise ValueError(f"Transfinite curve point count must be >= 2: {entry}")
-
-            for curve_ids, invert_directions in _iter_curve_specs(entry):
+            for curve_spec in _iter_curve_specs(entry):
                 for curve_id, curve_n_pts, invert in _curve_node_counts(
-                    curve_ids, invert_directions, n_pts, entry
+                    curve_spec.curve_ids,
+                    curve_spec.invert_directions,
+                    curve_spec.n_pts,
+                    entry,
+                    curve_spec.mesh_type,
+                    curve_spec.coef,
                 ):
-                    curve_coef = _curve_coef(mesh_type, coef, invert)
+                    curve_coef = _curve_coef(
+                        curve_spec.mesh_type, curve_spec.coef, invert
+                    )
                     gmsh.model.mesh.setTransfiniteCurve(
                         curve_id,
                         curve_n_pts,
-                        mesh_type,
+                        curve_spec.mesh_type,
                         curve_coef,
                     )
                     constraints[abs(curve_id)] = CurveConstraint(
-                        curve_n_pts, mesh_type, curve_coef
+                        curve_n_pts, curve_spec.mesh_type, curve_coef
                     )
 
     return constraints
@@ -292,7 +519,7 @@ def complete_surface_boundary_curves(
     section = mesh_def.get("transfinite_surfaces", {})
     unstructured_surfaces = _unstructured_surface_ids(mesh_def)
 
-    for surface in section.get("surfaces", []):
+    for surface in _iter_surface_entries(section):
         surface_id = int(surface["id"])
         if surface_id in unstructured_surfaces:
             continue
@@ -343,7 +570,7 @@ def _unstructured_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
 
 def _transfinite_surface_definitions(mesh_def: dict[str, Any]) -> dict[int, dict[str, Any]]:
     section = mesh_def.get("transfinite_surfaces", {})
-    return {int(surface["id"]): surface for surface in section.get("surfaces", [])}
+    return {int(surface["id"]): surface for surface in _iter_surface_entries(section)}
 
 
 def apply_transfinite_surfaces(mesh_def: dict[str, Any]) -> None:
