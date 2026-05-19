@@ -16,7 +16,7 @@ DEFAULT_STEP_FILE = Path(
     r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH"
     r"\Achleitner Aerospace GmbH Allgemein - General"
     r"\01_Projekte\04_Flaplets\03_CAD\Aerodynamikmodelle"
-    r"\Ventus3 FlapletV2\WKS\Ventus3_FlapletV2_WKS.stp"
+    r"\Ventus3 FlapletV2\WKS\Ventus3_FlapletV2_WKS_B.stp"
 )
 DEFAULT_MESH_DEF_FILE = (
     Path(__file__).resolve().parent.parent / "V3" / "msh_def_FlapletV2_WKS.json"
@@ -454,6 +454,42 @@ def _oriented_curve_endpoints(curve_id: int) -> tuple[int, int]:
     return points[0], points[1]
 
 
+def _curve_tangent_at_point(curve_id: int, point_id: int) -> list[float] | None:
+    try:
+        point_coord = gmsh.model.getValue(0, int(point_id), [0])
+        curve_parameter = gmsh.model.getParametrization(
+            1, abs(int(curve_id)), point_coord
+        )
+        derivative = gmsh.model.getDerivative(1, abs(int(curve_id)), curve_parameter)
+    except Exception:
+        return None
+
+    tangent = [float(value) for value in derivative[:3]]
+    if _vector_norm(tangent) <= 0.0:
+        return None
+    return tangent
+
+
+def _curve_traversal_invert_direction(
+    curve_id: int,
+    start_point: int,
+    end_point: int,
+) -> bool:
+    natural_start, natural_end = _oriented_curve_endpoints(curve_id)
+    if natural_start == start_point and natural_end == end_point:
+        return False
+    if natural_start == end_point and natural_end == start_point:
+        return True
+
+    traversal_vector = _point_vector(start_point, end_point)
+    tangent = _curve_tangent_at_point(curve_id, start_point)
+    if tangent is not None:
+        return _dot(tangent, traversal_vector) < 0.0
+
+    natural_vector = _point_vector(natural_start, natural_end)
+    return _dot(natural_vector, traversal_vector) < 0.0
+
+
 def _trace_surface_edge_curves(
     start_pt: int,
     v_pointing: Sequence[float],
@@ -498,9 +534,8 @@ def _trace_surface_edge_curves(
         if best_curve is None or best_next_pt is None or best_vector is None:
             break
 
-        natural_start, natural_end = _oriented_curve_endpoints(best_curve)
-        invert_direction = not (
-            natural_start == current_pt and natural_end == best_next_pt
+        invert_direction = _curve_traversal_invert_direction(
+            best_curve, current_pt, best_next_pt
         )
         traced_curves.append((best_curve, invert_direction))
         visited_curves.add(abs(best_curve))
@@ -626,8 +661,11 @@ def _curve_group_size(curve_group: int | list[int]) -> int:
 def _group_traced_curves(
     traced_curve_ids: list[int],
     template_entry: dict[str, Any],
+    inferred_n_subcurvs: list[int] | None = None,
 ) -> list[int | list[int]]:
-    if "n_subcurvs" in template_entry:
+    if inferred_n_subcurvs is not None:
+        group_sizes = inferred_n_subcurvs
+    elif "n_subcurvs" in template_entry:
         group_sizes = [int(group_size) for group_size in template_entry["n_subcurvs"]]
     elif "curve_ids" in template_entry:
         group_sizes = [
@@ -654,27 +692,266 @@ def _group_traced_curves(
     return grouped_curves
 
 
+def _group_values_by_curve_groups(
+    values: list[Any],
+    curve_groups: list[int | list[int]],
+) -> list[Any]:
+    grouped_values = []
+    index = 0
+    for curve_group in curve_groups:
+        group_size = _curve_group_size(curve_group)
+        group_values = values[index : index + group_size]
+        index += group_size
+        grouped_values.append(group_values[0] if group_size == 1 else group_values)
+    return grouped_values
+
+
+def _infer_n_subcurvs(
+    traced_loop: TracedLoop,
+    split_spanwise_curve_count: int,
+) -> list[int]:
+    loop_curve_set = {
+        abs(curve_id)
+        for curve_id in traced_loop.curve_ids + [traced_loop.blunt_curve_id]
+    }
+    group_sizes = []
+    current_group_size = 1
+
+    for curve_index, point_id in enumerate(traced_loop.points[1:-1], start=1):
+        adjacent_non_loop_curves = [
+            curve_id
+            for curve_id in _adjacent_curve_ids(point_id)
+            if abs(curve_id) not in loop_curve_set
+        ]
+
+        if len(adjacent_non_loop_curves) >= split_spanwise_curve_count:
+            group_sizes.append(current_group_size)
+            current_group_size = 1
+        else:
+            current_group_size += 1
+
+    group_sizes.append(current_group_size)
+    group_sizes.append(1)
+    return group_sizes
+
+
+def _template_group_count(template_entry: dict[str, Any]) -> int | None:
+    for key in ("n_pts", "type", "Parameter", "invert_direction", "_invert_direction"):
+        value = template_entry.get(key)
+        if isinstance(value, list):
+            return len(value)
+    return None
+
+
+def _infer_n_subcurvs_for_template(
+    traced_loop: TracedLoop,
+    template_entry: dict[str, Any],
+    default_split_spanwise_curve_count: int,
+    previous_group_sizes: list[int] | None = None,
+) -> list[int]:
+    target_group_count = _template_group_count(template_entry)
+    candidate_thresholds = [default_split_spanwise_curve_count, 1, 2, 3]
+    candidate_group_sizes = []
+
+    for threshold in candidate_thresholds:
+        if threshold < 1:
+            continue
+        group_sizes = _infer_n_subcurvs(traced_loop, threshold)
+        if group_sizes not in candidate_group_sizes:
+            candidate_group_sizes.append(group_sizes)
+        if target_group_count is not None and len(group_sizes) == target_group_count:
+            return group_sizes
+
+    if (
+        target_group_count is not None
+        and previous_group_sizes is not None
+        and len(previous_group_sizes) == target_group_count
+        and sum(previous_group_sizes)
+        == len(traced_loop.curve_ids) + 1
+    ):
+        return previous_group_sizes
+
+    if target_group_count is not None:
+        best_group_sizes = min(
+            candidate_group_sizes,
+            key=lambda group_sizes: abs(len(group_sizes) - target_group_count),
+        )
+        return best_group_sizes
+
+    return candidate_group_sizes[0]
+
+
+def _template_group_sizes(template_entry: dict[str, Any], total_curves: int) -> list[int]:
+    if "n_subcurvs" in template_entry:
+        return [int(group_size) for group_size in template_entry["n_subcurvs"]]
+    if "curve_ids" in template_entry:
+        return [
+            _curve_group_size(curve_group)
+            for curve_group in template_entry["curve_ids"]
+        ]
+    return [1] * total_curves
+
+
+def _expand_template_values(
+    template_entry: dict[str, Any],
+    key: str,
+    template_group_sizes: list[int],
+    total_curves: int,
+) -> list[Any] | None:
+    if key not in template_entry:
+        return None
+
+    value = template_entry[key]
+    if not isinstance(value, list):
+        return [copy.deepcopy(value) for _ in range(total_curves)]
+
+    if len(value) != len(template_group_sizes):
+        return [copy.deepcopy(value_item) for value_item in value]
+
+    expanded_values = []
+    for group_value, group_size in zip(value, template_group_sizes):
+        if key in ("invert_direction", "_invert_direction") and isinstance(
+            group_value, list
+        ):
+            expanded_values.extend(copy.deepcopy(group_value))
+        else:
+            expanded_values.extend(copy.deepcopy(group_value) for _ in range(group_size))
+
+    return expanded_values
+
+
+def _regroup_template_values(
+    expanded_values: list[Any],
+    group_sizes: list[int],
+    *,
+    keep_group_lists: bool,
+) -> list[Any]:
+    regrouped_values = []
+    index = 0
+    for group_size in group_sizes:
+        group_values = expanded_values[index : index + group_size]
+        index += group_size
+        if keep_group_lists and group_size > 1:
+            regrouped_values.append(group_values)
+        else:
+            regrouped_values.append(group_values[0])
+    return regrouped_values
+
+
+def _remap_template_values_to_groups(
+    entry: dict[str, Any],
+    template_entry: dict[str, Any],
+    group_sizes: list[int],
+    total_curves: int,
+) -> None:
+    template_group_sizes = _template_group_sizes(template_entry, total_curves)
+
+    for key in ("type", "Parameter", "n_pts", "invert_direction"):
+        template_key = f"_{key}" if key not in template_entry else key
+        value = template_entry.get(template_key)
+        if isinstance(value, list) and len(value) == len(group_sizes):
+            entry[key] = copy.deepcopy(value)
+            continue
+
+        expanded_values = _expand_template_values(
+            template_entry, template_key, template_group_sizes, total_curves
+        )
+        if expanded_values is None:
+            continue
+        if len(expanded_values) < total_curves:
+            expanded_values.extend(
+                copy.deepcopy(expanded_values[-1])
+                for _ in range(total_curves - len(expanded_values))
+            )
+        entry[key] = _regroup_template_values(
+            expanded_values,
+            group_sizes,
+            keep_group_lists=(key == "invert_direction"),
+        )
+
+
+def _normalize_invert_directions_for_curve_groups(entry: dict[str, Any]) -> None:
+    if "curve_ids" not in entry or "invert_direction" not in entry:
+        return
+
+    curve_groups = entry["curve_ids"]
+    invert_directions = entry["invert_direction"]
+    if isinstance(invert_directions, bool):
+        return
+
+    normalized_directions = []
+    for curve_group, invert_direction in zip(curve_groups, invert_directions):
+        group_size = _curve_group_size(curve_group)
+        if isinstance(invert_direction, bool):
+            normalized_directions.append(invert_direction)
+            continue
+
+        if group_size == 1:
+            normalized_directions.append(_as_bool(invert_direction[0]))
+            continue
+
+        direction_group = [_as_bool(value) for value in invert_direction]
+        if len(direction_group) < group_size:
+            direction_group.extend([direction_group[-1]] * (group_size - len(direction_group)))
+        normalized_directions.append(direction_group[:group_size])
+
+    entry["invert_direction"] = normalized_directions
+
+
 def _trace_spanwise_curves(
     point_ids: list[int],
     directions: list[list[float]],
     excluded_curves: set[int],
-) -> tuple[list[int], list[int], list[list[float]]]:
+) -> tuple[list[int], list[bool], list[int], list[list[float]]]:
     curve_ids = []
+    invert_directions = []
     next_points = []
     next_directions = []
 
     for index, point_id in enumerate(point_ids):
         direction = directions[min(index, len(directions) - 1)]
-        selected = _select_adjacent_curve(point_id, direction, excluded_curves)
-        if selected is None:
+        current_point = point_id
+        current_direction = direction
+        chain_curves = []
+        chain_inverts = []
+        chain_excluded = set(excluded_curves)
+        last_vector = None
+
+        while True:
+            selected = _select_adjacent_curve(
+                current_point, current_direction, chain_excluded
+            )
+            if selected is None:
+                break
+
+            curve_id, next_point, curve_vector = selected
+            chain_curves.append(curve_id)
+            chain_inverts.append(
+                _curve_traversal_invert_direction(curve_id, current_point, next_point)
+            )
+            chain_excluded.add(abs(curve_id))
+            current_point = next_point
+            current_direction = curve_vector
+            last_vector = curve_vector
+
+            continuing_curves = [
+                candidate_curve
+                for candidate_curve in _adjacent_curve_ids(current_point)
+                if abs(candidate_curve) not in chain_excluded
+                and abs(candidate_curve) not in excluded_curves
+            ]
+            if len(continuing_curves) != 1:
+                break
+
+        if not chain_curves or last_vector is None:
             continue
 
-        curve_id, next_point, curve_vector = selected
-        curve_ids.append(curve_id)
-        next_points.append(next_point)
-        next_directions.append(curve_vector)
+        curve_ids.extend(chain_curves)
+        invert_directions.extend(chain_inverts)
+        next_points.append(current_point)
+        next_directions.append(last_vector)
 
-    return curve_ids, next_points, next_directions
+    return curve_ids, invert_directions, next_points, next_directions
 
 
 def _automatic_config(mesh_def: dict[str, Any]) -> dict[str, Any] | None:
@@ -688,6 +965,89 @@ def _automatic_config(mesh_def: dict[str, Any]) -> dict[str, Any] | None:
     if config.get("enabled", True) is False:
         return None
     return config
+
+
+def _merge_transfinite_template(
+    common_template: dict[str, Any],
+    local_template: dict[str, Any],
+    excluded_common_keys: set[str],
+) -> dict[str, Any]:
+    merged_template = {
+        key: copy.deepcopy(value)
+        for key, value in common_template.items()
+        if key not in excluded_common_keys
+    }
+    merged_template.update(copy.deepcopy(local_template))
+    return merged_template
+
+
+def _automatic_chordwise_templates(
+    config: dict[str, Any],
+    loop_count: int | None = None,
+) -> list[dict[str, Any]]:
+    chordwise_def = config.get("chordwise_transfinite_def", {})
+    if not chordwise_def:
+        return []
+
+    loop_defs = chordwise_def.get("loops")
+    if isinstance(loop_defs, list) and loop_defs:
+        return [
+            _merge_transfinite_template(chordwise_def, loop_def, {"loops"})
+            for loop_def in loop_defs
+        ]
+
+    if loop_count is None:
+        return []
+
+    common_template = {
+        key: copy.deepcopy(value)
+        for key, value in chordwise_def.items()
+        if key != "loops"
+    }
+    return [
+        {
+            **copy.deepcopy(common_template),
+            "name": f"airfoil loop {loop_index + 1}",
+        }
+        for loop_index in range(loop_count)
+    ]
+
+
+def _automatic_spanwise_templates(config: dict[str, Any]) -> list[dict[str, Any]]:
+    spanwise_def = config.get("spanwise_transfinite_def")
+    if spanwise_def is None:
+        spanwise_def = config.get("chordwise_transfinite_def", {}).get(
+            "spanwise_transfinite_def", {}
+        )
+    if not spanwise_def:
+        return []
+
+    section_defs = spanwise_def.get("sections")
+    if isinstance(section_defs, list) and section_defs:
+        return [
+            _merge_transfinite_template(spanwise_def, section_def, {"sections"})
+            for section_def in section_defs
+        ]
+
+    target_sizes = spanwise_def.get("target ele sizes")
+    if isinstance(target_sizes, list) and len(target_sizes) >= 2:
+        common_template = {
+            key: copy.deepcopy(value)
+            for key, value in spanwise_def.items()
+            if key != "target ele sizes"
+        }
+        common_template.setdefault("mesh size mode", "ele size")
+        return [
+            {
+                **copy.deepcopy(common_template),
+                "name": f"spanwise section {index + 1}",
+                "target ele size 1": target_sizes[index],
+                "target ele size 2": target_sizes[index + 1],
+            }
+            for index in range(len(target_sizes) - 1)
+        ]
+
+    return []
 
 
 def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
@@ -714,15 +1074,22 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
             config.get("v_blunt_te", [0.0, 0.0, -1.0]),
         )
     )
+    infer_n_subcurvs = bool(config.get("infer_n_subcurvs", True))
 
-    chordwise_templates = [
-        copy.deepcopy(entry)
-        for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
-    ]
     spanwise_templates = [
         copy.deepcopy(entry)
         for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", []))
     ]
+    if not spanwise_templates:
+        spanwise_templates = _automatic_spanwise_templates(config)
+    chordwise_templates = [
+        copy.deepcopy(entry)
+        for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+    ]
+    if not chordwise_templates:
+        chordwise_templates = _automatic_chordwise_templates(
+            config, len(spanwise_templates) + 1 if spanwise_templates else None
+        )
     if not chordwise_templates:
         raise ValueError("Automatic curve discovery requires chordwise templates.")
 
@@ -732,6 +1099,7 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
     spanwise_entries = []
     loop_start_point = start_point
     spanwise_directions = [spanwise_direction]
+    previous_chordwise_group_sizes = None
 
     for loop_index, chordwise_template in enumerate(chordwise_templates):
         if loop_index > 0 and spanwise_directions:
@@ -759,26 +1127,81 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
             used_curves,
         )
         traced_curve_ids = traced_loop.curve_ids + [traced_loop.blunt_curve_id]
+        traced_invert_directions = [
+            _curve_traversal_invert_direction(
+                curve_id,
+                traced_loop.points[curve_index],
+                traced_loop.points[curve_index + 1],
+            )
+            for curve_index, curve_id in enumerate(traced_loop.curve_ids)
+        ]
+        traced_invert_directions.append(
+            _curve_traversal_invert_direction(
+                traced_loop.blunt_curve_id,
+                traced_loop.points[-1],
+                traced_loop.points[0],
+            )
+        )
         used_curves.update(abs(curve_id) for curve_id in traced_curve_ids)
 
         chordwise_entry = copy.deepcopy(chordwise_template)
-        chordwise_entry["curve_ids"] = _group_traced_curves(
-            traced_curve_ids, chordwise_template
+        split_spanwise_curve_count = (
+            1 if loop_index in (0, len(chordwise_templates) - 1) else 2
         )
+        inferred_n_subcurvs = (
+            _infer_n_subcurvs_for_template(
+                traced_loop,
+                chordwise_template,
+                split_spanwise_curve_count,
+                previous_chordwise_group_sizes,
+            )
+            if infer_n_subcurvs
+            else None
+        )
+        chordwise_entry["curve_ids"] = _group_traced_curves(
+            traced_curve_ids,
+            chordwise_template,
+            inferred_n_subcurvs,
+        )
+        chordwise_entry["invert_direction"] = _group_values_by_curve_groups(
+            traced_invert_directions, chordwise_entry["curve_ids"]
+        )
+        if inferred_n_subcurvs is not None:
+            _remap_template_values_to_groups(
+                chordwise_entry,
+                chordwise_template,
+                inferred_n_subcurvs,
+                len(traced_curve_ids),
+            )
+        _normalize_invert_directions_for_curve_groups(chordwise_entry)
         chordwise_entries.append(chordwise_entry)
+        if inferred_n_subcurvs is not None:
+            previous_chordwise_group_sizes = inferred_n_subcurvs
 
         if loop_index >= len(spanwise_templates):
             break
 
-        spanwise_curve_ids, next_points, next_directions = _trace_spanwise_curves(
-            traced_loop.points, spanwise_directions, used_curves
-        )
+        (
+            spanwise_curve_ids,
+            spanwise_invert_directions,
+            next_points,
+            next_directions,
+        ) = _trace_spanwise_curves(traced_loop.points, spanwise_directions, used_curves)
         if not spanwise_curve_ids:
             break
 
         used_curves.update(abs(curve_id) for curve_id in spanwise_curve_ids)
         spanwise_entry = copy.deepcopy(spanwise_templates[loop_index])
         spanwise_entry["curve_ids"] = spanwise_curve_ids
+        if (
+            "_invert_direction" in spanwise_entry
+            and "invert_direction" not in spanwise_entry
+        ):
+            spanwise_entry["invert_direction"] = copy.deepcopy(
+                spanwise_entry["_invert_direction"]
+            )
+        else:
+            spanwise_entry["invert_direction"] = spanwise_invert_directions
         spanwise_entries.append(spanwise_entry)
 
         loop_start_point = next_points[0]
@@ -834,6 +1257,80 @@ def _surface_boundary_curve_map() -> dict[frozenset[int], int]:
     return surface_map
 
 
+def _surface_ordered_boundary_points(surface_id: int) -> list[int]:
+    ordered_points, _ = _surface_ordered_boundary(surface_id)
+    return ordered_points
+
+
+def _surface_ordered_boundary(surface_id: int) -> tuple[list[int], list[int]]:
+    boundary_curves = _surface_boundary_curves(surface_id)
+    if not boundary_curves:
+        return [], []
+
+    unused_curves = set(boundary_curves)
+    first_curve = boundary_curves[0]
+    start_point, current_point = _curve_endpoints(first_curve)
+    ordered_points = [start_point, current_point]
+    ordered_curves = [first_curve]
+    unused_curves.remove(first_curve)
+
+    while unused_curves and current_point != start_point:
+        next_curve = None
+        next_point = None
+        for curve_id in unused_curves:
+            endpoints = _curve_endpoints(curve_id)
+            if current_point == endpoints[0]:
+                next_curve = curve_id
+                next_point = endpoints[1]
+                break
+            if current_point == endpoints[1]:
+                next_curve = curve_id
+                next_point = endpoints[0]
+                break
+
+        if next_curve is None or next_point is None:
+            break
+
+        unused_curves.remove(next_curve)
+        current_point = next_point
+        ordered_curves.append(next_curve)
+        ordered_points.append(current_point)
+
+    return ordered_points, ordered_curves
+
+
+def _curve_incident_boundary_points(curve_ids: Iterable[int]) -> dict[int, set[int]]:
+    incident_curves: dict[int, set[int]] = {}
+    for curve_id in curve_ids:
+        for point_id in _curve_endpoints(curve_id):
+            incident_curves.setdefault(point_id, set()).add(curve_id)
+    return incident_curves
+
+
+def _surface_transfinite_corners(
+    surface_id: int,
+    chordwise_curves: set[int],
+    spanwise_curves: set[int],
+) -> list[int]:
+    boundary_curves = _surface_boundary_curves(surface_id)
+    boundary_chordwise_curves = [
+        curve_id for curve_id in boundary_curves if curve_id in chordwise_curves
+    ]
+    boundary_spanwise_curves = [
+        curve_id for curve_id in boundary_curves if curve_id in spanwise_curves
+    ]
+    incident_chordwise = _curve_incident_boundary_points(boundary_chordwise_curves)
+    incident_spanwise = _curve_incident_boundary_points(boundary_spanwise_curves)
+    corner_set = set(incident_chordwise).intersection(incident_spanwise)
+
+    ordered_corners = []
+    for point_id in _surface_ordered_boundary_points(surface_id):
+        if point_id in corner_set and point_id not in ordered_corners:
+            ordered_corners.append(point_id)
+
+    return ordered_corners
+
+
 def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
     curve_map = {}
     for curve_id in curve_ids:
@@ -841,6 +1338,23 @@ def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
         curve_map[point_a] = curve_id
         curve_map[point_b] = curve_id
     return curve_map
+
+
+def _spanwise_connector_curves(spanwise_entries: Iterable[dict[str, Any]]) -> set[int]:
+    connector_curves = set()
+    for entry in spanwise_entries:
+        curve_ids = [abs(curve_id) for curve_id in _as_list(entry.get("curve_ids", []))]
+        if not curve_ids:
+            continue
+
+        curve_lengths = [_curve_length(curve_id) for curve_id in curve_ids]
+        short_threshold = _short_curve_threshold(curve_lengths)
+        connector_curves.update(
+            curve_id
+            for curve_id, curve_length in zip(curve_ids, curve_lengths)
+            if curve_length <= short_threshold
+        )
+    return connector_curves
 
 
 def _automatic_surfaces_enabled(mesh_def: dict[str, Any]) -> bool:
@@ -862,55 +1376,36 @@ def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, 
     if len(chordwise_entries) < 2 or not spanwise_entries:
         return mesh_def
 
-    surface_map = _surface_boundary_curve_map()
+    chordwise_curves = {
+        abs(curve_id)
+        for entry in chordwise_entries
+        for curve_group in _entry_curve_groups(entry)
+        for curve_id in curve_group
+    }
+    spanwise_curves = {
+        abs(curve_id)
+        for entry in spanwise_entries
+        for curve_id in _as_list(entry["curve_ids"])
+    }
+    transfinite_curves = chordwise_curves.union(spanwise_curves)
     transfinite_surfaces = []
     transfinite_surface_ids = set()
 
-    for span_index, spanwise_entry in enumerate(spanwise_entries):
-        if span_index + 1 >= len(chordwise_entries):
-            break
-
-        loop_a_groups = _entry_curve_groups(chordwise_entries[span_index])
-        loop_b_groups = _entry_curve_groups(chordwise_entries[span_index + 1])
-
-        if len(loop_a_groups) == len(loop_b_groups):
-            loop_a_pairs = _ordered_group_point_pairs(loop_a_groups)
-            loop_b_pairs = _ordered_group_point_pairs(loop_b_groups)
-        else:
-            loop_a_pairs = _flat_group_point_pairs(loop_a_groups)
-            loop_b_pairs = _flat_group_point_pairs(loop_b_groups)
-
-        if len(loop_a_pairs) != len(loop_b_pairs):
-            raise ValueError(
-                f"Cannot pair chordwise groups for spanwise section "
-                f"{spanwise_entry.get('name', span_index)!r}: "
-                f"{len(loop_a_pairs)} vs {len(loop_b_pairs)}."
-            )
-
-        span_map = _spanwise_curve_map(_as_list(spanwise_entry["curve_ids"]))
-
-        for (curves_a, start_a, end_a), (curves_b, start_b, end_b) in zip(
-            loop_a_pairs, loop_b_pairs
+    for _, surface_id in gmsh.model.getEntities(2):
+        boundary_curves = set(_surface_boundary_curves(surface_id))
+        boundary_chordwise_curves = boundary_curves.intersection(chordwise_curves)
+        boundary_spanwise_curves = boundary_curves.intersection(spanwise_curves)
+        if (
+            not boundary_curves.issubset(transfinite_curves)
+            or not boundary_chordwise_curves
+            or not boundary_spanwise_curves
         ):
-            span_start = span_map.get(start_a)
-            span_end = span_map.get(end_a)
-            if span_start is None or span_end is None:
-                raise ValueError(
-                    f"Could not find spanwise bounds for chordwise panel "
-                    f"{curves_a} in {spanwise_entry.get('name', span_index)!r}."
-                )
+            continue
 
-            boundary_curves = frozenset(curves_a + curves_b + [span_start, span_end])
-            surface_id = surface_map.get(boundary_curves)
-            if surface_id is None:
-                raise ValueError(
-                    f"Could not find surface bounded by curves "
-                    f"{sorted(boundary_curves)}."
-                )
-
-            corner_start_b = _other_curve_point(span_start, start_a)
-            corner_end_b = _other_curve_point(span_end, end_a)
-            boundary_points = [start_a, corner_start_b, corner_end_b, end_a]
+        boundary_points = _surface_transfinite_corners(
+            surface_id, chordwise_curves, spanwise_curves
+        )
+        if len(boundary_points) == 4:
             transfinite_surfaces.append(
                 {
                     "id": surface_id,
@@ -1065,6 +1560,113 @@ def _corner_edge_index(
     return None
 
 
+def _surface_edge_curves(surface_id: int, corners: list[int]) -> list[list[int]]:
+    if len(corners) != 4:
+        return [[], [], [], []]
+
+    ordered_points, ordered_curves = _surface_ordered_boundary(surface_id)
+    if len(ordered_points) < 2 or len(ordered_curves) < 1:
+        return [[], [], [], []]
+
+    if ordered_points[-1] == ordered_points[0]:
+        ordered_points = ordered_points[:-1]
+    corner_indices = [ordered_points.index(corner) for corner in corners]
+    edge_curves = []
+
+    for edge_index in range(4):
+        start_index = corner_indices[edge_index]
+        end_index = corner_indices[(edge_index + 1) % 4]
+        curves = []
+        cursor = start_index
+        while cursor != end_index:
+            curves.append(ordered_curves[cursor % len(ordered_curves)])
+            cursor = (cursor + 1) % len(ordered_points)
+        edge_curves.append(curves)
+
+    return edge_curves
+
+
+def _edge_divisions(
+    curves: list[int],
+    constraints: dict[int, CurveConstraint],
+) -> int | None:
+    divisions = 0
+    for curve_id in curves:
+        constraint = constraints.get(abs(curve_id))
+        if constraint is None:
+            return None
+        divisions += constraint.n_pts - 1
+    return divisions
+
+
+def _curve_constraint_or_default(
+    curve_id: int,
+    constraints: dict[int, CurveConstraint],
+) -> CurveConstraint:
+    return constraints.get(abs(curve_id), CurveConstraint(2, "Progression", 1.0))
+
+
+def _set_curve_constraint(
+    curve_id: int,
+    constraint: CurveConstraint,
+    constraints: dict[int, CurveConstraint],
+) -> None:
+    gmsh.model.mesh.setTransfiniteCurve(
+        curve_id,
+        constraint.n_pts,
+        constraint.mesh_type,
+        constraint.coef,
+    )
+    constraints[abs(curve_id)] = constraint
+
+
+def _short_curve_threshold(curve_lengths: list[float]) -> float:
+    nonzero_lengths = sorted(length for length in curve_lengths if length > 0.0)
+    if not nonzero_lengths:
+        return 0.0
+    median_length = nonzero_lengths[len(nonzero_lengths) // 2]
+    return max(1.0e-9, median_length * 1.0e-3)
+
+
+def _normalize_spanwise_sequence_counts(
+    mesh_def: dict[str, Any],
+    constraints: dict[int, CurveConstraint],
+) -> None:
+    for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])):
+        curve_ids = [abs(curve_id) for curve_id in _as_list(entry.get("curve_ids", []))]
+        if not curve_ids:
+            continue
+
+        curve_lengths = [_curve_length(curve_id) for curve_id in curve_ids]
+        short_threshold = _short_curve_threshold(curve_lengths)
+        primary_curves = [
+            curve_id
+            for curve_id, curve_length in zip(curve_ids, curve_lengths)
+            if curve_length > short_threshold
+        ]
+        if not primary_curves:
+            continue
+
+        target_n_pts = max(
+            _curve_constraint_or_default(curve_id, constraints).n_pts
+            for curve_id in primary_curves
+        )
+        target_n_pts = max(target_n_pts, 2)
+
+        for curve_id, curve_length in zip(curve_ids, curve_lengths):
+            current_constraint = _curve_constraint_or_default(curve_id, constraints)
+            n_pts = current_constraint.n_pts if curve_length <= short_threshold else target_n_pts
+            _set_curve_constraint(
+                curve_id,
+                CurveConstraint(
+                    n_pts,
+                    current_constraint.mesh_type,
+                    current_constraint.coef,
+                ),
+                constraints,
+            )
+
+
 def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstraint]:
     constraints = {}
 
@@ -1117,8 +1719,34 @@ def complete_surface_boundary_curves(
     mesh_def: dict[str, Any],
     constraints: dict[int, CurveConstraint],
 ) -> None:
+    for _ in range(100):
+        previous_counts = {
+            curve_id: constraint.n_pts
+            for curve_id, constraint in constraints.items()
+        }
+        _complete_surface_boundary_curves_once(mesh_def, constraints)
+        current_counts = {
+            curve_id: constraint.n_pts
+            for curve_id, constraint in constraints.items()
+        }
+        if current_counts == previous_counts:
+            return
+
+    warnings.warn(
+        "Surface boundary curve completion did not converge after 100 iterations.",
+        stacklevel=2,
+    )
+
+
+def _complete_surface_boundary_curves_once(
+    mesh_def: dict[str, Any],
+    constraints: dict[int, CurveConstraint],
+) -> None:
     section = mesh_def.get("transfinite_surfaces", {})
     unstructured_surfaces = _unstructured_surface_ids(mesh_def)
+    chordwise_curve_loop_indices = _chordwise_curve_loop_indices(mesh_def)
+    chordwise_curve_groups = _chordwise_curve_groups(mesh_def)
+    protected_curve_counts = _protected_curve_counts(mesh_def)
 
     for surface in _iter_surface_entries(section):
         surface_id = int(surface["id"])
@@ -1130,18 +1758,13 @@ def complete_surface_boundary_curves(
         if len(corners) != 4:
             continue
 
-        corner_edges = [
-            frozenset((corners[0], corners[1])),
-            frozenset((corners[1], corners[2])),
-            frozenset((corners[2], corners[3])),
-            frozenset((corners[3], corners[0])),
-        ]
-        edge_curves: list[list[int]] = [[], [], [], []]
-
-        for curve_id in _surface_boundary_curves(surface_id):
-            edge_index = _corner_edge_index(_curve_endpoints(curve_id), corner_edges)
-            if edge_index is not None:
-                edge_curves[edge_index].append(curve_id)
+        edge_curves = _surface_edge_curves(surface_id, corners)
+        if _has_protected_opposite_edge_mismatch(
+            edge_curves, constraints, protected_curve_counts
+        ):
+            _add_unstructured_surface(mesh_def, surface_id)
+            unstructured_surfaces.add(surface_id)
+            continue
 
         for edge_index, curves in enumerate(edge_curves):
             if len(curves) != 1 or curves[0] in constraints:
@@ -1156,13 +1779,261 @@ def complete_surface_boundary_curves(
                 continue
 
             curve_id = curves[0]
-            gmsh.model.mesh.setTransfiniteCurve(
+            _set_curve_constraint(
                 curve_id,
-                opposite_constraint.n_pts,
-                opposite_constraint.mesh_type,
-                opposite_constraint.coef,
+                opposite_constraint,
+                constraints,
             )
-            constraints[curve_id] = opposite_constraint
+
+        _align_opposite_edge_divisions(
+            edge_curves,
+            constraints,
+            chordwise_curve_loop_indices,
+            chordwise_curve_groups,
+        )
+
+
+def _chordwise_curve_loop_indices(mesh_def: dict[str, Any]) -> dict[int, int]:
+    loop_indices = {}
+    for loop_index, entry in enumerate(
+        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+    ):
+        for curve_group in entry.get("curve_ids", []):
+            for curve_id in _as_list(curve_group):
+                loop_indices[abs(curve_id)] = loop_index
+    return loop_indices
+
+
+def _chordwise_curve_groups(mesh_def: dict[str, Any]) -> dict[int, list[int]]:
+    curve_groups = {}
+    for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])):
+        for curve_group in entry.get("curve_ids", []):
+            group = [abs(curve_id) for curve_id in _as_list(curve_group)]
+            for curve_id in group:
+                curve_groups[curve_id] = group
+    return curve_groups
+
+
+def _protected_curve_counts(mesh_def: dict[str, Any]) -> set[int]:
+    protected_curves = set()
+    for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])):
+        curve_specs = list(_iter_curve_specs(entry))
+        spec_count = len(curve_specs)
+        for index, curve_spec in enumerate(curve_specs):
+            if _entry_mesh_size_mode(entry, index, spec_count) != "npts":
+                continue
+            for curve_id in _as_list(curve_spec.curve_ids):
+                protected_curves.add(abs(curve_id))
+    return protected_curves
+
+
+def _has_protected_opposite_edge_mismatch(
+    edge_curves: list[list[int]],
+    constraints: dict[int, CurveConstraint],
+    protected_curve_counts: set[int],
+) -> bool:
+    for edge_index in range(2):
+        curves_a = edge_curves[edge_index]
+        curves_b = edge_curves[edge_index + 2]
+        divisions_a = _edge_divisions(curves_a, constraints)
+        divisions_b = _edge_divisions(curves_b, constraints)
+        if divisions_a is None or divisions_b is None or divisions_a == divisions_b:
+            continue
+
+        protected_a = any(abs(curve_id) in protected_curve_counts for curve_id in curves_a)
+        protected_b = any(abs(curve_id) in protected_curve_counts for curve_id in curves_b)
+        if protected_a and protected_b:
+            return True
+
+    return False
+
+
+def _add_unstructured_surface(mesh_def: dict[str, Any], surface_id: int) -> None:
+    unstructured_surfaces = {
+        int(existing_surface_id)
+        for existing_surface_id in mesh_def.get("unstructured_surfaces", [])
+    }
+    unstructured_surfaces.add(int(surface_id))
+    mesh_def["unstructured_surfaces"] = sorted(unstructured_surfaces)
+
+
+def _align_opposite_edge_divisions(
+    edge_curves: list[list[int]],
+    constraints: dict[int, CurveConstraint],
+    chordwise_curve_loop_indices: dict[int, int],
+    chordwise_curve_groups: dict[int, list[int]],
+) -> None:
+    for edge_index in range(2):
+        curves_a = edge_curves[edge_index]
+        curves_b = edge_curves[edge_index + 2]
+        divisions_a = _edge_divisions(curves_a, constraints)
+        divisions_b = _edge_divisions(curves_b, constraints)
+        if divisions_a is None or divisions_b is None or divisions_a == divisions_b:
+            continue
+
+        loop_indices_a = [
+            chordwise_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_a
+        ]
+        loop_indices_b = [
+            chordwise_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_b
+        ]
+        chordwise_a = all(loop_index is not None for loop_index in loop_indices_a)
+        chordwise_b = all(loop_index is not None for loop_index in loop_indices_b)
+
+        if chordwise_a and chordwise_b:
+            _align_opposite_chordwise_edge_divisions(
+                curves_a,
+                divisions_a,
+                loop_indices_a,
+                curves_b,
+                divisions_b,
+                loop_indices_b,
+                constraints,
+                chordwise_curve_groups,
+            )
+            continue
+        if chordwise_a:
+            source_divisions = divisions_a
+            target_edge_divisions = divisions_b
+            target_curves = curves_b
+        elif chordwise_b:
+            source_divisions = divisions_b
+            target_edge_divisions = divisions_a
+            target_curves = curves_a
+        else:
+            source_divisions = max(divisions_a, divisions_b)
+            target_edge_divisions = min(divisions_a, divisions_b)
+            target_curves = curves_a if divisions_a < divisions_b else curves_b
+
+        non_chordwise_target_curves = [
+            abs(curve_id)
+            for curve_id in target_curves
+            if abs(curve_id) not in chordwise_curve_loop_indices
+        ]
+        if not non_chordwise_target_curves:
+            warnings.warn(
+                "Could not align opposite surface edge divisions without changing "
+                f"chordwise curves {target_curves}. Leaving counts unchanged.",
+                stacklevel=2,
+            )
+            continue
+
+        target_curve = max(
+            non_chordwise_target_curves,
+            key=_curve_length,
+        )
+
+        target_constraint = constraints.get(target_curve)
+        if target_constraint is None:
+            continue
+
+        missing_divisions = source_divisions - target_edge_divisions
+        if missing_divisions == 0:
+            continue
+
+        target_n_pts = max(2, target_constraint.n_pts + missing_divisions)
+        _set_curve_constraint(
+            target_curve,
+            CurveConstraint(
+                target_n_pts,
+                target_constraint.mesh_type,
+                target_constraint.coef,
+            ),
+            constraints,
+        )
+
+
+def _align_opposite_chordwise_edge_divisions(
+    curves_a: list[int],
+    divisions_a: int,
+    loop_indices_a: list[int | None],
+    curves_b: list[int],
+    divisions_b: int,
+    loop_indices_b: list[int | None],
+    constraints: dict[int, CurveConstraint],
+    chordwise_curve_groups: dict[int, list[int]],
+) -> None:
+    mean_loop_a = sum(
+        loop_index for loop_index in loop_indices_a if loop_index is not None
+    ) / len(loop_indices_a)
+    mean_loop_b = sum(
+        loop_index for loop_index in loop_indices_b if loop_index is not None
+    ) / len(loop_indices_b)
+    if mean_loop_a == mean_loop_b:
+        return
+
+    if mean_loop_a > mean_loop_b:
+        source_divisions = divisions_b
+        target_edge_divisions = divisions_a
+        target_curves = curves_a
+    else:
+        source_divisions = divisions_a
+        target_edge_divisions = divisions_b
+        target_curves = curves_b
+
+    missing_divisions = source_divisions - target_edge_divisions
+    if missing_divisions == 0:
+        return
+
+    target_curve = max((abs(curve_id) for curve_id in target_curves), key=_curve_length)
+    target_group = chordwise_curve_groups.get(target_curve, [target_curve])
+    compensation_curves = [
+        curve_id
+        for curve_id in target_group
+        if curve_id != target_curve
+        and curve_id not in {abs(target_item) for target_item in target_curves}
+    ]
+    if not compensation_curves:
+        warnings.warn(
+            "Opposite chordwise surface edges have inconsistent divisions, but "
+            f"curve {target_curve} is not part of a larger grouped curve. "
+            "Leaving chordwise group total unchanged.",
+            stacklevel=2,
+        )
+        return
+
+    target_constraint = constraints.get(target_curve)
+    if target_constraint is None:
+        return
+
+    compensation_curve = max(
+        compensation_curves,
+        key=lambda curve_id: constraints.get(
+            curve_id, CurveConstraint(2, "Progression", 1.0)
+        ).n_pts,
+    )
+    compensation_constraint = constraints.get(compensation_curve)
+    if compensation_constraint is None:
+        return
+
+    target_n_pts = max(2, target_constraint.n_pts + missing_divisions)
+    compensation_n_pts = compensation_constraint.n_pts - missing_divisions
+    if compensation_n_pts < 2:
+        warnings.warn(
+            "Cannot align chordwise subcurve divisions while preserving grouped "
+            f"curve total for group {target_group}. Leaving counts unchanged.",
+            stacklevel=2,
+        )
+        return
+
+    _set_curve_constraint(
+        target_curve,
+        CurveConstraint(
+            target_n_pts,
+            target_constraint.mesh_type,
+            target_constraint.coef,
+        ),
+        constraints,
+    )
+    _set_curve_constraint(
+        compensation_curve,
+        CurveConstraint(
+            compensation_n_pts,
+            compensation_constraint.mesh_type,
+            compensation_constraint.coef,
+        ),
+        constraints,
+    )
 
 
 def _unstructured_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
