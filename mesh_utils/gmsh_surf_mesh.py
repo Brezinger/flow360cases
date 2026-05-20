@@ -2075,6 +2075,22 @@ def apply_transfinite_surfaces(mesh_def: dict[str, Any]) -> None:
         )
 
 
+def apply_geometry_healing(mesh_def: dict[str, Any]) -> None:
+    healing_def = mesh_def.get("geometry_healing", {})
+    if not healing_def or not bool(healing_def.get("enabled", False)):
+        return
+
+    gmsh.model.occ.healShapes(
+        [],
+        float(healing_def.get("tolerance", 1.0e-6)),
+        bool(healing_def.get("fix_degenerated", True)),
+        bool(healing_def.get("fix_small_edges", True)),
+        bool(healing_def.get("fix_small_faces", True)),
+        bool(healing_def.get("sew_faces", True)),
+        bool(healing_def.get("make_solids", False)),
+    )
+
+
 def show_gmsh() -> None:
     """Open the Gmsh GUI for inspecting the generated mesh."""
     gmsh.option.setNumber("Mesh.SurfaceFaces", 1)
@@ -2090,6 +2106,7 @@ def generate_surface_mesh(
     recombine: bool = True,
     mesh_format: str = "msh2",
     show: bool = True,
+    mesh: bool = True,
 ) -> None:
     with mesh_def_file.open("r", encoding="utf-8") as file:
         mesh_def = json.load(file)
@@ -2102,7 +2119,13 @@ def generate_surface_mesh(
 
         gmsh.model.add(step_file.stem)
         gmsh.model.occ.importShapes(str(step_file))
+        apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
+
+        if not mesh:
+            if show:
+                show_gmsh()
+            return
 
         mesh_def = apply_automatic_curve_sequences(mesh_def)
         mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
@@ -2168,6 +2191,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not open the Gmsh GUI after writing the mesh.",
     )
+    parser.add_argument(
+        "--no-mesh",
+        action="store_true",
+        help="Only import and optionally heal the STEP geometry; do not generate a mesh.",
+    )
     return parser.parse_args()
 
 
@@ -2182,9 +2210,13 @@ def main() -> None:
         recombine=args.recombine,
         mesh_format=args.format,
         show=not args.no_show,
+        mesh=not args.no_mesh,
     )
 
-    print(f"Wrote surface mesh to {output_file}")
+    if args.no_mesh:
+        print("Imported geometry without generating a mesh.")
+    else:
+        print(f"Wrote surface mesh to {output_file}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,16 @@
 {
+  "geometry_healing": {
+    "enabled": true,
+    "tolerance": 0.01,
+    "fix_degenerated": true,
+    "fix_small_edges": true,
+    "fix_small_faces": true,
+    "sew_faces": true,
+    "make_solids": false
+  },
   "automatic_curve_sequences": {
     "enabled": true,
-    "start_pt": 61,
+    "start_pt": 60,
     "chordwise_direction": [
       -1.0,
       0.0,
