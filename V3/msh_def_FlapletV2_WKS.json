@@ -2,7 +2,7 @@
   "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 FlapletV2\\WKS\\Ventus3_FlapletV2_WKS_B.stp",
   "geometry_healing": {
     "enabled": true,
-    "tolerance": 0.01,
+    "tolerance": 0.05,
     "fix_degenerated": true,
     "fix_small_edges": true,
     "fix_small_faces": true,

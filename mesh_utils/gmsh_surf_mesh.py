@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import heapq
 import json
 import math
 import warnings
@@ -39,7 +40,14 @@ class CurveSpec:
 class TracedLoop:
     curve_ids: list[int]
     points: list[int]
-    blunt_curve_id: int
+    blunt_curve_ids: list[int]
+    blunt_points: list[int]
+
+
+@dataclass(frozen=True)
+class SpanwisePath:
+    points: list[int]
+    curve_segments: list[list[int]]
 
 
 def _as_bool(value: Any) -> bool:
@@ -522,38 +530,12 @@ def _nearest_node_index(node_positions: list[float], target_position: float) -> 
     )
 
 
-def _curve_node_counts(
-    curve_ids: int | list[int],
-    invert_directions: bool | list[bool],
-    n_pts: int,
-    entry: dict[str, Any],
-    mesh_type: str | None = None,
-    coef: float | None = None,
-) -> list[tuple[int, int, bool]]:
-    curve_group = _as_list(curve_ids)
-    invert_group = _as_bool_list(invert_directions, len(curve_group))
-
-    if len(curve_group) == 1:
-        return [(curve_group[0], n_pts, invert_group[0])]
-
-    n_elements = n_pts - 1
-    if n_elements < len(curve_group):
-        raise ValueError(
-            f"Need at least {len(curve_group) + 1} points for {len(curve_group)} "
-            f"split curves, got {n_pts}."
-        )
-
-    lengths = [_curve_length(curve_id) for curve_id in curve_group]
+def _greedy_compound_split_indices(
+    lengths: list[float],
+    node_positions: list[float],
+) -> list[int]:
     total_length = sum(lengths)
-    if total_length <= 0.0:
-        raise ValueError(f"Split curve group has non-positive total length: {curve_group}")
-
-    # The first sub-curve defines the virtual grouped curve direction. The
-    # per-sub-curve booleans are still applied below when setting Gmsh's local
-    # progression coefficient on each CAD curve.
-    node_positions = _distribution_node_positions(
-        entry, n_pts, invert_group[0], mesh_type, coef
-    )
+    n_elements = len(node_positions) - 1
     split_indices = [0]
     accumulated_length = 0.0
 
@@ -567,14 +549,123 @@ def _curve_node_counts(
         split_indices.append(min(max(nearest_index, min_index), max_index))
 
     split_indices.append(n_elements)
+    return split_indices
+
+
+def _compound_split_indices(
+    lengths: list[float],
+    node_positions: list[float],
+) -> list[int]:
+    n_elements = len(node_positions) - 1
+    n_curves = len(lengths)
+    if n_curves == 1:
+        return [0, n_elements]
+
+    # The dynamic program avoids accumulated rounding errors on compound edges
+    # with many short CAD subcurves. Fall back to the old greedy split for very
+    # large cases where the quadratic search would be disproportionate.
+    if n_curves * n_elements * n_elements > 20_000_000:
+        return _greedy_compound_split_indices(lengths, node_positions)
+
+    total_length = sum(lengths)
+    epsilon = 1.0e-300
+    best_by_end_index: dict[int, tuple[float, list[int]]] = {0: (0.0, [0])}
+
+    for curve_index, curve_length in enumerate(lengths):
+        remaining_curves = n_curves - curve_index - 1
+        next_best_by_end_index: dict[int, tuple[float, list[int]]] = {}
+
+        for start_index, (current_cost, current_path) in best_by_end_index.items():
+            min_end_index = start_index + 1
+            max_end_index = n_elements - remaining_curves
+
+            for end_index in range(min_end_index, max_end_index + 1):
+                represented_length = total_length * (
+                    node_positions[end_index] - node_positions[start_index]
+                )
+                split_cost = math.log(
+                    max(represented_length, epsilon)
+                    / max(curve_length, epsilon)
+                ) ** 2
+                candidate_cost = current_cost + split_cost
+
+                best_candidate = next_best_by_end_index.get(end_index)
+                if best_candidate is None or candidate_cost < best_candidate[0]:
+                    next_best_by_end_index[end_index] = (
+                        candidate_cost,
+                        current_path + [end_index],
+                    )
+
+        best_by_end_index = next_best_by_end_index
+
+    if n_elements not in best_by_end_index:
+        return _greedy_compound_split_indices(lengths, node_positions)
+
+    return best_by_end_index[n_elements][1]
+
+
+def _curve_node_counts(
+    curve_ids: int | list[int],
+    invert_directions: bool | list[bool],
+    n_pts: int,
+    entry: dict[str, Any],
+    mesh_type: str | None = None,
+    coef: float | None = None,
+) -> list[tuple[int, int, bool, float]]:
+    curve_group = _as_list(curve_ids)
+    invert_group = _as_bool_list(invert_directions, len(curve_group))
+    mesh_type = str(
+        mesh_type if mesh_type is not None else entry.get("type", "Progression")
+    )
+    coef = float(coef if coef is not None else entry.get("Parameter", 1.0))
+
+    if len(curve_group) == 1:
+        return [(curve_group[0], n_pts, invert_group[0], coef)]
+
+    n_elements = n_pts - 1
+    if n_elements < len(curve_group):
+        raise ValueError(
+            f"Need at least {len(curve_group) + 1} points for {len(curve_group)} "
+            f"split curves, got {n_pts}."
+        )
+
+    lengths = [_curve_length(curve_id) for curve_id in curve_group]
+    total_length = sum(lengths)
+    if total_length <= 0.0:
+        raise ValueError(f"Split curve group has non-positive total length: {curve_group}")
+
+    # The virtual grouped curve distribution is defined in traced curve order.
+    # Geometry orientation is handled per CAD subcurve when setting Gmsh's local
+    # progression coefficient, not when choosing where to split the compound.
+    node_positions = _distribution_node_positions(
+        entry, n_pts, False, mesh_type, coef
+    )
+    split_indices = _compound_split_indices(lengths, node_positions)
     element_counts = [
         end_index - start_index
         for start_index, end_index in zip(split_indices, split_indices[1:])
     ]
 
+    curve_coefs = []
+    for start_index, end_index in zip(split_indices, split_indices[1:]):
+        curve_elements = end_index - start_index
+        if mesh_type.lower() != "progression" or curve_elements <= 1:
+            curve_coefs.append(coef)
+            continue
+
+        first_size = node_positions[start_index + 1] - node_positions[start_index]
+        last_size = node_positions[end_index] - node_positions[end_index - 1]
+        if first_size <= 0.0 or last_size <= 0.0:
+            curve_coefs.append(coef)
+            continue
+
+        curve_coefs.append((last_size / first_size) ** (1.0 / (curve_elements - 1)))
+
     return [
-        (curve_id, n_elements + 1, invert)
-        for curve_id, n_elements, invert in zip(curve_group, element_counts, invert_group)
+        (curve_id, n_elements + 1, invert, curve_coef)
+        for curve_id, n_elements, invert, curve_coef in zip(
+            curve_group, element_counts, invert_group, curve_coefs
+        )
     ]
 
 
@@ -646,19 +737,116 @@ def _curve_traversal_invert_direction(
     start_point: int,
     end_point: int,
 ) -> bool:
+    traversal_vector = _point_vector(start_point, end_point)
+    tangent = _curve_tangent_at_point(curve_id, start_point)
+    if tangent is not None:
+        alignment = _dot(tangent, traversal_vector)
+        if abs(alignment) > 1.0e-12 * _vector_norm(tangent) * _vector_norm(
+            traversal_vector
+        ):
+            return alignment < 0.0
+
     natural_start, natural_end = _oriented_curve_endpoints(curve_id)
     if natural_start == start_point and natural_end == end_point:
         return False
     if natural_start == end_point and natural_end == start_point:
         return True
 
-    traversal_vector = _point_vector(start_point, end_point)
-    tangent = _curve_tangent_at_point(curve_id, start_point)
-    if tangent is not None:
-        return _dot(tangent, traversal_vector) < 0.0
-
     natural_vector = _point_vector(natural_start, natural_end)
     return _dot(natural_vector, traversal_vector) < 0.0
+
+
+def _curve_tangent_for_traversal(
+    curve_id: int,
+    point_id: int,
+    previous_point_id: int | None = None,
+) -> list[float] | None:
+    tangent = _curve_tangent_at_point(curve_id, point_id)
+    if tangent is None:
+        return None
+
+    if previous_point_id is not None:
+        traversal_vector = _point_vector(previous_point_id, point_id)
+        if _dot(tangent, traversal_vector) < 0.0:
+            tangent = [-value for value in tangent]
+
+    return tangent
+
+
+def _curve_tangent_towards_point(
+    curve_id: int,
+    point_id: int,
+    next_point_id: int,
+) -> list[float] | None:
+    tangent = _curve_tangent_at_point(curve_id, point_id)
+    if tangent is None:
+        return None
+
+    traversal_vector = _point_vector(point_id, next_point_id)
+    if _dot(tangent, traversal_vector) < 0.0:
+        tangent = [-value for value in tangent]
+    return tangent
+
+
+def _best_adjacent_tangent(
+    point_id: int,
+    direction: Sequence[float],
+    excluded_curves: set[int],
+) -> list[float] | None:
+    direction_unit = _normalized(direction)
+    best_curve = None
+    best_next_point = None
+    best_score = 0.0
+
+    for curve_id in _adjacent_curve_ids(point_id):
+        if abs(curve_id) in excluded_curves:
+            continue
+
+        next_point = _other_curve_point(curve_id, point_id)
+        curve_vector = _point_vector(point_id, next_point)
+        curve_norm = _vector_norm(curve_vector)
+        if curve_norm <= 0.0:
+            continue
+
+        score = abs(_dot(_normalized(curve_vector), direction_unit))
+        if score > best_score:
+            best_curve = curve_id
+            best_next_point = next_point
+            best_score = score
+
+    if best_curve is None or best_next_point is None:
+        return None
+    return _curve_tangent_towards_point(best_curve, point_id, best_next_point)
+
+
+def _local_blunt_direction(
+    start_point: int,
+    first_curve_id: int,
+    first_curve_end_point: int,
+    spanwise_direction: Sequence[float],
+    excluded_curves: set[int],
+    fallback_direction: Sequence[float],
+) -> list[float]:
+    first_tangent = _curve_tangent_towards_point(
+        first_curve_id,
+        start_point,
+        first_curve_end_point,
+    )
+    if first_tangent is None:
+        first_tangent = _point_vector(start_point, first_curve_end_point)
+
+    spanwise_tangent = _best_adjacent_tangent(
+        start_point,
+        spanwise_direction,
+        set(excluded_curves).union({abs(first_curve_id)}),
+    )
+    if spanwise_tangent is None:
+        spanwise_tangent = _as_vector(spanwise_direction)
+
+    blunt_direction = _cross(spanwise_tangent, first_tangent)
+    if _vector_norm(blunt_direction) <= 0.0:
+        return _as_vector(fallback_direction)
+    return blunt_direction
 
 
 def _trace_surface_edge_curves(
@@ -778,6 +966,46 @@ def _connecting_curve(point_a: int, point_b: int) -> int | None:
     return None
 
 
+def _curve_path_alignment(
+    curve_ids: Sequence[int],
+    point_path: Sequence[int],
+    direction: Sequence[float],
+) -> float:
+    if not curve_ids or len(point_path) < 2:
+        return -1.0
+
+    direction_unit = _normalized(direction)
+    length_sum = 0.0
+    weighted_alignment = 0.0
+    for curve_index, curve_id in enumerate(curve_ids):
+        start_point = point_path[curve_index]
+        end_point = point_path[curve_index + 1]
+        curve_vector = _point_vector(start_point, end_point)
+        curve_norm = _vector_norm(curve_vector)
+        if curve_norm <= 0.0:
+            continue
+        curve_length = _curve_length(curve_id)
+        length_sum += curve_length
+        weighted_alignment += curve_length * abs(
+            _dot(_normalized(curve_vector), direction_unit)
+        )
+
+    if length_sum <= 0.0:
+        return -1.0
+    return weighted_alignment / length_sum
+
+
+def _has_only_simple_intermediate_points(point_path: Sequence[int]) -> bool:
+    return all(_point_valence(point_id) <= 2 for point_id in point_path[1:-1])
+
+
+def _known_intermediate_points(
+    point_path: Sequence[int],
+    known_points: set[int],
+) -> list[int]:
+    return [point_id for point_id in point_path[1:-1] if point_id in known_points]
+
+
 def _trace_airfoil_loop(
     start_point: int,
     chordwise_direction: Sequence[float],
@@ -787,6 +1015,7 @@ def _trace_airfoil_loop(
 ) -> TracedLoop:
     current_point = int(start_point)
     pointing = _as_vector(chordwise_direction)
+    effective_blunt_direction = _as_vector(blunt_direction)
     curve_ids = []
     points = [current_point]
     local_excluded = set(excluded_curves)
@@ -797,10 +1026,41 @@ def _trace_airfoil_loop(
             if blunt_curve is not None and blunt_curve not in local_excluded:
                 blunt_vector = _point_vector(current_point, start_point)
                 if (
-                    abs(_dot(_normalized(blunt_vector), _normalized(blunt_direction)))
+                    abs(
+                        _dot(
+                            _normalized(blunt_vector),
+                            _normalized(effective_blunt_direction),
+                        )
+                    )
                     > 0.2
                 ):
-                    return TracedLoop(curve_ids, points, blunt_curve)
+                    return TracedLoop(
+                        curve_ids,
+                        points,
+                        [blunt_curve],
+                        [current_point, start_point],
+                    )
+
+            try:
+                blunt_curves, blunt_points = _curve_path_between_points(
+                    current_point,
+                    start_point,
+                    local_excluded,
+                )
+            except ValueError:
+                blunt_curves = []
+                blunt_points = []
+            if len(blunt_curves) > 1 and (
+                _has_only_simple_intermediate_points(blunt_points)
+                and
+                _curve_path_alignment(
+                    blunt_curves,
+                    blunt_points,
+                    effective_blunt_direction,
+                )
+                > 0.2
+            ):
+                return TracedLoop(curve_ids, points, blunt_curves, blunt_points)
 
         selected = _select_adjacent_curve(
             current_point,
@@ -819,8 +1079,18 @@ def _trace_airfoil_loop(
         curve_ids.append(curve_id)
         points.append(next_point)
         local_excluded.add(abs(curve_id))
+        if len(curve_ids) == 1:
+            effective_blunt_direction = _local_blunt_direction(
+                start_point,
+                curve_id,
+                next_point,
+                spanwise_direction,
+                local_excluded,
+                blunt_direction,
+            )
+        tangent = _curve_tangent_for_traversal(curve_id, next_point, current_point)
         current_point = next_point
-        pointing = curve_vector
+        pointing = tangent if tangent is not None else curve_vector
 
 
 def _curve_group_size(curve_group: int | list[int]) -> int:
@@ -881,10 +1151,7 @@ def _infer_n_subcurvs(
     traced_loop: TracedLoop,
     split_spanwise_curve_count: int,
 ) -> list[int]:
-    loop_curve_set = {
-        abs(curve_id)
-        for curve_id in traced_loop.curve_ids + [traced_loop.blunt_curve_id]
-    }
+    loop_curve_set = {abs(curve_id) for curve_id in _loop_all_curve_ids(traced_loop)}
     group_sizes = []
     current_group_size = 1
 
@@ -902,7 +1169,7 @@ def _infer_n_subcurvs(
             current_group_size += 1
 
     group_sizes.append(current_group_size)
-    group_sizes.append(1)
+    group_sizes.append(len(traced_loop.blunt_curve_ids))
     return group_sizes
 
 
@@ -950,6 +1217,412 @@ def _infer_n_subcurvs_for_template(
         return best_group_sizes
 
     return candidate_group_sizes[0]
+
+
+def _unique_ordered(values: Iterable[int]) -> list[int]:
+    unique_values = []
+    seen_values = set()
+    for value in values:
+        int_value = int(value)
+        if int_value in seen_values:
+            continue
+        unique_values.append(int_value)
+        seen_values.add(int_value)
+    return unique_values
+
+
+def _point_valence(point_id: int) -> int:
+    return len(_adjacent_curve_ids(point_id))
+
+
+def _loop_ordered_points(traced_loop: TracedLoop) -> list[int]:
+    return _unique_ordered(traced_loop.points)
+
+
+def _loop_all_curve_ids(traced_loop: TracedLoop) -> list[int]:
+    return traced_loop.curve_ids + traced_loop.blunt_curve_ids
+
+
+def _loop_split_points(traced_loop: TracedLoop) -> list[int]:
+    return [
+        point_id
+        for point_id in _loop_ordered_points(traced_loop)
+        if _point_valence(point_id) >= 3
+    ]
+
+
+def _select_adjacent_curve_excluding(
+    point_id: int,
+    direction: Sequence[float],
+    excluded_curves: set[int],
+    forbidden_curves: set[int],
+    *,
+    min_score: float = -0.2,
+) -> tuple[int, int, list[float]] | None:
+    filtered_excluded = set(excluded_curves).union(forbidden_curves)
+    return _select_adjacent_curve(
+        point_id,
+        direction,
+        filtered_excluded,
+        min_score=min_score,
+    )
+
+
+def _trace_spanwise_segment_to_crossing(
+    start_point: int,
+    direction: Sequence[float],
+    excluded_curves: set[int],
+    forbidden_curves: set[int],
+) -> tuple[list[int], int, list[float]] | None:
+    current_point = int(start_point)
+    current_direction = _as_vector(direction)
+    local_excluded = set(excluded_curves)
+    segment_curves = []
+    last_vector = current_direction
+
+    while True:
+        selected = _select_adjacent_curve_excluding(
+            current_point,
+            current_direction,
+            local_excluded,
+            forbidden_curves,
+        )
+        if selected is None:
+            return None
+
+        curve_id, next_point, curve_vector = selected
+        segment_curves.append(curve_id)
+        local_excluded.add(abs(curve_id))
+        tangent = _curve_tangent_for_traversal(curve_id, next_point, current_point)
+        current_point = next_point
+        current_direction = tangent if tangent is not None else curve_vector
+        last_vector = current_direction
+
+        if _point_valence(current_point) >= 3:
+            return segment_curves, current_point, last_vector
+
+
+def _trace_spanwise_path_by_crossings(
+    start_point: int,
+    direction: Sequence[float],
+    n_segments: int,
+    excluded_curves: set[int],
+    forbidden_curves: set[int],
+) -> SpanwisePath:
+    points = [int(start_point)]
+    curve_segments = []
+    current_point = int(start_point)
+    current_direction = _as_vector(direction)
+    local_excluded = set(excluded_curves)
+
+    for _ in range(n_segments):
+        segment = _trace_spanwise_segment_to_crossing(
+            current_point,
+            current_direction,
+            local_excluded,
+            forbidden_curves,
+        )
+        if segment is None:
+            raise ValueError(
+                f"Could not continue spanwise path from point {current_point}."
+            )
+
+        segment_curves, next_point, next_direction = segment
+        curve_segments.append(segment_curves)
+        local_excluded.update(abs(curve_id) for curve_id in segment_curves)
+        points.append(next_point)
+        current_point = next_point
+        current_direction = next_direction
+
+    return SpanwisePath(points, curve_segments)
+
+
+def _spanwise_direction_at_path_point(
+    path: SpanwisePath,
+    point_index: int,
+    fallback_direction: Sequence[float],
+) -> list[float]:
+    if point_index > 0:
+        segment = path.curve_segments[point_index - 1]
+        if segment:
+            curve_id = segment[-1]
+            point_id = path.points[point_index]
+            previous_point = _other_curve_point(curve_id, point_id)
+            tangent = _curve_tangent_for_traversal(
+                curve_id,
+                point_id,
+                previous_point,
+            )
+            if tangent is not None:
+                return tangent
+        previous_point = path.points[point_index - 1]
+        current_point = path.points[point_index]
+        spanwise_vector = _point_vector(previous_point, current_point)
+        if _vector_norm(spanwise_vector) > 0.0:
+            return spanwise_vector
+
+    if point_index < len(path.curve_segments):
+        segment = path.curve_segments[point_index]
+        if segment:
+            curve_id = segment[0]
+            point_id = path.points[point_index]
+            next_point = _other_curve_point(curve_id, point_id)
+            tangent = _curve_tangent_towards_point(curve_id, point_id, next_point)
+            if tangent is not None:
+                return tangent
+        current_point = path.points[point_index]
+        next_point = path.points[point_index + 1]
+        spanwise_vector = _point_vector(current_point, next_point)
+        if _vector_norm(spanwise_vector) > 0.0:
+            return spanwise_vector
+
+    return _as_vector(fallback_direction)
+
+
+def _group_loop_curves_by_split_points(
+    traced_loop: TracedLoop,
+    split_points: list[int],
+) -> tuple[list[int | list[int]], list[int]]:
+    split_points = _unique_ordered(split_points)
+    if not split_points or traced_loop.points[0] != split_points[0]:
+        raise ValueError(
+            "Chordwise split points must start at the airfoil loop start point."
+        )
+
+    split_point_set = set(split_points)
+    curve_groups = []
+    group_sizes = []
+    current_group = []
+
+    for curve_id, end_point in zip(traced_loop.curve_ids, traced_loop.points[1:]):
+        current_group.append(curve_id)
+        if end_point in split_point_set:
+            curve_groups.append(
+                current_group[0] if len(current_group) == 1 else list(current_group)
+            )
+            group_sizes.append(len(current_group))
+            current_group = []
+
+    if current_group:
+        raise ValueError(
+            f"Could not close chordwise curve group at split points {split_points}."
+        )
+    curve_groups.append(
+        traced_loop.blunt_curve_ids[0]
+        if len(traced_loop.blunt_curve_ids) == 1
+        else list(traced_loop.blunt_curve_ids)
+    )
+    group_sizes.append(len(traced_loop.blunt_curve_ids))
+    if len(curve_groups) != len(split_points):
+        raise ValueError(
+            f"Split points define {len(split_points)} groups, but traced loop "
+            f"produced {len(curve_groups)} groups."
+        )
+
+    return curve_groups, group_sizes
+
+
+def _curve_path_between_points(
+    start_point: int,
+    end_point: int,
+    forbidden_curves: set[int],
+) -> tuple[list[int], list[int]]:
+    start_point = int(start_point)
+    end_point = int(end_point)
+    queue: list[tuple[float, int, list[int], list[int]]] = [
+        (0.0, start_point, [], [start_point])
+    ]
+    best_distance = {start_point: 0.0}
+
+    while queue:
+        distance, point_id, curve_path, point_path = heapq.heappop(queue)
+        if point_id == end_point:
+            return curve_path, point_path
+        if distance > best_distance.get(point_id, math.inf):
+            continue
+
+        for curve_id in _adjacent_curve_ids(point_id):
+            abs_curve_id = abs(curve_id)
+            if abs_curve_id in forbidden_curves:
+                continue
+
+            next_point = _other_curve_point(curve_id, point_id)
+            next_distance = distance + _curve_length(curve_id)
+            if next_distance >= best_distance.get(next_point, math.inf):
+                continue
+
+            best_distance[next_point] = next_distance
+            heapq.heappush(
+                queue,
+                (
+                    next_distance,
+                    next_point,
+                    curve_path + [curve_id],
+                    point_path + [next_point],
+                ),
+            )
+
+    raise ValueError(f"Could not find curve path from point {start_point} to {end_point}.")
+
+
+def _trace_airfoil_loop_through_split_points(
+    split_points: list[int],
+    forbidden_curves: set[int],
+    spanwise_direction: Sequence[float] | None = None,
+    blunt_direction: Sequence[float] | None = None,
+    known_loop_points: set[int] | None = None,
+) -> TracedLoop:
+    split_points = _unique_ordered(split_points)
+    if len(split_points) < 2:
+        raise ValueError("Need at least two split points to trace an airfoil loop.")
+
+    curve_ids = []
+    points = [split_points[0]]
+    local_forbidden = set(forbidden_curves)
+
+    for start_point, end_point in zip(split_points[:-1], split_points[1:]):
+        path_curves, path_points = _curve_path_between_points(
+            start_point, end_point, local_forbidden
+        )
+        curve_ids.extend(path_curves)
+        points.extend(path_points[1:])
+        local_forbidden.update(abs(curve_id) for curve_id in path_curves)
+
+    if curve_ids and spanwise_direction is not None and blunt_direction is not None:
+        closing_curve = _connecting_curve(split_points[-1], split_points[0])
+        if closing_curve is not None and closing_curve not in local_forbidden:
+            local_blunt_direction = _local_blunt_direction(
+                split_points[0],
+                curve_ids[0],
+                points[1],
+                spanwise_direction,
+                local_forbidden,
+                blunt_direction,
+            )
+            closing_vector = _point_vector(split_points[-1], split_points[0])
+            if (
+                abs(
+                    _dot(
+                        _normalized(closing_vector),
+                        _normalized(local_blunt_direction),
+                    )
+                )
+                > 0.2
+            ):
+                return TracedLoop(
+                    curve_ids,
+                    points,
+                    [closing_curve],
+                    [split_points[-1], split_points[0]],
+                )
+
+    closing_curves, closing_points = _curve_path_between_points(
+        split_points[-1], split_points[0], local_forbidden
+    )
+    known_intermediate_points = _known_intermediate_points(
+        closing_points,
+        known_loop_points or set(split_points),
+    )
+    if known_intermediate_points:
+        raise ValueError(
+            f"Closing blunt trailing-edge curve path from {split_points[-1]} to "
+            f"{split_points[0]} passes through already identified loop/spanwise "
+            f"points {known_intermediate_points}: {closing_points}."
+        )
+    if (
+        spanwise_direction is not None
+        and blunt_direction is not None
+        and curve_ids
+    ):
+        local_blunt_direction = _local_blunt_direction(
+            split_points[0],
+            curve_ids[0],
+            points[1],
+            spanwise_direction,
+            local_forbidden,
+            blunt_direction,
+        )
+        if (
+            _curve_path_alignment(
+                closing_curves,
+                closing_points,
+                local_blunt_direction,
+            )
+            <= 0.2
+        ):
+            raise ValueError(
+                f"Closing curve path from {split_points[-1]} to {split_points[0]} "
+                f"is not aligned with the local blunt trailing-edge direction: "
+                f"{closing_curves}."
+            )
+    if not closing_curves:
+        raise ValueError(
+            f"Expected a closing blunt trailing-edge curve path from "
+            f"{split_points[-1]} to {split_points[0]}, got {closing_curves}."
+        )
+
+    return TracedLoop(curve_ids, points, closing_curves, closing_points)
+
+
+def _entry_group_count(entry: dict[str, Any]) -> int | None:
+    return _template_group_count(entry)
+
+
+def _best_loop_split_points(
+    traced_loop: TracedLoop,
+    defining_split_points: list[int],
+    template_entry: dict[str, Any],
+) -> list[int]:
+    target_group_count = _entry_group_count(template_entry)
+    split_points = [
+        point_id
+        for point_id in defining_split_points
+        if point_id in set(_loop_ordered_points(traced_loop))
+    ]
+    if target_group_count is not None and len(split_points) != target_group_count:
+        local_split_points = _loop_split_points(traced_loop)
+        if len(local_split_points) == target_group_count:
+            return local_split_points
+    return split_points
+
+
+def _chordwise_entry_from_grouped_loop(
+    traced_loop: TracedLoop,
+    chordwise_template: dict[str, Any],
+    curve_groups: list[int | list[int]],
+    group_sizes: list[int],
+) -> dict[str, Any]:
+    traced_curve_ids = _loop_all_curve_ids(traced_loop)
+    traced_invert_directions = [
+        _curve_traversal_invert_direction(
+            curve_id,
+            traced_loop.points[curve_index],
+            traced_loop.points[curve_index + 1],
+        )
+        for curve_index, curve_id in enumerate(traced_loop.curve_ids)
+    ]
+    traced_invert_directions.extend(
+        _curve_traversal_invert_direction(
+            curve_id,
+            traced_loop.blunt_points[curve_index],
+            traced_loop.blunt_points[curve_index + 1],
+        )
+        for curve_index, curve_id in enumerate(traced_loop.blunt_curve_ids)
+    )
+
+    chordwise_entry = copy.deepcopy(chordwise_template)
+    chordwise_entry["curve_ids"] = curve_groups
+    chordwise_entry["invert_direction"] = _group_values_by_curve_groups(
+        traced_invert_directions, curve_groups
+    )
+    _remap_template_values_to_groups(
+        chordwise_entry,
+        chordwise_template,
+        group_sizes,
+        len(traced_curve_ids),
+    )
+    _normalize_invert_directions_for_curve_groups(chordwise_entry)
+    return chordwise_entry
 
 
 def _template_group_sizes(template_entry: dict[str, Any], total_curves: int) -> list[int]:
@@ -1101,9 +1774,10 @@ def _trace_spanwise_curves(
                 _curve_traversal_invert_direction(curve_id, current_point, next_point)
             )
             chain_excluded.add(abs(curve_id))
+            tangent = _curve_tangent_for_traversal(curve_id, next_point, current_point)
             current_point = next_point
-            current_direction = curve_vector
-            last_vector = curve_vector
+            current_direction = tangent if tangent is not None else curve_vector
+            last_vector = current_direction
 
             continuing_curves = [
                 candidate_curve
@@ -1279,118 +1953,186 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Automatic curve discovery requires chordwise templates.")
 
     auto_mesh_def = copy.deepcopy(mesh_def)
-    used_curves: set[int] = set()
-    chordwise_entries = []
-    spanwise_entries = []
-    loop_start_point = start_point
-    spanwise_directions = [spanwise_direction]
-    previous_chordwise_group_sizes = None
-
-    for loop_index, chordwise_template in enumerate(chordwise_templates):
-        if loop_index > 0 and spanwise_directions:
-            first_chord = _select_adjacent_curve(
-                loop_start_point, chordwise_direction, used_curves
-            )
-            if first_chord is None:
-                raise ValueError(
-                    f"Could not identify first chordwise curve at point "
-                    f"{loop_start_point}."
-                )
-            first_chord_vector = _point_vector(
-                loop_start_point,
-                _other_curve_point(first_chord[0], loop_start_point),
-            )
-            cross_blunt_direction = _cross(first_chord_vector, spanwise_directions[0])
-            if _vector_norm(cross_blunt_direction) > 0.0:
-                blunt_direction = cross_blunt_direction
-
-        traced_loop = _trace_airfoil_loop(
-            loop_start_point,
-            chordwise_direction,
-            blunt_direction,
-            spanwise_directions[0] if spanwise_directions else spanwise_direction,
-            used_curves,
+    n_spanwise_sections = len(spanwise_templates)
+    n_airfoil_loops = len(chordwise_templates)
+    if n_airfoil_loops != n_spanwise_sections + 1:
+        raise ValueError(
+            f"Automatic tracing needs one more chordwise template than spanwise "
+            f"sections, got {n_airfoil_loops} and {n_spanwise_sections}."
         )
-        traced_curve_ids = traced_loop.curve_ids + [traced_loop.blunt_curve_id]
-        traced_invert_directions = [
-            _curve_traversal_invert_direction(
-                curve_id,
-                traced_loop.points[curve_index],
-                traced_loop.points[curve_index + 1],
-            )
-            for curve_index, curve_id in enumerate(traced_loop.curve_ids)
+
+    first_loop = _trace_airfoil_loop(
+        start_point,
+        chordwise_direction,
+        blunt_direction,
+        spanwise_direction,
+        set(),
+    )
+    first_loop_split_points = _loop_split_points(first_loop)
+    if len(first_loop_split_points) < 2:
+        raise ValueError(
+            "Could not identify compound curve defining points on the first "
+            "airfoil loop."
+        )
+
+    first_loop_curves = {abs(curve_id) for curve_id in _loop_all_curve_ids(first_loop)}
+    defining_paths = [
+        _trace_spanwise_path_by_crossings(
+            split_point,
+            spanwise_direction,
+            n_spanwise_sections,
+            set(),
+            first_loop_curves,
+        )
+        for split_point in first_loop_split_points
+    ]
+    known_loop_points = {
+        point_id for defining_path in defining_paths for point_id in defining_path.points
+    }
+    loop_start_points = defining_paths[0].points
+    traced_loops = [first_loop]
+    chordwise_curve_set = set(first_loop_curves)
+
+    for loop_index in range(1, n_airfoil_loops):
+        loop_split_points = [
+            defining_path.points[loop_index] for defining_path in defining_paths
         ]
-        traced_invert_directions.append(
-            _curve_traversal_invert_direction(
-                traced_loop.blunt_curve_id,
-                traced_loop.points[-1],
-                traced_loop.points[0],
+        loop_spanwise_direction = _spanwise_direction_at_path_point(
+            defining_paths[0],
+            loop_index,
+            spanwise_direction,
+        )
+        try:
+            traced_loop = _trace_airfoil_loop_through_split_points(
+                loop_split_points,
+                chordwise_curve_set,
+                loop_spanwise_direction,
+                blunt_direction,
+                known_loop_points,
             )
+        except ValueError as exc:
+            warnings.warn(
+                f"Stopping automatic airfoil-loop tracing before loop "
+                f"{loop_index + 1}: {exc}",
+                stacklevel=2,
+            )
+            break
+        traced_loops.append(traced_loop)
+        chordwise_curve_set.update(
+            abs(curve_id) for curve_id in _loop_all_curve_ids(traced_loop)
         )
-        used_curves.update(abs(curve_id) for curve_id in traced_curve_ids)
 
-        chordwise_entry = copy.deepcopy(chordwise_template)
-        split_spanwise_curve_count = (
-            1 if loop_index in (0, len(chordwise_templates) - 1) else 2
+    chordwise_templates = chordwise_templates[: len(traced_loops)]
+    spanwise_templates = spanwise_templates[: max(0, len(traced_loops) - 1)]
+
+    chordwise_entries = []
+    for loop_index, traced_loop in enumerate(traced_loops):
+        split_points = [
+            defining_path.points[loop_index] for defining_path in defining_paths
+        ]
+        split_points = _best_loop_split_points(
+            traced_loop,
+            split_points,
+            chordwise_templates[loop_index],
         )
-        inferred_n_subcurvs = (
-            _infer_n_subcurvs_for_template(
+        curve_groups, group_sizes = _group_loop_curves_by_split_points(
+            traced_loop, split_points
+        )
+        chordwise_entries.append(
+            _chordwise_entry_from_grouped_loop(
                 traced_loop,
-                chordwise_template,
-                split_spanwise_curve_count,
-                previous_chordwise_group_sizes,
+                chordwise_templates[loop_index],
+                curve_groups,
+                group_sizes,
             )
-            if infer_n_subcurvs
-            else None
         )
-        chordwise_entry["curve_ids"] = _group_traced_curves(
-            traced_curve_ids,
-            chordwise_template,
-            inferred_n_subcurvs,
+
+    spanwise_entries = []
+    used_spanwise_curves: set[int] = set()
+    for section_index, spanwise_template in enumerate(spanwise_templates):
+        section_curve_ids = []
+        section_invert_directions = []
+        section_direction = _point_vector(
+            defining_paths[0].points[section_index],
+            defining_paths[0].points[section_index + 1],
         )
-        chordwise_entry["invert_direction"] = _group_values_by_curve_groups(
-            traced_invert_directions, chordwise_entry["curve_ids"]
-        )
-        if inferred_n_subcurvs is not None:
-            _remap_template_values_to_groups(
-                chordwise_entry,
-                chordwise_template,
-                inferred_n_subcurvs,
-                len(traced_curve_ids),
+
+        for start_point_candidate in _loop_ordered_points(traced_loops[section_index]):
+            segment = _trace_spanwise_segment_to_crossing(
+                start_point_candidate,
+                section_direction,
+                used_spanwise_curves,
+                chordwise_curve_set,
             )
-        _normalize_invert_directions_for_curve_groups(chordwise_entry)
-        chordwise_entries.append(chordwise_entry)
-        if inferred_n_subcurvs is not None:
-            previous_chordwise_group_sizes = inferred_n_subcurvs
+            if segment is None:
+                continue
 
-        if loop_index >= len(spanwise_templates):
-            break
+            segment_curves, end_point, _ = segment
+            next_loop_points = set(_loop_ordered_points(traced_loops[section_index + 1]))
+            if end_point not in next_loop_points:
+                continue
 
-        (
-            spanwise_curve_ids,
-            spanwise_invert_directions,
-            next_points,
-            next_directions,
-        ) = _trace_spanwise_curves(traced_loop.points, spanwise_directions, used_curves)
-        if not spanwise_curve_ids:
-            break
+            segment_invert_directions = []
+            current_point = start_point_candidate
+            for curve_id in segment_curves:
+                next_point = _other_curve_point(curve_id, current_point)
+                segment_invert_directions.append(
+                    _curve_traversal_invert_direction(
+                        curve_id, current_point, next_point
+                    )
+                )
+                used_spanwise_curves.add(abs(curve_id))
+                current_point = next_point
+            section_curve_ids.append(
+                segment_curves[0] if len(segment_curves) == 1 else list(segment_curves)
+            )
+            section_invert_directions.append(
+                segment_invert_directions[0]
+                if len(segment_invert_directions) == 1
+                else segment_invert_directions
+            )
 
-        used_curves.update(abs(curve_id) for curve_id in spanwise_curve_ids)
-        spanwise_entry = copy.deepcopy(spanwise_templates[loop_index])
-        spanwise_entry["curve_ids"] = spanwise_curve_ids
+        spanwise_entry = copy.deepcopy(spanwise_template)
+        spanwise_entry["curve_ids"] = section_curve_ids
         if (
             "_invert_direction" in spanwise_entry
             and "invert_direction" not in spanwise_entry
         ):
-            spanwise_entry["invert_direction"] = copy.deepcopy(
-                spanwise_entry["_invert_direction"]
-            )
+            spec_count = len(section_curve_ids)
+            adjusted_invert_directions = []
+            for spec_index, (curve_group, inferred_invert_direction) in enumerate(
+                zip(section_curve_ids, section_invert_directions)
+            ):
+                curve_group_size = len(_as_list(curve_group))
+                user_invert_direction = _per_spec_value(
+                    spanwise_entry,
+                    "_invert_direction",
+                    spec_index,
+                    spec_count,
+                    False,
+                )
+                user_invert_group = _as_bool_list(
+                    user_invert_direction,
+                    curve_group_size,
+                )
+                inferred_invert_group = _as_bool_list(
+                    inferred_invert_direction,
+                    curve_group_size,
+                )
+                invert_group = [
+                    bool(inferred) != bool(user_invert)
+                    for inferred, user_invert in zip(
+                        inferred_invert_group,
+                        user_invert_group,
+                    )
+                ]
+                adjusted_invert_directions.append(
+                    invert_group[0] if curve_group_size == 1 else invert_group
+                )
+            spanwise_entry["invert_direction"] = adjusted_invert_directions
         else:
-            spanwise_entry["invert_direction"] = spanwise_invert_directions
+            spanwise_entry["invert_direction"] = section_invert_directions
         spanwise_entries.append(spanwise_entry)
-
-        loop_start_point = next_points[0]
-        spanwise_directions = next_directions or [spanwise_direction]
 
     auto_mesh_def["chordwise_curve_sequences"] = chordwise_entries
     auto_mesh_def["spanwise_curve_sequences"] = spanwise_entries
@@ -1528,7 +2270,11 @@ def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
 def _spanwise_connector_curves(spanwise_entries: Iterable[dict[str, Any]]) -> set[int]:
     connector_curves = set()
     for entry in spanwise_entries:
-        curve_ids = [abs(curve_id) for curve_id in _as_list(entry.get("curve_ids", []))]
+        curve_ids = [
+            abs(curve_id)
+            for curve_group in _entry_curve_groups(entry)
+            for curve_id in curve_group
+        ]
         if not curve_ids:
             continue
 
@@ -1570,7 +2316,8 @@ def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, 
     spanwise_curves = {
         abs(curve_id)
         for entry in spanwise_entries
-        for curve_id in _as_list(entry["curve_ids"])
+        for curve_group in _entry_curve_groups(entry)
+        for curve_id in curve_group
     }
     transfinite_curves = chordwise_curves.union(spanwise_curves)
     transfinite_surfaces = []
@@ -1818,7 +2565,11 @@ def _normalize_spanwise_sequence_counts(
     constraints: dict[int, CurveConstraint],
 ) -> None:
     for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])):
-        curve_ids = [abs(curve_id) for curve_id in _as_list(entry.get("curve_ids", []))]
+        curve_ids = [
+            abs(curve_id)
+            for curve_group in _entry_curve_groups(entry)
+            for curve_id in curve_group
+        ]
         if not curve_ids:
             continue
 
@@ -1855,7 +2606,11 @@ def _normalize_spanwise_sequence_counts(
 def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstraint]:
     constraints = {}
 
-    for section_name in ("chordwise_curve_sequences", "spanwise_curve_sequences"):
+    for section_name in (
+        "chordwise_curve_sequences",
+        "spanwise_curve_sequences",
+        "explicit_curve_sequences",
+    ):
         section = mesh_def.get(section_name, {})
         for entry in _iter_curve_entries(section):
             curve_specs = list(_iter_curve_specs(entry))
@@ -1876,7 +2631,7 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
                 ]
 
             for curve_spec in curve_specs:
-                for curve_id, curve_n_pts, invert in _curve_node_counts(
+                for curve_id, curve_n_pts, invert, curve_base_coef in _curve_node_counts(
                     curve_spec.curve_ids,
                     curve_spec.invert_directions,
                     curve_spec.n_pts,
@@ -1885,7 +2640,7 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
                     curve_spec.coef,
                 ):
                     curve_coef = _curve_coef(
-                        curve_spec.mesh_type, curve_spec.coef, invert
+                        curve_spec.mesh_type, curve_base_coef, invert
                     )
                     gmsh.model.mesh.setTransfiniteCurve(
                         curve_id,
@@ -1975,6 +2730,7 @@ def _complete_surface_boundary_curves_once(
             constraints,
             chordwise_curve_loop_indices,
             chordwise_curve_groups,
+            protected_curve_counts,
         )
 
 
@@ -2001,14 +2757,19 @@ def _chordwise_curve_groups(mesh_def: dict[str, Any]) -> dict[int, list[int]]:
 
 def _protected_curve_counts(mesh_def: dict[str, Any]) -> set[int]:
     protected_curves = set()
-    for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])):
-        curve_specs = list(_iter_curve_specs(entry))
-        spec_count = len(curve_specs)
-        for index, curve_spec in enumerate(curve_specs):
-            if _entry_mesh_size_mode(entry, index, spec_count) != "npts":
-                continue
-            for curve_id in _as_list(curve_spec.curve_ids):
-                protected_curves.add(abs(curve_id))
+    sections = (
+        mesh_def.get("spanwise_curve_sequences", []),
+        mesh_def.get("explicit_curve_sequences", []),
+    )
+    for section in sections:
+        for entry in _iter_curve_entries(section):
+            curve_specs = list(_iter_curve_specs(entry))
+            spec_count = len(curve_specs)
+            for index, curve_spec in enumerate(curve_specs):
+                if _entry_mesh_size_mode(entry, index, spec_count) != "npts":
+                    continue
+                for curve_id in _as_list(curve_spec.curve_ids):
+                    protected_curves.add(abs(curve_id))
     return protected_curves
 
 
@@ -2047,6 +2808,7 @@ def _align_opposite_edge_divisions(
     constraints: dict[int, CurveConstraint],
     chordwise_curve_loop_indices: dict[int, int],
     chordwise_curve_groups: dict[int, list[int]],
+    protected_curve_counts: set[int],
 ) -> None:
     for edge_index in range(2):
         curves_a = edge_curves[edge_index]
@@ -2094,11 +2856,13 @@ def _align_opposite_edge_divisions(
             abs(curve_id)
             for curve_id in target_curves
             if abs(curve_id) not in chordwise_curve_loop_indices
+            and abs(curve_id) not in protected_curve_counts
         ]
         if not non_chordwise_target_curves:
             warnings.warn(
                 "Could not align opposite surface edge divisions without changing "
-                f"chordwise curves {target_curves}. Leaving counts unchanged.",
+                f"chordwise or protected curves {target_curves}. Leaving counts "
+                "unchanged.",
                 stacklevel=2,
             )
             continue
@@ -2308,7 +3072,7 @@ def generate_surface_mesh(
     output_file: Path,
     *,
     recombine: bool = True,
-    mesh_format: str = "msh2",
+    mesh_format: str = "cgns",
     show: bool = True,
     mesh: bool = True,
 ) -> None:
