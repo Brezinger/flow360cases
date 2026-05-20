@@ -12,12 +12,6 @@ from typing import Any, Iterable, Sequence
 import gmsh
 
 
-DEFAULT_STEP_FILE = Path(
-    r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH"
-    r"\Achleitner Aerospace GmbH Allgemein - General"
-    r"\01_Projekte\04_Flaplets\03_CAD\Aerodynamikmodelle"
-    r"\Ventus3 FlapletV2\WKS\Ventus3_FlapletV2_WKS_B.stp"
-)
 DEFAULT_MESH_DEF_FILE = (
     Path(__file__).resolve().parent.parent / "V3" / "msh_def_FlapletV2_WKS.json"
 )
@@ -2098,9 +2092,28 @@ def show_gmsh() -> None:
     gmsh.fltk.run()
 
 
+def load_mesh_def(mesh_def_file: Path) -> dict[str, Any]:
+    with mesh_def_file.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def mesh_def_step_file(mesh_def: dict[str, Any], mesh_def_file: Path) -> Path:
+    step_file_value = mesh_def.get("step_file")
+    if not step_file_value:
+        raise ValueError(
+            f"No STEP file specified. Add 'step_file' to {mesh_def_file} "
+            "or pass --step."
+        )
+
+    step_file = Path(str(step_file_value))
+    if not step_file.is_absolute():
+        step_file = mesh_def_file.resolve().parent / step_file
+    return step_file
+
+
 def generate_surface_mesh(
     step_file: Path,
-    mesh_def_file: Path,
+    mesh_def: dict[str, Any],
     output_file: Path,
     *,
     recombine: bool = True,
@@ -2108,9 +2121,6 @@ def generate_surface_mesh(
     show: bool = True,
     mesh: bool = True,
 ) -> None:
-    with mesh_def_file.open("r", encoding="utf-8") as file:
-        mesh_def = json.load(file)
-
     gmsh.initialize()
     try:
         gmsh.option.setNumber("General.Terminal", 1)
@@ -2152,8 +2162,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--step",
         type=Path,
-        default=DEFAULT_STEP_FILE,
-        help="Path to the STEP file.",
+        default=None,
+        help="Path to the STEP file. Overrides the 'step_file' value in the JSON file.",
     )
     parser.add_argument(
         "--mesh-def",
@@ -2201,11 +2211,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_file = args.out or args.step.with_suffix(".msh")
+    mesh_def = load_mesh_def(args.mesh_def)
+    step_file = args.step or mesh_def_step_file(mesh_def, args.mesh_def)
+    output_file = args.out or step_file.with_suffix(".msh")
 
     generate_surface_mesh(
-        args.step,
-        args.mesh_def,
+        step_file,
+        mesh_def,
         output_file,
         recombine=args.recombine,
         mesh_format=args.format,
