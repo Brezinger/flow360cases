@@ -38,6 +38,48 @@ def calculate_flat_plate_turbulent_y1(
 
     return reynolds_number, y1
 
+
+def calculate_standard_atmosphere_density(altitude=0.0):
+    """
+    Calculate ISA density in the troposphere.
+
+    Units:
+        altitude: m
+
+    Returns:
+        density: kg/m3
+    """
+    sea_level_temperature = 288.15
+    sea_level_pressure = 101325.0
+    temperature_lapse_rate = 0.0065
+    gas_constant_air = 287.05287
+    gravity = 9.80665
+
+    temperature = sea_level_temperature - temperature_lapse_rate * altitude
+    pressure = sea_level_pressure * (
+        temperature / sea_level_temperature
+    ) ** (gravity / (gas_constant_air * temperature_lapse_rate))
+
+    return pressure / (gas_constant_air * temperature)
+
+
+def calculate_target_lift_coefficient(aircraft_mass, wing_area, freestream_velocity, density):
+    gravity = 9.80665
+    dynamic_pressure = 0.5 * density * freestream_velocity**2
+
+    return aircraft_mass * gravity / (dynamic_pressure * wing_area)
+
+
+def calculate_freestream_velocity_for_target_lift_coefficient(
+        aircraft_mass, wing_area, target_lift_coefficient, density):
+    gravity = 9.80665
+
+    if target_lift_coefficient <= 0:
+        raise ValueError("target_lift_coefficient must be positive to calculate freestream velocity.")
+
+    return np.sqrt(aircraft_mass * gravity / (0.5 * density * wing_area * target_lift_coefficient))
+
+
 def calc_ncrit_from_fsti(turbulence_intensity_perc=0.05):
     """
     calculates critical N factor from freestream turbulence intensity according to paper from Djeddi, Coder et al.
@@ -169,6 +211,17 @@ def make_winglet_tip_refinement_cylinders(
     return cylinders
 
 
+def geometric_spacing_values(initial_spacing, growth_rate, n_values, max_spacing=None):
+    if n_values <= 0:
+        return []
+
+    spacings = [initial_spacing * growth_rate**idx for idx in range(n_values)]
+    if max_spacing is not None:
+        spacings = [min(spacing, max_spacing) for spacing in spacings]
+
+    return spacings
+
+
 def read_last_vertex(vertices_coords_file):
     vertices_coords_path = _resolve_existing_path(vertices_coords_file)
     points = pd.read_csv(vertices_coords_path, sep=r"\s+", engine="python")
@@ -237,20 +290,51 @@ def read_highest_yz_curvature_vertex(vertices_coords_file, fallback_vertex=None)
 
 
 
-def define_and_run(project_step_file_name=None, project_id=None, name=None, U_inf = 55, alpha_deg=0., half_model=True,
-                   y1_fac=1., surf_mesh_lvl=0, flow360folder=None, results_path=None, run_flag = False):
+def define_and_run(project_cgns_file_name=None, project_step_file_name=None, project_id=None, name=None,
+                   symm_face = "body00001_face00003", U_inf=None, alpha_deg=0., half_model=True,
+                   y1_fac=1., surf_mesh_lvl=0, enable_volume_refinements=True,
+                   enable_alpha_controller=False, target_lift_coefficient=None,
+                   alpha_controller_kp=0.2, alpha_controller_ki=0.002,
+                   alpha_controller_start_pseudo_step=50,
+                   alpha_controller_initial_alpha_deg=None,
+                   aircraft_mass=600.0,
+                   flow360folder=None, results_path=None, run_flag = False):
     """
+    Define a V3 Flow360 setup and either prepare the next mesh step or run the case.
 
-    :param U_inf:               Free stream velocity
+    The project source is selected in this order:
+    - project_cgns_file_name: create a project from an existing CGNS surface mesh
+      and build surface models from the mesh boundaries.
+    - project_step_file_name: create a project from CAD geometry and generate the
+      surface mesh from geometry.
+    - project_id: load an existing cloud project and use its geometry workflow.
+
+    :param project_cgns_file_name: CGNS surface mesh file used to create the project
+    :param project_step_file_name: CAD geometry file used to create the project
+    :param project_id:             Existing Flow360 cloud project ID
+    :param name:                   Simulation name prefix
+    :param symm_face:              Symmetry face name
+    :param U_inf:               Free stream velocity. Mutually exclusive with target_lift_coefficient
     :param alpha_deg:           Angle of attack in degrees
     :param half_model:          Half model flag. True for half-model, False for full model
     :param y1_fac:              first layer thickness scaling factor
     :param surf_mesh_lvl:       Mesh refinement level
+    :param enable_volume_refinements: Enable wake and winglet volumetric refinement zones
+    :param enable_alpha_controller: Enable a PI controller that adjusts alpha to reach target_lift_coefficient
+    :param target_lift_coefficient: Target CL. Mutually exclusive with U_inf
+    :param alpha_controller_kp:  Proportional gain for the alpha controller
+    :param alpha_controller_ki:  Integral gain for the alpha controller
+    :param alpha_controller_start_pseudo_step: Pseudo-step after which alpha control starts
+    :param alpha_controller_initial_alpha_deg: Initial alpha angle in degrees for the controller state
+    :param aircraft_mass:       Aircraft mass in kg used to calculate target CL when not specified
     :param flow360folder:       Flow360 folder to put the case in
     :param results_path:        Path to store results
     :param run_flag:            Flag, determines, if simulation is only set-up (False) or also run (True)
     :return:
     """
+    if alpha_controller_initial_alpha_deg is None:
+        alpha_controller_initial_alpha_deg = alpha_deg
+
     #  #  #
     # global flags
     async_flag = False
@@ -266,6 +350,26 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     wingspan = 18  # half-span
     moment_center_x = 0.386666666666667  # x reference location for moments
     wing_area = 10.84
+    standard_atmosphere_density = calculate_standard_atmosphere_density(altitude)
+    has_airspeed = U_inf is not None
+    has_target_lift_coefficient = target_lift_coefficient is not None
+    if has_airspeed == has_target_lift_coefficient:
+        raise ValueError("Specify exactly one of U_inf or target_lift_coefficient.")
+
+    if has_airspeed:
+        target_lift_coefficient = calculate_target_lift_coefficient(
+            aircraft_mass=aircraft_mass,
+            wing_area=wing_area,
+            freestream_velocity=U_inf,
+            density=standard_atmosphere_density,
+        )
+    else:
+        U_inf = calculate_freestream_velocity_for_target_lift_coefficient(
+            aircraft_mass=aircraft_mass,
+            wing_area=wing_area,
+            target_lift_coefficient=target_lift_coefficient,
+            density=standard_atmosphere_density,
+        )
 
     # For V3 original WKS
     LE_edge_list = [13, 24, 35, 46, 56, 78, 108, 172, 192, 215]
@@ -274,10 +378,10 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
                     199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 217, 218]
 
     # symmetry face
-    symm_face = "body00001_face00003"
 
     # turbulator definition
-    turbulator_location_files = ["Turbulator_wing_lower_WKS.dat"] #, "Turbulator_Flaplet_upper_WKS.dat"]
+    #turbulator_location_files = ["Turbulator_wing_lower_WKS.dat"]
+    turbulator_location_files = ["Turbulator_wing_lower_WKS.dat", "Turbulator_Flaplet_upper_WKS.dat"]
     turbulator_box_x_size = 4
     turbulator_box_z_size = 1.6
     turbulator_box_x_offset = 0
@@ -285,10 +389,14 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     turbulator_box_z_offset = 0
 
     # wake volumetric refinement
-    wake_refinement_files = ["TE_upper_VentusOrig_WKS.dat"]
+    #wake_refinement_files = ["TE_upper_VentusOrig_WKS.dat"]
+    wake_refinement_files = ["TE_upper_Flaplet_WKS.dat"]
     wake_refinement_angle_deg = 15
     wake_refinement_length = 1000
     wake_refinement_delta_x = 100
+    wake_refinement_initial_spacing = surf_mesh_refine_factor * 60 * 3**(1/2)
+    wake_refinement_spacing_growth_rate = 1.35
+    wake_refinement_max_spacing = surf_mesh_refine_factor * 24
 
     # winglet tip cylindrical volume refinement: 10 adjacent cylinders over 2 m total length
     winglet_tip_refinement_axis = (1, 0, 0)
@@ -296,7 +404,9 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     winglet_tip_refinement_n_cylinders = 10
     winglet_tip_refinement_initial_diameter = 100
     winglet_tip_refinement_growth_angle_deg = 5
-    winglet_tip_refinement_spacing = surf_mesh_refine_factor * 1 * u.mm
+    winglet_tip_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
+    winglet_tip_refinement_spacing_growth_rate = 1.35
+    winglet_tip_refinement_max_spacing = surf_mesh_refine_factor * 24
 
     # winglet radius cylindrical volume refinement: start at max y-z trailing-edge curvature
     winglet_radius_refinement_fallback_start_center = (1267.0, 8997.5, 1357.4)
@@ -305,11 +415,18 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     winglet_radius_refinement_n_cylinders = 10
     winglet_radius_refinement_initial_diameter = 100
     winglet_radius_refinement_growth_angle_deg = 5
-    winglet_radius_refinement_spacing = surf_mesh_refine_factor * 1 * u.mm
+    winglet_radius_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
+    winglet_radius_refinement_spacing_growth_rate = 1.35
+    winglet_radius_refinement_max_spacing = surf_mesh_refine_factor * 24
 
     ns_solver_tolerance = 1.e-7            # Navier-Stokes and turbulence model solver tolerance
     turb_solver_tolerance = 1.e-6          # turbulence model solver tolerance
-    n_timesteps = 150
+    n_timesteps = 500
+    if enable_alpha_controller and alpha_controller_start_pseudo_step >= n_timesteps:
+        raise ValueError(
+            "alpha_controller_start_pseudo_step must be smaller than n_timesteps "
+            f"({n_timesteps}) for the alpha controller to activate."
+        )
 
     # First layer volumetric mesh thicknesses
     _, flat_plate_y1 = calculate_flat_plate_turbulent_y1(
@@ -326,7 +443,10 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
         sim_name = name + " "
     else:
         sim_name = ""
-    sim_name += "U{0:d}_AOA{1:d}".format(int(U_inf), int(alpha_deg))
+    if has_airspeed:
+        sim_name += "U{0:g}_AOA{1:g}".format(U_inf, alpha_deg)
+    else:
+        sim_name += "CL{0:g}".format(target_lift_coefficient)
 
     if surf_mesh_lvl != 0:
         sim_name += "_mshlvl{0:d}".format(surf_mesh_lvl)
@@ -340,26 +460,41 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     alpha = np.deg2rad(alpha_deg)
 
     # Initialize project
-    if project_step_file_name is not None:
+    project_from_surface_mesh = project_cgns_file_name is not None
+    if project_from_surface_mesh:
+        project = fl.Project.from_surface_mesh(project_cgns_file_name, name=sim_name,
+                                               folder=flow360folder, length_unit="mm", run_async=async_flag)
+        surface_mesh = project.surface_mesh
+    elif project_step_file_name is not None:
         project = fl.Project.from_geometry(project_step_file_name, name=sim_name,
                                            folder=flow360folder, length_unit="mm", run_async=async_flag)
+        surface_mesh = None
     elif project_id is not None:
         project = fl.Project.from_cloud(project_id)
+        surface_mesh = None
     else:
-        raise ValueError("Either parameter project_step_file_name or project_id must be specified")
-    geo = project.geometry  # Access the geometry of the project
+        raise ValueError("Either project_cgns_file_name, project_step_file_name, or project_id must be specified")
 
-    # Display available groupings in the geometry (helpful for identifying group names)
-    #geo.show_available_groupings(verbose_mode=True)
-    #####################################################################################
-    # Group edges and faces
-    geo.group_faces_by_tag("faceId")
-    geo.group_edges_by_tag("edgeId")
+    if project_from_surface_mesh:
+        wall_surfaces = [
+            surface_mesh[boundary_name]
+            for boundary_name in surface_mesh.boundary_names
+            if boundary_name != symm_face
+        ]
+    else:
+        geo = project.geometry  # Access the geometry of the project
 
-    LE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in LE_edge_list]
-    TE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in TE_edge_list]
+        # Display available groupings in the geometry (helpful for identifying group names)
+        #geo.show_available_groupings(verbose_mode=True)
+        #####################################################################################
+        # Group edges and faces
+        geo.group_faces_by_tag("faceId")
+        geo.group_edges_by_tag("edgeId")
 
-    wall_surfaces = [geo[face] for face in geo.entity_info.all_face_ids if face != symm_face]
+        LE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in LE_edge_list]
+        TE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in TE_edge_list]
+
+        wall_surfaces = [geo[face] for face in geo.entity_info.all_face_ids if face != symm_face]
 
     ################################
     # 1) Define operating conditions
@@ -378,27 +513,28 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
     mesh_defaults = fl.MeshingDefaults(surface_edge_growth_rate=1.2,
                                        surface_max_edge_length=surf_mesh_refine_factor * 80 * u.mm,
                                        curvature_resolution_angle=surf_mesh_refine_factor * 5 * u.deg,
-                                       boundary_layer_growth_rate=1.3,
+                                       boundary_layer_growth_rate=1.1,
                                        boundary_layer_first_layer_thickness=global_y1)
 
     # 3c) Rotation region
     # None..
 
     # 3d) Mesh refinements
-    surf_msh_data = {'refinement name': ["LE", "TE"],
-                     "geo_item": [LE_edges, TE_edges],
-                     "mesh size": [surf_mesh_refine_factor * 0.5 * u.mm,  # Leading edge refinement
-                                   surf_mesh_refine_factor * 0.2 * u.mm,  # Trailing edge refinement
-                     ]}
-    df_mesh_refinement = pd.DataFrame(surf_msh_data)
-    # Height-based edge refinement
     refinements = []
-    for idx, data in df_mesh_refinement.iterrows():
-        edge_refinement = fl.SurfaceEdgeRefinement(name=data.iloc[0],
-            edges=[data.iloc[1]],
-            method=fl.HeightBasedRefinement(value=data.iloc[2]),
-        )
-        refinements.append(edge_refinement)
+    if not project_from_surface_mesh:
+        surf_msh_data = {'refinement name': ["LE", "TE"],
+                         "geo_item": [LE_edges, TE_edges],
+                         "mesh size": [surf_mesh_refine_factor * 0.5 * u.mm,  # Leading edge refinement
+                                       surf_mesh_refine_factor * 0.2 * u.mm,  # Trailing edge refinement
+                         ]}
+        df_mesh_refinement = pd.DataFrame(surf_msh_data)
+        # Height-based edge refinement
+        for idx, data in df_mesh_refinement.iterrows():
+            edge_refinement = fl.SurfaceEdgeRefinement(name=data.iloc[0],
+                edges=[data.iloc[1]],
+                method=fl.HeightBasedRefinement(value=data.iloc[2]),
+            )
+            refinements.append(edge_refinement)
 
     turbulator_boxes = list()
     for file in turbulator_location_files:
@@ -411,83 +547,91 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
         )
         turbulator_boxes.append(boxes)
 
-    wake_refinement_boxes = list()
-    for file in wake_refinement_files:
-        h_box = 0
-        for i_row, x in enumerate(np.arange(0, wake_refinement_length, wake_refinement_delta_x)):
-            h_box += wake_refinement_delta_x * 2*np.sin(np.deg2rad(wake_refinement_angle_deg/2))
-            boxes = make_boxes(
-                vertices_coords_file=file,
-                x_size=wake_refinement_delta_x,
-                z_size=h_box,
-                center_offset=(x + wake_refinement_delta_x/2, 0, -0.5),
-                name_prefix="wakebox_row{0:0d}".format(i_row)
+    if enable_volume_refinements:
+        wake_refinement_rows = list()
+        for file in wake_refinement_files:
+            h_box = 0
+            for i_row, x in enumerate(np.arange(0, wake_refinement_length, wake_refinement_delta_x)):
+                h_box += wake_refinement_delta_x * 2*np.sin(np.deg2rad(wake_refinement_angle_deg/2))
+                boxes = make_boxes(
+                    vertices_coords_file=file,
+                    x_size=wake_refinement_delta_x,
+                    z_size=h_box,
+                    center_offset=(x + wake_refinement_delta_x/2, 0, -0.5),
+                    name_prefix="wakebox_row{0:0d}".format(i_row)
+                )
+                wake_refinement_rows.append((i_row, boxes))
+
+        # Volume refinement at winglet tip: staggered cylinders with 5 deg diameter growth
+        winglet_tip_refinement_start_center = read_last_vertex(wake_refinement_files[-1])
+        winglet_tip_cylinders = make_winglet_tip_refinement_cylinders(
+            name_prefix="winglet_tip_cylinder",
+            start_center=winglet_tip_refinement_start_center,
+            axis=winglet_tip_refinement_axis,
+            total_length=winglet_tip_refinement_length,
+            n_cylinders=winglet_tip_refinement_n_cylinders,
+            initial_diameter=winglet_tip_refinement_initial_diameter,
+            growth_angle_deg=winglet_tip_refinement_growth_angle_deg,
+        )
+        winglet_tip_spacings = geometric_spacing_values(
+            initial_spacing=winglet_tip_refinement_initial_spacing,
+            growth_rate=winglet_tip_refinement_spacing_growth_rate,
+            n_values=len(winglet_tip_cylinders),
+            max_spacing=winglet_tip_refinement_max_spacing,
+        )
+        for idx, (cylinder, spacing) in enumerate(zip(winglet_tip_cylinders, winglet_tip_spacings), start=1):
+            refinements.append(
+                fl.UniformRefinement(
+                    name=f"winglet_tip_refinement_{idx:03d}",
+                    entities=[cylinder],
+                    spacing=spacing * u.mm,
+                )
             )
-            wake_refinement_boxes.append(boxes)
 
+        # Volume refinement at winglet radius: start at highest y-z curvature on the trailing edge
+        winglet_radius_refinement_start_center = read_highest_yz_curvature_vertex(
+            wake_refinement_files[-1],
+            fallback_vertex=winglet_radius_refinement_fallback_start_center,
+        )
+        winglet_radius_cylinders = make_winglet_tip_refinement_cylinders(
+            name_prefix="winglet_radius_cylinder",
+            start_center=winglet_radius_refinement_start_center,
+            axis=winglet_radius_refinement_axis,
+            total_length=winglet_radius_refinement_length,
+            n_cylinders=winglet_radius_refinement_n_cylinders,
+            initial_diameter=winglet_radius_refinement_initial_diameter,
+            growth_angle_deg=winglet_radius_refinement_growth_angle_deg,
+        )
+        winglet_radius_spacings = geometric_spacing_values(
+            initial_spacing=winglet_radius_refinement_initial_spacing,
+            growth_rate=winglet_radius_refinement_spacing_growth_rate,
+            n_values=len(winglet_radius_cylinders),
+            max_spacing=winglet_radius_refinement_max_spacing,
+        )
+        for idx, (cylinder, spacing) in enumerate(zip(winglet_radius_cylinders, winglet_radius_spacings), start=1):
+            refinements.append(
+                fl.UniformRefinement(
+                    name=f"winglet_radius_refinement_{idx:03d}",
+                    entities=[cylinder],
+                    spacing=spacing * u.mm,
+                )
+            )
 
-    """# first layer refinements
-    fuse_nose_ref = fl.BoundaryLayer(faces=[geo["fuseNoseFace"], ], first_layer_thickness=nose_y1)
-    refinements.append(fuse_nose_ref)
-    fin_ref = fl.BoundaryLayer(faces=[geo["tailFin"], geo["antenna"]], first_layer_thickness=tail_fin_y1)
-    refinements.append(fin_ref)"""
+        wake_spacings = geometric_spacing_values(
+            initial_spacing=wake_refinement_initial_spacing,
+            growth_rate=wake_refinement_spacing_growth_rate,
+            n_values=len(wake_refinement_rows),
+            max_spacing=wake_refinement_max_spacing,
+        )
+        for row_order, ((_, boxes), spacing) in enumerate(zip(wake_refinement_rows, wake_spacings), start=1):
+            refinements.append(
+                fl.UniformRefinement(
+                    name=f"wake_refinement_row_{row_order:03d}",
+                    entities=boxes,
+                    spacing=spacing * u.mm,
+                )
+            )
 
-    # Volume refinement at winglet tip: staggered cylinders with 5 deg diameter growth
-    winglet_tip_refinement_start_center = read_last_vertex(wake_refinement_files[-1])
-    winglet_tip_cylinders = make_winglet_tip_refinement_cylinders(
-        name_prefix="winglet_tip_cylinder",
-        start_center=winglet_tip_refinement_start_center,
-        axis=winglet_tip_refinement_axis,
-        total_length=winglet_tip_refinement_length,
-        n_cylinders=winglet_tip_refinement_n_cylinders,
-        initial_diameter=winglet_tip_refinement_initial_diameter,
-        growth_angle_deg=winglet_tip_refinement_growth_angle_deg,
-    )
-    winglet_tip_refinement = fl.UniformRefinement(
-        name="winglet_tip_refinement",
-        entities=winglet_tip_cylinders,
-        spacing=winglet_tip_refinement_spacing,
-    )
-    refinements.append(winglet_tip_refinement)
-
-    # Volume refinement at winglet radius: start at highest y-z curvature on the trailing edge
-    winglet_radius_refinement_start_center = read_highest_yz_curvature_vertex(
-        wake_refinement_files[-1],
-        fallback_vertex=winglet_radius_refinement_fallback_start_center,
-    )
-    winglet_radius_cylinders = make_winglet_tip_refinement_cylinders(
-        name_prefix="winglet_radius_cylinder",
-        start_center=winglet_radius_refinement_start_center,
-        axis=winglet_radius_refinement_axis,
-        total_length=winglet_radius_refinement_length,
-        n_cylinders=winglet_radius_refinement_n_cylinders,
-        initial_diameter=winglet_radius_refinement_initial_diameter,
-        growth_angle_deg=winglet_radius_refinement_growth_angle_deg,
-    )
-    winglet_radius_refinement = fl.UniformRefinement(
-        name="winglet_radius_refinement",
-        entities=winglet_radius_cylinders,
-        spacing=winglet_radius_refinement_spacing,
-    )
-    refinements.append(winglet_radius_refinement)
-
-
-    # make wake refinement
-    wake_box_ref = fl.UniformRefinement(name="wake_refinement", entities=wake_refinement_boxes,
-                                        spacing=surf_mesh_refine_factor * 1 * u.mm)
-    refinements.append(wake_box_ref)
-
-    # antenna volumetric refinement
-    l_ant_cyl = 380
-    antenna_cylinder = fl.Cylinder(name="antenna_tip_cylinder", center=(367 + l_ant_cyl / 2 * np.cos(alpha),
-                                                                           76,
-                                                                           l_ant_cyl / 2 * np.sin(alpha)) * fl.u.mm,
-                                   axis=(np.cos(alpha), 0, np.sin(alpha)),
-                                   outer_radius=20 * fl.u.mm,
-                                   height=(l_ant_cyl + 30) * fl.u.mm)
-    antenna_refinement = fl.UniformRefinement(name="antenna_tip_refinement", entities=[antenna_cylinder],
-                                              spacing=surf_mesh_refine_factor * 1.1 * 3 ** (1 / 2) * u.mm)
-    refinements.append(antenna_refinement)
 
     # make mesh parameters
     mesh_params = fl.MeshingParams(defaults=mesh_defaults,
@@ -509,10 +653,9 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
 
     navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=ns_solver_tolerance, linear_solver=fl.KrylovLinearSolver())
     transition_solver = fl.TransitionModelSolver(N_crit=ncrit, trip_regions=turbulator_boxes)
-    #turbulence_solver = fl.KOmegaSST(absolute_tolerance=turb_solver_tolerance)
     turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=turb_solver_tolerance)
 
-    fl_models = [fl.Wall(surfaces=wall_surfaces, use_wall_function=False),
+    fl_models = [fl.Wall(surfaces=wall_surfaces, use_wall_function=None),
                          fl.Freestream(surfaces=[far_field_zone.farfield]),
                          fl.Fluid(navier_stokes_solver=navier_stokes_solver,
                                   transition_model_solver=transition_solver,
@@ -520,6 +663,29 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
 
     if half_model:
         fl_models.append(fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes]))
+
+    user_defined_dynamics = []
+    if enable_alpha_controller:
+        alpha_controller = fl.UserDefinedDynamic(
+            name="alphaController",
+            input_vars=["CL"],
+            constants={
+                "CLTarget": target_lift_coefficient,
+                "Kp": alpha_controller_kp,
+                "Ki": alpha_controller_ki,
+                "StartPseudoStep": alpha_controller_start_pseudo_step,
+            },
+            output_vars={
+                "alphaAngle": "if (pseudoStep > StartPseudoStep) state[0]; else alphaAngle;",
+            },
+            state_vars_initial_value=[str(alpha_controller_initial_alpha_deg), "0.0"],
+            update_law=[
+                "if (pseudoStep > StartPseudoStep) state[0] + Kp * (CLTarget - CL) + Ki * state[1]; else state[0];",
+                "if (pseudoStep > StartPseudoStep) state[1] + (CLTarget - CL); else state[1];",
+            ],
+            input_boundary_patches=wall_surfaces,
+        )
+        user_defined_dynamics.append(alpha_controller)
 
     with fl.SI_unit_system:
         # Set up the main simulation parameters
@@ -533,17 +699,26 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
                                                               output_fields=vol_output_requests)]
 
                                      )
+        if user_defined_dynamics:
+            params.user_defined_dynamics = user_defined_dynamics
 
     ###############################
     # 5) Generate mesh and run case
     ###############################
     # Step 5: Run the simulation case with the specified parameters
     if not run_flag:
-        project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False, draft_only=False)
-        #project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False,
-        # raise_on_error=True)
+        if project_from_surface_mesh:
+            project.generate_volume_mesh(params, use_beta_mesher=True, name='VolumeMesh', run_async=False,
+                                         use_geometry_AI=False, raise_on_error=True)
+
+        else:
+            project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False, draft_only=False)
+            #project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False,
+            # raise_on_error=True)
         return project.id
     else:
+        project.generate_volume_mesh(params, use_beta_mesher=True, name='VolumeMesh', run_async=False,
+                                     use_geometry_AI=False, raise_on_error=True)
         project.run_case(params=params, name="V3_case_" + sim_name)
 
         case = project.case
@@ -559,18 +734,27 @@ def define_and_run(project_step_file_name=None, project_id=None, name=None, U_in
 
 
 def main():
-    mshlvl = 1
+    mshlvl = 0
     run=False
     n_test_cases = None
+    enable_volume_refinements = True
+    enable_alpha_controller = True
+    aircraft_mass = 600.0
+    alpha_controller_kp = 0.2
+    alpha_controller_ki = 0.002
+    alpha_controller_start_pseudo_step = 50
 
-    results_dir = "F:/WDIR/flow360"
+    results_dir = "C:/WDIR/flow360"
 
     proj_step_file = None
+    proj_cgns_file = "Ventus3_FlapletV2_WKS.cgns"
     proj_id = None
+
+    symm_face = "S_55"
 
     # proj_step_file = "Ventus_Original_WKS.stp"
     #proj_step_file = "Ventus_Original_WK2.stp"
-    proj_step_file = "Ventus3_FlapletV2_WKS.stp"
+    #proj_step_file = "Ventus3_FlapletV2_WKS.stp"
     # proj_step_file = "Ventus3_FlapletV2_WK2.stp"
 
     # proj_id = "prj-c6babf81-d21a-4715-a36c-b9190be22783" # orig WKS
@@ -578,30 +762,72 @@ def main():
     # proj_id = "" # Flaplet WKS
     # proj_id = "" # Flaplet WK+2
 
-    if proj_step_file is not None:
-        sim_name = "V3 " + proj_step_file.lstrip("Ventus3_").rstrip(".stp").replace("_", " ")
+
+
+    if proj_cgns_file is not None:
+        variant_name = proj_cgns_file.lstrip("Ventus3_").rstrip(".cgns").replace("_", " ")
+    elif proj_step_file is not None:
+        variant_name = proj_step_file.lstrip("Ventus3_").rstrip(".stp").replace("_", " ")
     else:
         match proj_id:
             case "prj-c6babf81-d21a-4715-a36c-b9190be22783":
-                sim_name = "V3 Original WKS"
+                variant_name = "Original WKS"
             case "prj-0f7b4be0-5921-4245-8c96-08a4f1597752":
-                sim_name = "V3 Original WK2"
+                variant_name = "Original WK2"
             case "prj-9ee6a802-17af-481f-887a-ba992fce2db3":
-                sim_name = "V3 Flaplet WKS"
+                variant_name = "Flaplet WKS"
             case "prj-f5032aa0-570f-44ab-ba5b-47f7fbde11fa":
-                sim_name = "V3 Flaplet WK2"
+                variant_name = "Flaplet WK2"
             case _:
                 raise ValueError(f"Invalid project ID: {proj_id}")
 
+    sim_name = "V3 " + variant_name
+
     half_model = True
-    U_inf_range = [55]
+    altitude = 1500
+    wing_area = 10.84
+    U_inf_range = None
+    target_lift_coefficient_range = [0.3]
     alpha_deg_range = [0.75, ]
     study_name = "V3 Flaplets"
 
+    has_airspeed_range = U_inf_range is not None
+    has_target_lift_coefficient_range = target_lift_coefficient_range is not None
+    if has_airspeed_range == has_target_lift_coefficient_range:
+        raise ValueError("Specify exactly one of U_inf_range or target_lift_coefficient_range.")
+
+    standard_atmosphere_density = calculate_standard_atmosphere_density(altitude)
+    operating_points = []
+    if has_airspeed_range:
+        for U_inf, alpha_deg in product(U_inf_range, alpha_deg_range):
+            operating_points.append({
+                "U_inf": U_inf,
+                "target_lift_coefficient": calculate_target_lift_coefficient(
+                    aircraft_mass=aircraft_mass,
+                    wing_area=wing_area,
+                    freestream_velocity=U_inf,
+                    density=standard_atmosphere_density,
+                ),
+                "alpha_deg": alpha_deg,
+                "input_mode": "airspeed",
+            })
+    else:
+        for target_cl, alpha_deg in product(target_lift_coefficient_range, alpha_deg_range):
+            operating_points.append({
+                "U_inf": calculate_freestream_velocity_for_target_lift_coefficient(
+                    aircraft_mass=aircraft_mass,
+                    wing_area=wing_area,
+                    target_lift_coefficient=target_cl,
+                    density=standard_atmosphere_density,
+                ),
+                "target_lift_coefficient": target_cl,
+                "alpha_deg": alpha_deg,
+                "input_mode": "target_lift_coefficient",
+            })
+
     # initialize results DataFrame
-    cols=['U_inf', 'alpha_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
-    df_results = pd.DataFrame(columns=cols)
-    df_results[cols[:2]] = list(product(U_inf_range, alpha_deg_range))
+    cols=['U_inf', 'target_lift_coefficient', 'alpha_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
+    df_results = pd.DataFrame(operating_points).reindex(columns=cols + ["input_mode"])
 
     if n_test_cases is not None:
         df_results = df_results.iloc[:n_test_cases]   # limit number of runs for testing
@@ -609,20 +835,29 @@ def main():
     # create folders for airspeeds and AOA
     # create folder in ROOT level
     folder_toplvl = fl.Folder.create(study_name).submit()
-    folders = []
-    for U in U_inf_range:
-        # create folder inside the above folder
-        folder_U = fl.Folder.create("U_inf {0:d}".format(int(U)), parent_folder=folder_toplvl).submit()
-        folders.append(folder_U)
+
+    curr_folder = fl.Folder.create(variant_name, parent_folder=folder_toplvl).submit()
 
     for i, row in df_results.iterrows():
         U_inf = row['U_inf']
+        target_cl = row['target_lift_coefficient']
         alpha_deg = row['alpha_deg']
+        input_mode = row['input_mode']
 
-        curr_folder = folders[list(U_inf_range).index(U_inf)]
-        res = define_and_run(project_step_file_name=proj_step_file, project_id=proj_id, name=sim_name,
-                             U_inf=U_inf, alpha_deg=alpha_deg, half_model=half_model,
-                             surf_mesh_lvl=mshlvl, flow360folder=curr_folder, results_path=results_dir, run_flag=run)
+        res = define_and_run(project_cgns_file_name=proj_cgns_file, project_step_file_name=proj_step_file,
+                             project_id=proj_id, name=sim_name,
+                             symm_face = symm_face,
+                             U_inf=U_inf if input_mode == "airspeed" else None,
+                             target_lift_coefficient=target_cl if input_mode == "target_lift_coefficient" else None,
+                             alpha_deg=alpha_deg, half_model=half_model,
+                             surf_mesh_lvl=mshlvl, enable_volume_refinements=enable_volume_refinements,
+                             enable_alpha_controller=enable_alpha_controller,
+                             alpha_controller_kp=alpha_controller_kp,
+                             alpha_controller_ki=alpha_controller_ki,
+                             alpha_controller_start_pseudo_step=alpha_controller_start_pseudo_step,
+                             alpha_controller_initial_alpha_deg=alpha_deg,
+                             aircraft_mass=aircraft_mass,
+                             flow360folder=curr_folder, results_path=results_dir, run_flag=run)
 
         if run:
             # extract CL, CD, CMY from results as moving average over last 20 timesteps
@@ -645,7 +880,7 @@ def main():
 
     # write df_results to csv
     if run:
-        df_results.to_csv(study_name + ".csv", index=False)
+        df_results.drop(columns=["input_mode"]).to_csv(study_name + ".csv", index=False)
     pass
 
 
