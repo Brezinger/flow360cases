@@ -131,7 +131,8 @@ def _axis_perpendicular_to(segment_axis, preferred_axis):
     return projected_axis / projected_norm
 
 
-def make_boxes(vertices_coords_file, x_size, z_size, center_offset=(0, 0, 0), name_prefix="turbulator_box"):
+def make_boxes(vertices_coords_file, x_size, z_size, center_offset=(0, 0, 0),
+               name_prefix="turbulator_box", segment_overlap=0):
     vertices_coords_path = _resolve_existing_path(vertices_coords_file)
     points = pd.read_csv(vertices_coords_path, sep=r"\s+", engine="python")
 
@@ -171,7 +172,7 @@ def make_boxes(vertices_coords_file, x_size, z_size, center_offset=(0, 0, 0), na
                 name=f"{name_prefix}_{idx:03d}",
                 axes=[tuple(x_axis), tuple(y_axis)],
                 center=((start + end) / 2 + center_offset) * u.mm,
-                size=(x_size, segment_length, z_size) * u.mm,
+                size=(x_size, segment_length + segment_overlap, z_size) * u.mm,
             )
         )
 
@@ -180,7 +181,7 @@ def make_boxes(vertices_coords_file, x_size, z_size, center_offset=(0, 0, 0), na
 
 def make_winglet_tip_refinement_cylinders(
         name_prefix, start_center, axis, total_length, n_cylinders, initial_diameter,
-        growth_angle_deg):
+        growth_angle_deg, cylinder_overlap=0):
     axis = np.asarray(axis, dtype=float)
     axis_norm = np.linalg.norm(axis)
     if axis_norm <= 0:
@@ -204,7 +205,7 @@ def make_winglet_tip_refinement_cylinders(
                 center=center * u.mm,
                 axis=tuple(axis),
                 outer_radius=diameter / 2 * u.mm,
-                height=cylinder_length * u.mm,
+                height=(cylinder_length + cylinder_overlap) * u.mm,
             )
         )
 
@@ -380,8 +381,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # symmetry face
 
     # turbulator definition
-    #turbulator_location_files = ["Turbulator_wing_lower_WKS.dat"]
-    turbulator_location_files = ["Turbulator_wing_lower_WKS.dat", "Turbulator_Flaplet_upper_WKS.dat"]
+    turbulator_location_files = ["Turbulator_wing_lower_FlapletV2_WKS.dat", "Turbulator_Flaplet_upper_WKS.dat"]
     turbulator_box_x_size = 4
     turbulator_box_z_size = 1.6
     turbulator_box_x_offset = 0
@@ -394,9 +394,10 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     wake_refinement_angle_deg = 15
     wake_refinement_length = 1000
     wake_refinement_delta_x = 100
-    wake_refinement_initial_spacing = surf_mesh_refine_factor * 60 * 3**(1/2)
-    wake_refinement_spacing_growth_rate = 1.35
-    wake_refinement_max_spacing = surf_mesh_refine_factor * 24
+    wake_refinement_box_overlap = 5
+    wake_refinement_initial_spacing = surf_mesh_refine_factor * 20 * 3**(1/2)
+    wake_refinement_spacing_growth_rate = 1.2
+    wake_refinement_max_spacing = None
 
     # winglet tip cylindrical volume refinement: 10 adjacent cylinders over 2 m total length
     winglet_tip_refinement_axis = (1, 0, 0)
@@ -404,9 +405,10 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     winglet_tip_refinement_n_cylinders = 10
     winglet_tip_refinement_initial_diameter = 100
     winglet_tip_refinement_growth_angle_deg = 5
+    winglet_tip_refinement_cylinder_overlap = 5
     winglet_tip_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
-    winglet_tip_refinement_spacing_growth_rate = 1.35
-    winglet_tip_refinement_max_spacing = surf_mesh_refine_factor * 24
+    winglet_tip_refinement_spacing_growth_rate = 1.2
+    winglet_tip_refinement_max_spacing = None
 
     # winglet radius cylindrical volume refinement: start at max y-z trailing-edge curvature
     winglet_radius_refinement_fallback_start_center = (1267.0, 8997.5, 1357.4)
@@ -415,9 +417,10 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     winglet_radius_refinement_n_cylinders = 10
     winglet_radius_refinement_initial_diameter = 100
     winglet_radius_refinement_growth_angle_deg = 5
+    winglet_radius_refinement_cylinder_overlap = 5
     winglet_radius_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
-    winglet_radius_refinement_spacing_growth_rate = 1.35
-    winglet_radius_refinement_max_spacing = surf_mesh_refine_factor * 24
+    winglet_radius_refinement_spacing_growth_rate = 1.2
+    winglet_radius_refinement_max_spacing = None
 
     ns_solver_tolerance = 1.e-7            # Navier-Stokes and turbulence model solver tolerance
     turb_solver_tolerance = 1.e-6          # turbulence model solver tolerance
@@ -555,10 +558,11 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                 h_box += wake_refinement_delta_x * 2*np.sin(np.deg2rad(wake_refinement_angle_deg/2))
                 boxes = make_boxes(
                     vertices_coords_file=file,
-                    x_size=wake_refinement_delta_x,
-                    z_size=h_box,
+                    x_size=wake_refinement_delta_x + wake_refinement_box_overlap,
+                    z_size=h_box + wake_refinement_box_overlap,
                     center_offset=(x + wake_refinement_delta_x/2, 0, -0.5),
-                    name_prefix="wakebox_row{0:0d}".format(i_row)
+                    name_prefix="wakebox_row{0:0d}".format(i_row),
+                    segment_overlap=wake_refinement_box_overlap,
                 )
                 wake_refinement_rows.append((i_row, boxes))
 
@@ -572,6 +576,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             n_cylinders=winglet_tip_refinement_n_cylinders,
             initial_diameter=winglet_tip_refinement_initial_diameter,
             growth_angle_deg=winglet_tip_refinement_growth_angle_deg,
+            cylinder_overlap=winglet_tip_refinement_cylinder_overlap,
         )
         winglet_tip_spacings = geometric_spacing_values(
             initial_spacing=winglet_tip_refinement_initial_spacing,
@@ -601,6 +606,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             n_cylinders=winglet_radius_refinement_n_cylinders,
             initial_diameter=winglet_radius_refinement_initial_diameter,
             growth_angle_deg=winglet_radius_refinement_growth_angle_deg,
+            cylinder_overlap=winglet_radius_refinement_cylinder_overlap,
         )
         winglet_radius_spacings = geometric_spacing_values(
             initial_spacing=winglet_radius_refinement_initial_spacing,
@@ -747,10 +753,10 @@ def main():
     results_dir = "C:/WDIR/flow360"
 
     proj_step_file = None
-    proj_cgns_file = "Ventus3_FlapletV2_WKS.cgns"
+    proj_cgns_file = "Ventus3_FlapletV2_WKS_B.cgns"
     proj_id = None
 
-    symm_face = "S_55"
+    symm_face = "S_53"
 
     # proj_step_file = "Ventus_Original_WKS.stp"
     #proj_step_file = "Ventus_Original_WK2.stp"
@@ -784,7 +790,7 @@ def main():
     sim_name = "V3 " + variant_name
 
     half_model = True
-    altitude = 1500
+    altitude = 0
     wing_area = 10.84
     U_inf_range = None
     target_lift_coefficient_range = [0.3]

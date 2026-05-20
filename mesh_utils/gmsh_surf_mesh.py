@@ -12,10 +12,12 @@ from typing import Any, Iterable, Sequence
 import gmsh
 
 
-DEFAULT_MESH_DEF_FILE = (
+"""DEFAULT_MESH_DEF_FILE = (
     Path(__file__).resolve().parent.parent / "V3" / "msh_def_FlapletV2_WKS.json"
+)"""
+DEFAULT_MESH_DEF_FILE = (
+    Path(__file__).resolve().parent.parent / "V3" / "msh_def_original_WKS.json"
 )
-
 
 class CurveConstraint:
     def __init__(self, n_pts: int, mesh_type: str, coef: float) -> None:
@@ -108,12 +110,6 @@ def _curve_spec_discretization(
         n_pts = int(_per_spec_value(entry, "n_pts", index, spec_count))
         coef = float(_per_spec_value(entry, "Parameter", index, spec_count, 1.0))
     elif mesh_size_mode in ("ele size", "element size", "element_size"):
-        if mesh_type.lower() != "progression":
-            raise ValueError(
-                f"Element-size mode currently requires Progression, got "
-                f"{mesh_type!r} in {entry.get('name', entry)!r}."
-            )
-
         curve_length = _curve_group_length(curve_ids)
         target_size_1 = float(
             _per_spec_value(entry, "target ele size 1", index, spec_count)
@@ -121,9 +117,20 @@ def _curve_spec_discretization(
         target_size_2 = float(
             _per_spec_value(entry, "target ele size 2", index, spec_count)
         )
-        n_pts, coef = _progression_from_endpoint_sizes(
-            curve_length, target_size_1, target_size_2
-        )
+        mesh_type_normalized = mesh_type.lower()
+        if mesh_type_normalized == "progression":
+            n_pts, coef = _progression_from_endpoint_sizes(
+                curve_length, target_size_1, target_size_2
+            )
+        elif mesh_type_normalized == "bump":
+            n_pts, coef = _bump_from_corner_middle_sizes(
+                curve_length, target_size_1, target_size_2
+            )
+        else:
+            raise ValueError(
+                f"Element-size mode supports Progression and Bump, got "
+                f"{mesh_type!r} in {entry.get('name', entry)!r}."
+            )
     else:
         raise ValueError(
             f"Unsupported mesh size mode {mesh_size_mode!r} in "
@@ -313,6 +320,176 @@ def _bump_node_positions(n_pts: int, coef: float) -> list[float]:
         ]
 
     raise ValueError(f"Bump coefficient must be positive, got {coef}.")
+
+
+def _bump_corner_middle_sizes(
+    curve_length: float,
+    n_elements: int,
+    coef: float,
+) -> tuple[float, float]:
+    node_positions = _bump_node_positions(n_elements + 1, coef)
+    element_sizes = [
+        curve_length * (node_positions[index + 1] - node_positions[index])
+        for index in range(n_elements)
+    ]
+    corner_size = 0.5 * (element_sizes[0] + element_sizes[-1])
+
+    middle_index = n_elements // 2
+    if n_elements % 2 == 0:
+        middle_size = 0.5 * (
+            element_sizes[middle_index - 1] + element_sizes[middle_index]
+        )
+    else:
+        middle_size = element_sizes[middle_index]
+
+    return corner_size, middle_size
+
+
+def _bump_size_error(
+    curve_length: float,
+    target_corner_size: float,
+    target_middle_size: float,
+    n_elements: int,
+    log_coef: float,
+) -> float:
+    corner_size, middle_size = _bump_corner_middle_sizes(
+        curve_length, n_elements, math.exp(log_coef)
+    )
+    corner_error = math.log(corner_size / target_corner_size)
+    middle_error = math.log(middle_size / target_middle_size)
+    return corner_error * corner_error + middle_error * middle_error
+
+
+def _best_bump_coef_for_element_count(
+    curve_length: float,
+    target_corner_size: float,
+    target_middle_size: float,
+    n_elements: int,
+) -> tuple[float, float]:
+    left = -30.0
+    right = 30.0
+    for _ in range(80):
+        left_mid = left + (right - left) / 3.0
+        right_mid = right - (right - left) / 3.0
+        if _bump_size_error(
+            curve_length,
+            target_corner_size,
+            target_middle_size,
+            n_elements,
+            left_mid,
+        ) < _bump_size_error(
+            curve_length,
+            target_corner_size,
+            target_middle_size,
+            n_elements,
+            right_mid,
+        ):
+            right = right_mid
+        else:
+            left = left_mid
+
+    log_coef = 0.5 * (left + right)
+    return (
+        _bump_size_error(
+            curve_length,
+            target_corner_size,
+            target_middle_size,
+            n_elements,
+            log_coef,
+        ),
+        math.exp(log_coef),
+    )
+
+
+def _candidate_bump_element_counts(
+    lower: int,
+    upper: int,
+    curve_length: float,
+    target_corner_size: float,
+    target_middle_size: float,
+) -> list[int]:
+    if upper - lower <= 500:
+        return list(range(lower, upper + 1))
+
+    candidates = {
+        lower,
+        upper,
+        round(curve_length / target_corner_size),
+        round(curve_length / target_middle_size),
+        round(curve_length / math.sqrt(target_corner_size * target_middle_size)),
+        round(curve_length / (0.5 * (target_corner_size + target_middle_size))),
+    }
+    step = (upper - lower) / 500.0
+    candidates.update(round(lower + step * index) for index in range(501))
+    return sorted(
+        max(lower, min(upper, int(candidate)))
+        for candidate in candidates
+        if int(candidate) >= 1
+    )
+
+
+def _bump_from_corner_middle_sizes(
+    curve_length: float,
+    target_corner_size: float,
+    target_middle_size: float,
+) -> tuple[int, float]:
+    if curve_length <= 0.0:
+        raise ValueError(f"Curve length must be positive, got {curve_length}.")
+    if target_corner_size <= 0.0 or target_middle_size <= 0.0:
+        raise ValueError(
+            f"Target element sizes must be positive, got "
+            f"{target_corner_size} and {target_middle_size}."
+        )
+
+    if abs(target_corner_size - target_middle_size) < 1e-14:
+        n_elements = max(1, round(curve_length / target_corner_size))
+        return n_elements + 1, 1.0
+
+    lower = max(1, math.floor(curve_length / max(target_corner_size, target_middle_size)))
+    upper = max(lower, math.ceil(curve_length / min(target_corner_size, target_middle_size)))
+    candidates = _candidate_bump_element_counts(
+        lower,
+        upper,
+        curve_length,
+        target_corner_size,
+        target_middle_size,
+    )
+    best_n_elements, (best_error, best_coef) = min(
+        (
+            (
+                n_elements,
+                _best_bump_coef_for_element_count(
+                    curve_length,
+                    target_corner_size,
+                    target_middle_size,
+                    n_elements,
+                ),
+            )
+            for n_elements in candidates
+        ),
+        key=lambda item: item[1][0],
+    )
+
+    refinement_radius = max(10, math.ceil((upper - lower) / 500))
+    refined_lower = max(lower, best_n_elements - refinement_radius)
+    refined_upper = min(upper, best_n_elements + refinement_radius)
+    best_n_elements, (best_error, best_coef) = min(
+        (
+            (
+                n_elements,
+                _best_bump_coef_for_element_count(
+                    curve_length,
+                    target_corner_size,
+                    target_middle_size,
+                    n_elements,
+                ),
+            )
+            for n_elements in range(refined_lower, refined_upper + 1)
+        ),
+        key=lambda item: item[1][0],
+    )
+
+    return best_n_elements + 1, best_coef
 
 
 def _distribution_node_positions(
@@ -975,6 +1152,20 @@ def _merge_transfinite_template(
     return merged_template
 
 
+def _merge_spanwise_transfinite_template(
+    spanwise_template: dict[str, Any],
+    section_template: dict[str, Any],
+) -> dict[str, Any]:
+    merged_template = _merge_transfinite_template(
+        spanwise_template,
+        section_template,
+        {"sections", "default type"},
+    )
+    if "type" not in merged_template and "default type" in spanwise_template:
+        merged_template["type"] = copy.deepcopy(spanwise_template["default type"])
+    return merged_template
+
+
 def _automatic_chordwise_templates(
     config: dict[str, Any],
     loop_count: int | None = None,
@@ -1019,7 +1210,7 @@ def _automatic_spanwise_templates(config: dict[str, Any]) -> list[dict[str, Any]
     section_defs = spanwise_def.get("sections")
     if isinstance(section_defs, list) and section_defs:
         return [
-            _merge_transfinite_template(spanwise_def, section_def, {"sections"})
+            _merge_spanwise_transfinite_template(spanwise_def, section_def)
             for section_def in section_defs
         ]
 
@@ -2125,7 +2316,10 @@ def generate_surface_mesh(
     try:
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber("Mesh.SaveAll", 1)
-        gmsh.option.setNumber("Mesh.MshFileVersion", 2.2 if mesh_format == "msh2" else 4.1)
+        if output_file.suffix.lower() == ".msh":
+            gmsh.option.setNumber(
+                "Mesh.MshFileVersion", 2.2 if mesh_format == "msh2" else 4.1
+            )
 
         gmsh.model.add(step_file.stem)
         gmsh.model.occ.importShapes(str(step_file))
@@ -2175,7 +2369,7 @@ def parse_args() -> argparse.Namespace:
         "--out",
         type=Path,
         default=None,
-        help="Output mesh path. Defaults to <step-file>.msh.",
+        help="Output mesh path. Defaults to <step-file>.cgns.",
     )
     parser.add_argument(
         "--recombine",
@@ -2213,7 +2407,7 @@ def main() -> None:
     args = parse_args()
     mesh_def = load_mesh_def(args.mesh_def)
     step_file = args.step or mesh_def_step_file(mesh_def, args.mesh_def)
-    output_file = args.out or step_file.with_suffix(".msh")
+    output_file = args.out or step_file.with_suffix(".cgns")
 
     generate_surface_mesh(
         step_file,

@@ -1,5 +1,5 @@
 {
-  "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 FlapletV2\\WKS\\Ventus3_FlapletV2_WKS_B.stp",
+  "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 original\\WKS\\Ventus_Original_WKS_F.stp",
   "geometry_healing": {
     "enabled": true,
     "tolerance": 0.01,
@@ -11,7 +11,7 @@
   },
   "automatic_curve_sequences": {
     "enabled": true,
-    "start_pt": 60,
+    "start_pt": 1,
     "chordwise_direction": [
       -1.0,
       0.0,
@@ -117,12 +117,26 @@
           "target ele size 2": 5
         },
         {
-          "name": "Flaplet",
+          "name": "Intermediate section 2",
+          "_invert_direction": false,
+          "mesh size mode": "npts",
+          "n_pts": 2
+        },
+        {
+          "name": "Winglet radius",
           "type": "Progression",
           "_invert_direction": false,
           "mesh size mode": "ele size",
           "target ele size 1": 5,
-          "target ele size 2": 0.36
+          "target ele size 2": 5
+        },
+        {
+          "name": "Winglet main section",
+          "type": "Progression",
+          "_invert_direction": false,
+          "mesh size mode": "ele size",
+          "target ele size 1": 5,
+          "target ele size 2": 5
         }
       ]
     }
