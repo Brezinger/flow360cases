@@ -1147,6 +1147,69 @@ def _group_values_by_curve_groups(
     return grouped_values
 
 
+def _grouped_template_invert_directions(
+    template_entry: dict[str, Any],
+    group_sizes: list[int],
+    total_curves: int,
+) -> list[bool | list[bool]] | None:
+    template_key = (
+        "invert_direction"
+        if "invert_direction" in template_entry
+        else "_invert_direction"
+    )
+    if template_key not in template_entry:
+        return None
+
+    template_group_sizes = _template_group_sizes(template_entry, total_curves)
+    expanded_values = _expand_template_values(
+        template_entry,
+        template_key,
+        template_group_sizes,
+        total_curves,
+    )
+    if expanded_values is None:
+        return None
+    if len(expanded_values) < total_curves:
+        expanded_values.extend(
+            copy.deepcopy(expanded_values[-1])
+            for _ in range(total_curves - len(expanded_values))
+        )
+
+    return _regroup_template_values(
+        expanded_values,
+        group_sizes,
+        keep_group_lists=True,
+    )
+
+
+def _combine_grouped_invert_directions(
+    inferred_directions: list[bool | list[bool]],
+    user_directions: list[bool | list[bool]] | None,
+    curve_groups: list[int | list[int]],
+) -> list[bool | list[bool]]:
+    if user_directions is None:
+        return inferred_directions
+
+    combined_directions = []
+    for curve_group, inferred_direction, user_direction in zip(
+        curve_groups,
+        inferred_directions,
+        user_directions,
+    ):
+        group_size = _curve_group_size(curve_group)
+        inferred_group = _as_bool_list(inferred_direction, group_size)
+        user_group = _as_bool_list(user_direction, group_size)
+        combined_group = [
+            bool(inferred) != bool(user_invert)
+            for inferred, user_invert in zip(inferred_group, user_group)
+        ]
+        combined_directions.append(
+            combined_group[0] if group_size == 1 else combined_group
+        )
+
+    return combined_directions
+
+
 def _infer_n_subcurvs(
     traced_loop: TracedLoop,
     split_spanwise_curve_count: int,
@@ -1612,7 +1675,7 @@ def _chordwise_entry_from_grouped_loop(
 
     chordwise_entry = copy.deepcopy(chordwise_template)
     chordwise_entry["curve_ids"] = curve_groups
-    chordwise_entry["invert_direction"] = _group_values_by_curve_groups(
+    inferred_invert_directions = _group_values_by_curve_groups(
         traced_invert_directions, curve_groups
     )
     _remap_template_values_to_groups(
@@ -1620,6 +1683,16 @@ def _chordwise_entry_from_grouped_loop(
         chordwise_template,
         group_sizes,
         len(traced_curve_ids),
+    )
+    user_invert_directions = _grouped_template_invert_directions(
+        chordwise_template,
+        group_sizes,
+        len(traced_curve_ids),
+    )
+    chordwise_entry["invert_direction"] = _combine_grouped_invert_directions(
+        inferred_invert_directions,
+        user_invert_directions,
+        curve_groups,
     )
     _normalize_invert_directions_for_curve_groups(chordwise_entry)
     return chordwise_entry
@@ -3072,7 +3145,7 @@ def generate_surface_mesh(
     output_file: Path,
     *,
     recombine: bool = True,
-    mesh_format: str = "cgns",
+    mesh_format: str = "msh2",
     show: bool = True,
     mesh: bool = True,
 ) -> None:
