@@ -47,7 +47,7 @@
         1.05,
         1.05
       ],
-      "_invert_direction": [
+      "invert_direction": [
         false,
         false,
         true,
