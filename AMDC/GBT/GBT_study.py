@@ -76,7 +76,7 @@ def define_and_run(elev_deflection_deg=0., U_inf = 270, alpha_deg=0., beta_deg=0
     ###############################
 
     # first modify csm file to set elevator deflection and half-model flag
-    mod_csm_file(path="C:/git/flow360cases/AMDC_GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
+    mod_csm_file(path="/GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
                  half_model=half_model)
 
     if wall_func_flag:
@@ -90,7 +90,7 @@ def define_and_run(elev_deflection_deg=0., U_inf = 270, alpha_deg=0., beta_deg=0
 
     # This initializes a project with the specified geometry and assigns it a name.
     #gbt_folder = fl.Folder.get(folder.id)
-    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT " + sim_name,
+    project = fl.Project.from_geometry("C:/git/flow360cases/GBT/GBT.csm", name="GBT " + sim_name,
                                        folder=flow360folder, length_unit="mm", run_async=async_flag)
     geo = project.geometry  # Access the geometry of the project
 

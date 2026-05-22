@@ -299,7 +299,12 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                    alpha_controller_start_pseudo_step=50,
                    alpha_controller_initial_alpha_deg=None,
                    aircraft_mass=600.0,
-                   flow360folder=None, results_path=None, run_flag = False):
+                   LE_edge_list=None, TE_edge_list=None,
+                   turbulator_location_files=None, wake_refinement_files=None,
+                   flow360folder=None, results_path=None,
+                   generate_surf_mesh=True, generate_vol_mesh=True,
+                   boundary_layer_growth_rate=1.1,
+                   run_flag = False):
     """
     Define a V3 Flow360 setup and either prepare the next mesh step or run the case.
 
@@ -328,8 +333,15 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     :param alpha_controller_start_pseudo_step: Pseudo-step after which alpha control starts
     :param alpha_controller_initial_alpha_deg: Initial alpha angle in degrees for the controller state
     :param aircraft_mass:       Aircraft mass in kg used to calculate target CL when not specified
+    :param LE_edge_list:        Geometry-specific leading-edge IDs for CAD-based meshing
+    :param TE_edge_list:        Geometry-specific trailing-edge IDs for CAD-based meshing
+    :param turbulator_location_files: Geometry-specific turbulator coordinate files
+    :param wake_refinement_files: Geometry-specific wake refinement coordinate files
     :param flow360folder:       Flow360 folder to put the case in
     :param results_path:        Path to store results
+    :param generate_surf_mesh:  Generate the surface mesh when geometry-based meshing is used
+    :param generate_vol_mesh:   Generate the volume mesh before returning or running the case
+    :param boundary_layer_growth_rate: Boundary layer growth rate for volume meshing
     :param run_flag:            Flag, determines, if simulation is only set-up (False) or also run (True)
     :return:
     """
@@ -340,7 +352,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # global flags
     async_flag = False
     # global parameters
-    altitude = 1500
+    altitude = 0
     # mesh parameters
     surf_mesh_refine_factor = 2**(surf_mesh_lvl/2)       # Surface mesh size multiplier
     target_yplus_wall_modeled = 0.67    # Target y-plus value for wall-resolved meshing
@@ -372,16 +384,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             density=standard_atmosphere_density,
         )
 
-    # For V3 original WKS
-    LE_edge_list = [13, 24, 35, 46, 56, 78, 108, 172, 192, 215]
-    TE_edge_list = [4, 16, 27, 38, 49, 62, 87, 129, 130, 131, 132, 133, 134, 191, 190, 189, 188, 187, 186, 185, 184,
-                    183, 182, 181, 180, 179, 212, 216, 7, 20, 31, 42, 53, 66, 93, 146, 145, 144, 195, 196, 197, 198,
-                    199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 217, 218]
-
-    # symmetry face
-
     # turbulator definition
-    turbulator_location_files = ["Turbulator_wing_lower_FlapletV2_WKS.dat", "Turbulator_Flaplet_upper_WKS.dat"]
     turbulator_box_x_size = 4
     turbulator_box_z_size = 1.6
     turbulator_box_x_offset = 0
@@ -389,12 +392,11 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     turbulator_box_z_offset = 0
 
     # wake volumetric refinement
-    #wake_refinement_files = ["TE_upper_VentusOrig_WKS.dat"]
-    wake_refinement_files = ["TE_upper_Flaplet_WKS.dat"]
     wake_refinement_angle_deg = 15
     wake_refinement_length = 1000
     wake_refinement_delta_x = 100
     wake_refinement_box_overlap = 5
+    wake_refinement_spanwise_overlap = 20
     wake_refinement_initial_spacing = surf_mesh_refine_factor * 20 * 3**(1/2)
     wake_refinement_spacing_growth_rate = 1.2
     wake_refinement_max_spacing = None
@@ -478,6 +480,11 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     else:
         raise ValueError("Either project_cgns_file_name, project_step_file_name, or project_id must be specified")
 
+    if turbulator_location_files is None:
+        raise ValueError("turbulator_location_files must be provided.")
+    if wake_refinement_files is None:
+        raise ValueError("wake_refinement_files must be provided.")
+
     if project_from_surface_mesh:
         wall_surfaces = [
             surface_mesh[boundary_name]
@@ -485,6 +492,11 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             if boundary_name != symm_face
         ]
     else:
+        if LE_edge_list is None or TE_edge_list is None:
+            raise ValueError(
+                "LE_edge_list and TE_edge_list must be provided for geometry-based projects."
+            )
+
         geo = project.geometry  # Access the geometry of the project
 
         # Display available groupings in the geometry (helpful for identifying group names)
@@ -516,7 +528,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     mesh_defaults = fl.MeshingDefaults(surface_edge_growth_rate=1.2,
                                        surface_max_edge_length=surf_mesh_refine_factor * 80 * u.mm,
                                        curvature_resolution_angle=surf_mesh_refine_factor * 5 * u.deg,
-                                       boundary_layer_growth_rate=1.1,
+                                       boundary_layer_growth_rate=boundary_layer_growth_rate,
                                        boundary_layer_first_layer_thickness=global_y1)
 
     # 3c) Rotation region
@@ -562,7 +574,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                     z_size=h_box + wake_refinement_box_overlap,
                     center_offset=(x + wake_refinement_delta_x/2, 0, -0.5),
                     name_prefix="wakebox_row{0:0d}".format(i_row),
-                    segment_overlap=wake_refinement_box_overlap,
+                    segment_overlap=wake_refinement_spanwise_overlap,
                 )
                 wake_refinement_rows.append((i_row, boxes))
 
@@ -711,39 +723,66 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     ###############################
     # 5) Generate mesh and run case
     ###############################
-    # Step 5: Run the simulation case with the specified parameters
+    if run_flag and not generate_vol_mesh:
+        raise ValueError("generate_vol_mesh must be True when run_flag is True.")
+
     if not run_flag:
-        if project_from_surface_mesh:
-            project.generate_volume_mesh(params, use_beta_mesher=True, name='VolumeMesh', run_async=False,
-                                         use_geometry_AI=False, raise_on_error=True)
-
-        else:
-            project.generate_surface_mesh(params=params, name='SurfaceMesh', run_async=False, draft_only=False)
-            #project.generate_volume_mesh(params, name='VolumeMesh', run_async=False, use_geometry_AI=False,
-            # raise_on_error=True)
+        if not project_from_surface_mesh and generate_surf_mesh:
+            project.generate_surface_mesh(
+                params=params,
+                name="SurfaceMesh",
+                run_async=False,
+                draft_only=False,
+            )
+        if generate_vol_mesh:
+            project.generate_volume_mesh(
+                params,
+                use_beta_mesher=True,
+                name="VolumeMesh",
+                run_async=False,
+                use_geometry_AI=False,
+                raise_on_error=True,
+            )
         return project.id
-    else:
-        project.generate_volume_mesh(params, use_beta_mesher=True, name='VolumeMesh', run_async=False,
-                                     use_geometry_AI=False, raise_on_error=True)
-        project.run_case(params=params, name="V3_case_" + sim_name)
 
-        case = project.case
-        case.wait()
+    if not project_from_surface_mesh and generate_surf_mesh:
+        project.generate_surface_mesh(
+            params=params,
+            name="SurfaceMesh",
+            run_async=False,
+            draft_only=False,
+        )
+    if generate_vol_mesh:
+        project.generate_volume_mesh(
+            params,
+            use_beta_mesher=True,
+            name="VolumeMesh",
+            run_async=False,
+            use_geometry_AI=False,
+            raise_on_error=True,
+        )
+    project.run_case(params=params, name="V3_case_" + sim_name)
 
-        results = case.results
-        results.download(surface=True, volume=True, total_forces=True, nonlinear_residuals=True,
-                         destination=os.path.join(results_path, case.name))
+    case = project.case
+    case.wait()
 
-        total_forces = case.results.total_forces.as_dataframe()
+    results = case.results
+    results.download(surface=True, volume=True, total_forces=True, nonlinear_residuals=True,
+                     destination=os.path.join(results_path, case.name))
 
-        return total_forces
+    total_forces = case.results.total_forces.as_dataframe()
+
+    return total_forces
 
 
 def main():
     mshlvl = 0
-    run=False
+    generate_surf_mesh = False
+    generate_vol_mesh = True
+    run = False
     n_test_cases = None
     enable_volume_refinements = True
+    boundary_layer_growth_rate = 1.15
     enable_alpha_controller = True
     aircraft_mass = 600.0
     alpha_controller_kp = 0.2
@@ -752,50 +791,100 @@ def main():
 
     results_dir = "C:/WDIR/flow360"
 
-    proj_step_file = None
-    proj_cgns_file = "Ventus3_FlapletV2_WKS_B.cgns"
-    proj_id = None
+    #variant = "FlapletV2 WKS"
+    variant = "Original WKS"
 
-    symm_face = "S_53"
+    sim_name = "V3 " + variant
 
-    # proj_step_file = "Ventus_Original_WKS.stp"
-    #proj_step_file = "Ventus_Original_WK2.stp"
-    #proj_step_file = "Ventus3_FlapletV2_WKS.stp"
-    # proj_step_file = "Ventus3_FlapletV2_WK2.stp"
+    default_boundary_layer_growth_rate = 1.1
+    if boundary_layer_growth_rate != default_boundary_layer_growth_rate:
+        sim_name += f"_VolGR={boundary_layer_growth_rate:g}"
 
-    # proj_id = "prj-c6babf81-d21a-4715-a36c-b9190be22783" # orig WKS
-    # proj_id = "" # orig WK+2
-    # proj_id = "" # Flaplet WKS
-    # proj_id = "" # Flaplet WK+2
-
-
-
-    if proj_cgns_file is not None:
-        variant_name = proj_cgns_file.lstrip("Ventus3_").rstrip(".cgns").replace("_", " ")
-    elif proj_step_file is not None:
-        variant_name = proj_step_file.lstrip("Ventus3_").rstrip(".stp").replace("_", " ")
-    else:
-        match proj_id:
-            case "prj-c6babf81-d21a-4715-a36c-b9190be22783":
-                variant_name = "Original WKS"
-            case "prj-0f7b4be0-5921-4245-8c96-08a4f1597752":
-                variant_name = "Original WK2"
-            case "prj-9ee6a802-17af-481f-887a-ba992fce2db3":
-                variant_name = "Flaplet WKS"
-            case "prj-f5032aa0-570f-44ab-ba5b-47f7fbde11fa":
-                variant_name = "Flaplet WK2"
-            case _:
-                raise ValueError(f"Invalid project ID: {proj_id}")
-
-    sim_name = "V3 " + variant_name
-
+    study_name = "V3 Flaplets"
     half_model = True
     altitude = 0
     wing_area = 10.84
     U_inf_range = None
-    target_lift_coefficient_range = [0.3]
-    alpha_deg_range = [0.75, ]
-    study_name = "V3 Flaplets"
+
+
+    variant_configs = {
+        "Original WKS": {
+            "project_step_file_name": None,
+            "project_cgns_file_name": "Ventus_Original_WKS_G.cgns",
+            "project_id": None,
+            "symm_face": "symm face",
+            "LE_edge_list": [],
+            "TE_edge_list": [],
+            "turbulator_location_files": ["Turbulator_wing_lower_original_WKS.dat"],
+            "wake_refinement_files": ["TE_upper_VentusOrig_WKS.dat"],
+            "target_lift_coefficient_range": [0.5],
+            "alpha_deg_range": [3.0],
+        },
+        "Original WK+2": {
+            "project_step_file_name": None,
+            "project_cgns_file_name": None,
+            "project_id": None,
+            "symm_face": "symm face",
+            "LE_edge_list": [],
+            "TE_edge_list": [],
+            "turbulator_location_files": [],
+            "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
+            "target_lift_coefficient_range": [1.4],
+            "alpha_deg_range": [4.],
+        },
+        "FlapletV2 WKS": {
+            "project_step_file_name": None,
+            "project_cgns_file_name": "Ventus3_FlapletV2_WKS_B.cgns",
+            "project_id": None,
+            "symm_face": "symm face",
+            "LE_edge_list": [13, 24, 35, 46, 56, 78, 108, 172, 192, 215],
+            "TE_edge_list": [
+                                4, 16, 27, 38, 49, 62, 87, 129, 130, 131, 132, 133, 134, 191, 190, 189,
+                                188, 187, 186, 185, 184, 183, 182, 181, 180, 179, 212, 216, 7, 20, 31,
+                                42, 53, 66, 93, 146, 145, 144, 195, 196, 197, 198, 199, 200, 201, 202,
+                                203, 204, 205, 206, 207, 208, 217, 218,
+                            ],
+            "turbulator_location_files": [
+                "Turbulator_wing_lower_FlapletV2_WKS.dat",
+                "Turbulator_Flaplet_upper_WKS.dat",
+            ],
+            "wake_refinement_files": ["TE_upper_Flaplet_WKS.dat"],
+            "target_lift_coefficient_range": [0.3],
+            "alpha_deg_range": [1.2],
+        },
+        "Flaplet V2 WK+2": {
+            "project_step_file_name": None,
+            "project_cgns_file_name": None,
+            "project_id": None,
+            "symm_face": "symm face",
+            "LE_edge_list": [],
+            "TE_edge_list": [],
+            "turbulator_location_files": [
+                "Turbulator_Flaplet_upper_WKS.dat",
+            ],
+            "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
+            "target_lift_coefficient_range": [0.3],
+            "alpha_deg_range": [0.75],
+        },
+    }
+
+    if variant not in variant_configs:
+        raise ValueError(
+            f"Invalid variant {variant!r}. Available variants: {list(variant_configs)}"
+        )
+
+    variant_config = variant_configs[variant]
+    proj_step_file = variant_config["project_step_file_name"]
+    proj_cgns_file = variant_config["project_cgns_file_name"]
+    proj_id = variant_config["project_id"]
+    symm_face = variant_config["symm_face"]
+    LE_edge_list = variant_config["LE_edge_list"]
+    TE_edge_list = variant_config["TE_edge_list"]
+    turbulator_location_files = variant_config["turbulator_location_files"]
+    wake_refinement_files = variant_config["wake_refinement_files"]
+    target_lift_coefficient_range = variant_config["target_lift_coefficient_range"]
+    alpha_deg_range = variant_config["alpha_deg_range"]
+
 
     has_airspeed_range = U_inf_range is not None
     has_target_lift_coefficient_range = target_lift_coefficient_range is not None
@@ -832,62 +921,71 @@ def main():
             })
 
     # initialize results DataFrame
-    cols=['U_inf', 'target_lift_coefficient', 'alpha_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
+    cols = ["U_inf", "target_lift_coefficient", "alpha_deg", "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
     df_results = pd.DataFrame(operating_points).reindex(columns=cols + ["input_mode"])
 
     if n_test_cases is not None:
-        df_results = df_results.iloc[:n_test_cases]   # limit number of runs for testing
+        df_results = df_results.iloc[:n_test_cases]
 
-    # create folders for airspeeds and AOA
-    # create folder in ROOT level
     folder_toplvl = fl.Folder.create(study_name).submit()
-
-    curr_folder = fl.Folder.create(variant_name, parent_folder=folder_toplvl).submit()
+    curr_folder = fl.Folder.create(variant, parent_folder=folder_toplvl).submit()
 
     for i, row in df_results.iterrows():
-        U_inf = row['U_inf']
-        target_cl = row['target_lift_coefficient']
-        alpha_deg = row['alpha_deg']
-        input_mode = row['input_mode']
+        U_inf = row["U_inf"]
+        target_cl = row["target_lift_coefficient"]
+        alpha_deg = row["alpha_deg"]
+        input_mode = row["input_mode"]
 
-        res = define_and_run(project_cgns_file_name=proj_cgns_file, project_step_file_name=proj_step_file,
-                             project_id=proj_id, name=sim_name,
-                             symm_face = symm_face,
-                             U_inf=U_inf if input_mode == "airspeed" else None,
-                             target_lift_coefficient=target_cl if input_mode == "target_lift_coefficient" else None,
-                             alpha_deg=alpha_deg, half_model=half_model,
-                             surf_mesh_lvl=mshlvl, enable_volume_refinements=enable_volume_refinements,
-                             enable_alpha_controller=enable_alpha_controller,
-                             alpha_controller_kp=alpha_controller_kp,
-                             alpha_controller_ki=alpha_controller_ki,
-                             alpha_controller_start_pseudo_step=alpha_controller_start_pseudo_step,
-                             alpha_controller_initial_alpha_deg=alpha_deg,
-                             aircraft_mass=aircraft_mass,
-                             flow360folder=curr_folder, results_path=results_dir, run_flag=run)
+        res = define_and_run(
+            project_cgns_file_name=proj_cgns_file,
+            project_step_file_name=proj_step_file,
+            project_id=proj_id,
+            name=sim_name,
+            symm_face=symm_face,
+            U_inf=U_inf if input_mode == "airspeed" else None,
+            target_lift_coefficient=target_cl if input_mode == "target_lift_coefficient" else None,
+            alpha_deg=alpha_deg,
+            half_model=half_model,
+            surf_mesh_lvl=mshlvl,
+            enable_volume_refinements=enable_volume_refinements,
+            enable_alpha_controller=enable_alpha_controller,
+            alpha_controller_kp=alpha_controller_kp,
+            alpha_controller_ki=alpha_controller_ki,
+            alpha_controller_start_pseudo_step=alpha_controller_start_pseudo_step,
+            alpha_controller_initial_alpha_deg=alpha_deg,
+            aircraft_mass=aircraft_mass,
+            LE_edge_list=LE_edge_list,
+            TE_edge_list=TE_edge_list,
+            turbulator_location_files=turbulator_location_files,
+            wake_refinement_files=wake_refinement_files,
+            flow360folder=curr_folder,
+            results_path=results_dir,
+            generate_surf_mesh=generate_surf_mesh,
+            generate_vol_mesh=generate_vol_mesh,
+            boundary_layer_growth_rate=boundary_layer_growth_rate,
+            run_flag=run,
+        )
 
         if run:
-            # extract CL, CD, CMY from results as moving average over last 20 timesteps
-            CL_avg = res['CL'].tail(15).mean()
-            CD_avg = res['CD'].tail(15).mean()
-            CFx = res['CFx'].tail(15).mean()
-            CFy = res['CFy'].tail(15).mean()
-            CFz = res['CFz'].tail(15).mean()
-            CMx_avg = res['CMx'].tail(15).mean()
-            CMy_avg = res['CMy'].tail(15).mean()
-            CMz_avg = res['CMz'].tail(15).mean()
-            df_results.loc[i, 'CL'] = CL_avg
-            df_results.loc[i, 'CD'] = CD_avg
-            df_results.loc[i, 'CMx'] = CMx_avg
-            df_results.loc[i, 'CMy'] = CMy_avg
-            df_results.loc[i, 'CMz'] = CMz_avg
-            df_results.loc[i, 'CFx'] = CFx
-            df_results.loc[i, 'CFy'] = CFy
-            df_results.loc[i, 'CFz'] = CFz
+            CL_avg = res["CL"].tail(15).mean()
+            CD_avg = res["CD"].tail(15).mean()
+            CFx = res["CFx"].tail(15).mean()
+            CFy = res["CFy"].tail(15).mean()
+            CFz = res["CFz"].tail(15).mean()
+            CMx_avg = res["CMx"].tail(15).mean()
+            CMy_avg = res["CMy"].tail(15).mean()
+            CMz_avg = res["CMz"].tail(15).mean()
+            df_results.loc[i, "CL"] = CL_avg
+            df_results.loc[i, "CD"] = CD_avg
+            df_results.loc[i, "CMx"] = CMx_avg
+            df_results.loc[i, "CMy"] = CMy_avg
+            df_results.loc[i, "CMz"] = CMz_avg
+            df_results.loc[i, "CFx"] = CFx
+            df_results.loc[i, "CFy"] = CFy
+            df_results.loc[i, "CFz"] = CFz
 
-    # write df_results to csv
     if run:
         df_results.drop(columns=["input_mode"]).to_csv(study_name + ".csv", index=False)
-    pass
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ class CurveConstraint:
 class CurveSpec:
     curve_ids: int | list[int]
     invert_directions: bool | list[bool]
+    group_invert_direction: bool
     n_pts: int
     mesh_type: str
     coef: float
@@ -607,6 +608,7 @@ def _compound_split_indices(
 def _curve_node_counts(
     curve_ids: int | list[int],
     invert_directions: bool | list[bool],
+    group_invert_direction: bool,
     n_pts: int,
     entry: dict[str, Any],
     mesh_type: str | None = None,
@@ -620,7 +622,12 @@ def _curve_node_counts(
     coef = float(coef if coef is not None else entry.get("Parameter", 1.0))
 
     if len(curve_group) == 1:
-        return [(curve_group[0], n_pts, invert_group[0], coef)]
+        curve_coef = coef
+        if mesh_type.lower() == "progression" and group_invert_direction:
+            if coef == 0.0:
+                raise ValueError("Progression coefficient cannot be zero.")
+            curve_coef = 1.0 / coef
+        return [(curve_group[0], n_pts, invert_group[0], curve_coef)]
 
     n_elements = n_pts - 1
     if n_elements < len(curve_group):
@@ -638,7 +645,7 @@ def _curve_node_counts(
     # Geometry orientation is handled per CAD subcurve when setting Gmsh's local
     # progression coefficient, not when choosing where to split the compound.
     node_positions = _distribution_node_positions(
-        entry, n_pts, False, mesh_type, coef
+        entry, n_pts, group_invert_direction, mesh_type, coef
     )
     split_indices = _compound_split_indices(lengths, node_positions)
     element_counts = [
@@ -1160,6 +1167,10 @@ def _grouped_template_invert_directions(
     if template_key not in template_entry:
         return None
 
+    value = template_entry[template_key]
+    if isinstance(value, list) and len(value) == len(group_sizes):
+        return copy.deepcopy(value)
+
     template_group_sizes = _template_group_sizes(template_entry, total_curves)
     expanded_values = _expand_template_values(
         template_entry,
@@ -1180,6 +1191,20 @@ def _grouped_template_invert_directions(
         group_sizes,
         keep_group_lists=True,
     )
+
+
+def _group_invert_direction(value: bool | list[bool] | None) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+
+    group = [_as_bool(item) for item in value]
+    if not group:
+        return False
+    if len(set(group)) == 1:
+        return group[0]
+    return group[0]
 
 
 def _combine_grouped_invert_directions(
@@ -1689,12 +1714,14 @@ def _chordwise_entry_from_grouped_loop(
         group_sizes,
         len(traced_curve_ids),
     )
-    chordwise_entry["invert_direction"] = _combine_grouped_invert_directions(
-        inferred_invert_directions,
-        user_invert_directions,
-        curve_groups,
-    )
+    chordwise_entry["invert_direction"] = inferred_invert_directions
     _normalize_invert_directions_for_curve_groups(chordwise_entry)
+    chordwise_entry["_group_invert_direction"] = [
+        _group_invert_direction(user_invert_direction)
+        for user_invert_direction in (
+            user_invert_directions or [False] * len(curve_groups)
+        )
+    ]
     return chordwise_entry
 
 
@@ -2172,39 +2199,24 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
             and "invert_direction" not in spanwise_entry
         ):
             spec_count = len(section_curve_ids)
-            adjusted_invert_directions = []
-            for spec_index, (curve_group, inferred_invert_direction) in enumerate(
-                zip(section_curve_ids, section_invert_directions)
-            ):
-                curve_group_size = len(_as_list(curve_group))
-                user_invert_direction = _per_spec_value(
-                    spanwise_entry,
-                    "_invert_direction",
-                    spec_index,
-                    spec_count,
-                    False,
-                )
-                user_invert_group = _as_bool_list(
-                    user_invert_direction,
-                    curve_group_size,
-                )
-                inferred_invert_group = _as_bool_list(
-                    inferred_invert_direction,
-                    curve_group_size,
-                )
-                invert_group = [
-                    bool(inferred) != bool(user_invert)
-                    for inferred, user_invert in zip(
-                        inferred_invert_group,
-                        user_invert_group,
+            spanwise_entry["invert_direction"] = section_invert_directions
+            spanwise_entry["_group_invert_direction"] = [
+                _group_invert_direction(
+                    _per_spec_value(
+                        spanwise_entry,
+                        "_invert_direction",
+                        spec_index,
+                        spec_count,
+                        False,
                     )
-                ]
-                adjusted_invert_directions.append(
-                    invert_group[0] if curve_group_size == 1 else invert_group
                 )
-            spanwise_entry["invert_direction"] = adjusted_invert_directions
+                for spec_index in range(spec_count)
+            ]
         else:
             spanwise_entry["invert_direction"] = section_invert_directions
+            spanwise_entry["_group_invert_direction"] = [
+                False for _ in spanwise_entry["invert_direction"]
+            ]
         spanwise_entries.append(spanwise_entry)
 
     auto_mesh_def["chordwise_curve_sequences"] = chordwise_entries
@@ -2467,10 +2479,22 @@ def _iter_traced_curve_specs(
 
         if group_size == 1:
             yield CurveSpec(
-                curve_ids[0], invert_directions[0], n_pts, mesh_type, coef
+                curve_ids[0],
+                invert_directions[0],
+                _group_invert_direction(user_invert_direction),
+                n_pts,
+                mesh_type,
+                coef,
             )
         else:
-            yield CurveSpec(curve_ids, invert_directions, n_pts, mesh_type, coef)
+            yield CurveSpec(
+                curve_ids,
+                invert_directions,
+                _group_invert_direction(user_invert_direction),
+                n_pts,
+                mesh_type,
+                coef,
+            )
 
 
 def _legacy_invert_direction(entry: dict[str, Any]) -> bool:
@@ -2513,11 +2537,28 @@ def _iter_curve_specs(
     for spec_index, (spec_curve_ids, spec_invert_direction) in enumerate(
         zip(curve_ids, invert_direction)
     ):
+        if "_group_invert_direction" in entry:
+            group_invert_direction = _as_bool(
+                _per_spec_value(
+                    entry,
+                    "_group_invert_direction",
+                    spec_index,
+                    spec_count,
+                    False,
+                )
+            )
+        else:
+            group_invert_direction = _group_invert_direction(spec_invert_direction)
         n_pts, mesh_type, coef = _curve_spec_discretization(
             entry, spec_index, spec_count, spec_curve_ids
         )
         yield CurveSpec(
-            spec_curve_ids, spec_invert_direction, n_pts, mesh_type, coef
+            spec_curve_ids,
+            spec_invert_direction,
+            group_invert_direction,
+            n_pts,
+            mesh_type,
+            coef,
         )
 
 
@@ -2707,6 +2748,7 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
                 for curve_id, curve_n_pts, invert, curve_base_coef in _curve_node_counts(
                     curve_spec.curve_ids,
                     curve_spec.invert_directions,
+                    curve_spec.group_invert_direction,
                     curve_spec.n_pts,
                     entry,
                     curve_spec.mesh_type,
@@ -3113,6 +3155,310 @@ def apply_geometry_healing(mesh_def: dict[str, Any]) -> None:
     )
 
 
+def _as_point(value: Sequence[float], *, name: str) -> list[float]:
+    point = [float(item) for item in value]
+    if len(point) != 3:
+        raise ValueError(f"{name} must be a 3D point/vector, got {value!r}.")
+    return point
+
+
+def _as_xyz_values(value: Any, *, name: str, default: float) -> list[float]:
+    if value is None:
+        return [default, default, default]
+
+    if isinstance(value, (int, float)):
+        scalar = float(value)
+        return [scalar, scalar, scalar]
+
+    if isinstance(value, dict):
+        return [
+            float(value.get("x", default)),
+            float(value.get("y", default)),
+            float(value.get("z", default)),
+        ]
+
+    values = [float(item) for item in value]
+    if len(values) != 3:
+        raise ValueError(f"{name} must be a scalar, x/y/z object, or 3-item list.")
+    return values
+
+
+def _imported_geometry_dim_tags(imported_entities: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    dim_tags = list(imported_entities or []) or gmsh.model.occ.getEntities()
+    if not dim_tags:
+        return []
+
+    max_dim = max(dim for dim, _ in dim_tags)
+    return [(dim, tag) for dim, tag in dim_tags if dim == max_dim]
+
+
+def apply_geometry_preprocessing(
+    mesh_def: dict[str, Any],
+    imported_entities: list[tuple[int, int]],
+) -> None:
+    preprocessing_def = mesh_def.get("geometry_preprocessing", {})
+    if not preprocessing_def or not bool(preprocessing_def.get("enabled", True)):
+        return
+
+    dim_tags = _imported_geometry_dim_tags(imported_entities)
+    if not dim_tags:
+        return
+
+    origin = _as_point(preprocessing_def.get("origin", [0.0, 0.0, 0.0]), name="origin")
+    scale = _as_xyz_values(preprocessing_def.get("scale"), name="scale", default=1.0)
+    if any(abs(value) <= 0.0 for value in scale):
+        raise ValueError("geometry_preprocessing scale values must be non-zero.")
+
+    if any(not math.isclose(value, 1.0) for value in scale):
+        gmsh.model.occ.dilate(dim_tags, *origin, *scale)
+
+    rotation_deg = preprocessing_def.get(
+        "rotation_deg",
+        preprocessing_def.get("rotation_degrees", preprocessing_def.get("rotation")),
+    )
+    rotation_rad = preprocessing_def.get("rotation_rad")
+    if rotation_rad is not None:
+        rotations = _as_xyz_values(rotation_rad, name="rotation_rad", default=0.0)
+    else:
+        rotations = [
+            math.radians(value)
+            for value in _as_xyz_values(rotation_deg, name="rotation_deg", default=0.0)
+        ]
+
+    axes = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    for angle, axis in zip(rotations, axes):
+        if math.isclose(angle, 0.0):
+            continue
+        gmsh.model.occ.rotate(dim_tags, *origin, *axis, angle)
+
+    translation = _as_point(
+        preprocessing_def.get("translation", [0.0, 0.0, 0.0]),
+        name="translation",
+    )
+    if any(not math.isclose(value, 0.0) for value in translation):
+        gmsh.model.occ.translate(dim_tags, *translation)
+
+
+def _surface_meshing_algorithm_code(algorithm: Any) -> int:
+    if isinstance(algorithm, int):
+        return algorithm
+
+    algorithm_name = str(algorithm).strip().lower()
+    algorithm_map = {
+        "meshadapt": 1,
+        "automatic": 2,
+        "initialmeshonly": 3,
+        "delaunay": 5,
+        "frontal-delaunay": 6,
+        "frontaldelaunay": 6,
+        "bamg": 7,
+        "frontal-delaunay for quads": 8,
+        "frontaldelaunayforquads": 8,
+        "packing of parallelograms": 9,
+        "packingofparallelograms": 9,
+        "quasi-structured quad": 11,
+        "quasistructuredquad": 11,
+    }
+    if algorithm_name not in algorithm_map:
+        raise ValueError(
+            f"Unsupported surface meshing algorithm {algorithm!r}. "
+            f"Supported names: {sorted(algorithm_map)}."
+        )
+    return algorithm_map[algorithm_name]
+
+
+def apply_surface_meshing_algorithms(mesh_def: dict[str, Any]) -> None:
+    entries = mesh_def.get("surface_meshing_algorithms", [])
+    if not entries:
+        return
+    if not isinstance(entries, list):
+        raise TypeError("surface_meshing_algorithms must be a list.")
+
+    surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise TypeError(
+                "Each surface_meshing_algorithms entry must be an object."
+            )
+
+        target_surfaces = [int(surface_id) for surface_id in entry.get("surfaces", [])]
+        if not target_surfaces:
+            continue
+
+        unknown_surfaces = [
+            surface_id for surface_id in target_surfaces if surface_id not in surface_ids
+        ]
+        if unknown_surfaces:
+            raise ValueError(
+                f"surface_meshing_algorithms references unknown surfaces "
+                f"{unknown_surfaces}."
+            )
+
+        algorithm_code = _surface_meshing_algorithm_code(entry["algorithm"])
+        for surface_id in target_surfaces:
+            gmsh.model.mesh.setAlgorithm(2, surface_id, algorithm_code)
+
+
+def apply_structured_surface_recombination(mesh_def: dict[str, Any]) -> None:
+    unstructured_surfaces = _unstructured_surface_ids(mesh_def)
+    structured_surface_ids = [
+        surface_id
+        for _, surface_id in gmsh.model.getEntities(2)
+        if surface_id not in unstructured_surfaces
+    ]
+    for surface_id in structured_surface_ids:
+        gmsh.model.mesh.setRecombine(2, surface_id)
+
+
+def _surface_is_on_y0_plane(surface_id: int, tolerance: float = 1.0e-3) -> bool:
+    xmin, ymin, zmin, xmax, ymax, zmax = gmsh.model.getBoundingBox(2, surface_id)
+    return abs(ymin) <= tolerance and abs(ymax) <= tolerance
+
+
+def _unique_physical_name(name: str, used_names: set[str]) -> str:
+    if name not in used_names:
+        used_names.add(name)
+        return name
+
+    suffix = 2
+    while f"{name}_{suffix}" in used_names:
+        suffix += 1
+
+    unique_name = f"{name}_{suffix}"
+    used_names.add(unique_name)
+    return unique_name
+
+
+def _curve_to_chordwise_group_map(
+    mesh_def: dict[str, Any],
+) -> dict[int, tuple[int, int]]:
+    curve_map = {}
+    for loop_index, entry in enumerate(
+        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])),
+        start=1,
+    ):
+        for group_index, curve_group in enumerate(_entry_curve_groups(entry), start=1):
+            for curve_id in curve_group:
+                curve_map[abs(curve_id)] = (loop_index, group_index)
+    return curve_map
+
+
+def _curve_to_spanwise_section_map(mesh_def: dict[str, Any]) -> dict[int, int]:
+    curve_map = {}
+    for section_index, entry in enumerate(
+        _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])),
+        start=1,
+    ):
+        for curve_group in _entry_curve_groups(entry):
+            for curve_id in curve_group:
+                curve_map[abs(curve_id)] = section_index
+    return curve_map
+
+
+def _blunt_trailing_edge_group_index(mesh_def: dict[str, Any]) -> int | None:
+    chordwise_entries = list(_iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])))
+    if not chordwise_entries:
+        return None
+    return max(len(_entry_curve_groups(entry)) for entry in chordwise_entries)
+
+
+def _structured_surface_export_names(mesh_def: dict[str, Any]) -> dict[int, str]:
+    surface_definitions = _transfinite_surface_definitions(mesh_def)
+    chordwise_curve_map = _curve_to_chordwise_group_map(mesh_def)
+    spanwise_curve_map = _curve_to_spanwise_section_map(mesh_def)
+    blunt_group_index = _blunt_trailing_edge_group_index(mesh_def)
+    structured_names = {}
+
+    for surface_id, surface_def in surface_definitions.items():
+        corners = [int(point) for point in surface_def.get("boundary points", [])]
+        if len(corners) != 4:
+            continue
+
+        boundary_curves = [abs(curve_id) for curve_id in _surface_boundary_curves(surface_id)]
+        chordwise_groups = {
+            chordwise_curve_map[curve_id][1]
+            for curve_id in boundary_curves
+            if curve_id in chordwise_curve_map
+        }
+        spanwise_sections = {
+            spanwise_curve_map[curve_id]
+            for curve_id in boundary_curves
+            if curve_id in spanwise_curve_map
+        }
+
+        if len(chordwise_groups) != 1 or len(spanwise_sections) != 1:
+            continue
+
+        chordwise_index = next(iter(chordwise_groups))
+        spanwise_index = next(iter(spanwise_sections))
+        if blunt_group_index is not None and chordwise_index == blunt_group_index:
+            structured_names[surface_id] = f"struct_bluntTE_S{spanwise_index:02d}"
+        else:
+            structured_names[surface_id] = (
+                f"struct_surf_S{spanwise_index:02d}_C{chordwise_index:02d}"
+            )
+
+    return structured_names
+
+
+def apply_export_surface_names(mesh_def: dict[str, Any]) -> None:
+    symmetry_surfaces = []
+    other_surfaces = []
+    tolerance = 1.0e-3
+    structured_surface_names = _structured_surface_export_names(mesh_def)
+
+    for _, surface_id in gmsh.model.getEntities(2):
+        if _surface_is_on_y0_plane(surface_id, tolerance):
+            symmetry_surfaces.append(surface_id)
+        else:
+            other_surfaces.append(surface_id)
+
+    physical_groups = gmsh.model.getPhysicalGroups(2)
+    for _, physical_tag in physical_groups:
+        gmsh.model.removePhysicalGroups([(2, physical_tag)])
+
+    used_names = set()
+    if symmetry_surfaces:
+        physical_tag = gmsh.model.addPhysicalGroup(2, symmetry_surfaces)
+        gmsh.model.setPhysicalName(
+            2,
+            physical_tag,
+            _unique_physical_name("symm face", used_names),
+        )
+
+    named_surface_groups: dict[str, list[int]] = {}
+    unnamed_surfaces: list[int] = []
+    for surface_id in other_surfaces:
+        entity_name = structured_surface_names.get(surface_id)
+        if entity_name is None:
+            unnamed_surfaces.append(surface_id)
+            continue
+        named_surface_groups.setdefault(entity_name, []).append(surface_id)
+
+    for entity_name, surface_ids in named_surface_groups.items():
+        physical_tag = gmsh.model.addPhysicalGroup(2, surface_ids)
+        gmsh.model.setPhysicalName(
+            2,
+            physical_tag,
+            _unique_physical_name(entity_name, used_names),
+        )
+
+    for surface_id in unnamed_surfaces:
+        physical_tag = gmsh.model.addPhysicalGroup(2, [surface_id])
+        entity_name = gmsh.model.getEntityName(2, surface_id).strip()
+        if not entity_name:
+            entity_name = f"surface_{surface_id:05d}"
+        gmsh.model.setPhysicalName(
+            2,
+            physical_tag,
+            _unique_physical_name(entity_name, used_names),
+        )
+
+
 def show_gmsh() -> None:
     """Open the Gmsh GUI for inspecting the generated mesh."""
     gmsh.option.setNumber("Mesh.SurfaceFaces", 1)
@@ -3122,7 +3468,39 @@ def show_gmsh() -> None:
 
 def load_mesh_def(mesh_def_file: Path) -> dict[str, Any]:
     with mesh_def_file.open("r", encoding="utf-8") as file:
-        return json.load(file)
+        return normalize_mesh_def(json.load(file))
+
+
+def normalize_mesh_def(mesh_def: dict[str, Any]) -> dict[str, Any]:
+    expected_sections = {"geometry definition", "mesh definition"}
+    actual_sections = set(mesh_def)
+    if actual_sections != expected_sections:
+        missing_sections = sorted(expected_sections - actual_sections)
+        extra_sections = sorted(actual_sections - expected_sections)
+        details = []
+        if missing_sections:
+            details.append(f"missing {missing_sections}")
+        if extra_sections:
+            details.append(f"unexpected top-level keys {extra_sections}")
+        raise ValueError(
+            "Mesh definition JSON must contain exactly the top-level sections "
+            "'geometry definition' and 'mesh definition'"
+            + (f" ({'; '.join(details)})." if details else ".")
+        )
+
+    geometry_def = mesh_def["geometry definition"]
+    mesh_settings = mesh_def["mesh definition"]
+
+    if not isinstance(geometry_def, dict):
+        raise TypeError("'geometry definition' must be an object.")
+    if not isinstance(mesh_settings, dict):
+        raise TypeError("'mesh definition' must be an object.")
+
+    normalized: dict[str, Any] = {}
+    normalized.update(copy.deepcopy(geometry_def))
+    normalized.update(copy.deepcopy(mesh_settings))
+
+    return normalized
 
 
 def mesh_def_step_file(mesh_def: dict[str, Any], mesh_def_file: Path) -> Path:
@@ -3156,10 +3534,11 @@ def generate_surface_mesh(
         if output_file.suffix.lower() == ".msh":
             gmsh.option.setNumber(
                 "Mesh.MshFileVersion", 2.2 if mesh_format == "msh2" else 4.1
-            )
+        )
 
         gmsh.model.add(step_file.stem)
-        gmsh.model.occ.importShapes(str(step_file))
+        imported_entities = gmsh.model.occ.importShapes(str(step_file))
+        apply_geometry_preprocessing(mesh_def, imported_entities)
         apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
 
@@ -3168,16 +3547,32 @@ def generate_surface_mesh(
                 show_gmsh()
             return
 
+        generate_1d_mesh = bool(mesh_def.get("generate_1d_mesh", True))
+        generate_2d_mesh = bool(mesh_def.get("generate_2d_mesh", True))
+        if generate_2d_mesh and not generate_1d_mesh:
+            raise ValueError(
+                "generate_2d_mesh requires generate_1d_mesh, because Gmsh "
+                "builds surface meshes from curve meshes."
+            )
+        if not generate_1d_mesh and not generate_2d_mesh:
+            if show:
+                show_gmsh()
+            return
+
         mesh_def = apply_automatic_curve_sequences(mesh_def)
-        mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
-        complete_surface_boundary_curves(mesh_def, curve_constraints)
-        apply_transfinite_surfaces(mesh_def)
+        if generate_2d_mesh:
+            mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
+            complete_surface_boundary_curves(mesh_def, curve_constraints)
+            apply_transfinite_surfaces(mesh_def)
+            apply_surface_meshing_algorithms(mesh_def)
+            if recombine:
+                apply_structured_surface_recombination(mesh_def)
 
-        gmsh.model.mesh.generate(2)
-        if recombine:
-            gmsh.model.mesh.recombine()
+        gmsh.model.mesh.generate(2 if generate_2d_mesh else 1)
 
+        if generate_2d_mesh:
+            apply_export_surface_names(mesh_def)
         gmsh.write(str(output_file))
 
         if show:

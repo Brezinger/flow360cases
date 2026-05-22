@@ -50,7 +50,7 @@ def main():
     l_fuse = 756.51
     r_fuse = 45
 
-    mod_csm_file(path="C:/git/flow360cases/AMDC_GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
+    mod_csm_file(path="/GBT/GBT.csm", elev_deflection_deg=elev_deflection_deg,
                  half_model=half_model)
 
     ###############################
@@ -70,7 +70,7 @@ def main():
     #gbt_folder = fl.Folder.get("folder-ee329f80-9142-496f-938c-15b650fdebc2")
 
     # This initializes a project with the specified geometry and assigns it a name.
-    project = fl.Project.from_geometry("C:/git/flow360cases/AMDC_GBT/GBT.csm", name="GBT U{0:d}_AOA{1:d}_delta{2:.1f}".format(U_inf, alpha_deg, elev_deflection_deg),
+    project = fl.Project.from_geometry("C:/git/flow360cases/GBT/GBT.csm", name="GBT U{0:d}_AOA{1:d}_delta{2:.1f}".format(U_inf, alpha_deg, elev_deflection_deg),
                                        folder=gbt_folder, length_unit="mm", run_async=async_flag)
     geo = project.geometry  # Access the geometry of the project
 

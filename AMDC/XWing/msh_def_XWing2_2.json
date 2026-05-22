@@ -1,8 +1,8 @@
 {
   "geometry definition": {
-    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 original\\WKS\\Ventus_Original_WKS_G.stp",
+    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\20_AMDC_XWing2\\05_CAD\\2026-05-12_AMDC-simplified-XWingV22_getrennt.stp",
     "geometry_preprocessing": {
-      "enabled": false,
+      "enabled": true,
       "origin": [
         0.0,
         0.0,
@@ -16,10 +16,10 @@
       "rotation_deg": {
         "x": 0.0,
         "y": 0.0,
-        "z": 0.0
+        "z": 180.0
       },
       "translation": [
-        0.0,
+        1394.0,
         0.0,
         0.0
       ]
@@ -35,8 +35,8 @@
     }
   },
   "mesh definition": {
-    "generate_1d_mesh": true,
-    "generate_2d_mesh": true,
+    "generate_1d_mesh": false,
+    "generate_2d_mesh": false,
     "automatic_curve_sequences": {
       "enabled": true,
       "start_pt": 1,

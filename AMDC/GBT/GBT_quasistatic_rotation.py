@@ -81,7 +81,7 @@ def define_and_run(project_id=None, elev_deflection_deg=0., U_inf = 270, alpha_d
     ###############################
 
     # first modify csm file to set elevator deflection and half-model flag
-    src = "C:/git/flow360cases/AMDC_GBT/GBT.csm"
+    src = "/GBT/GBT.csm"
     dst = os.path.join(os.getcwd(),  "GBT_temp.csm")
     shutil.copyfile(src, dst)
     mod_csm_file(path=dst, elev_deflection_deg=elev_deflection_deg,
