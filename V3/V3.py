@@ -426,7 +426,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
     ns_solver_tolerance = 1.e-7            # Navier-Stokes and turbulence model solver tolerance
     turb_solver_tolerance = 1.e-6          # turbulence model solver tolerance
-    n_timesteps = 500
+    n_timesteps = 1000
     if enable_alpha_controller and alpha_controller_start_pseudo_step >= n_timesteps:
         raise ValueError(
             "alpha_controller_start_pseudo_step must be smaller than n_timesteps "
@@ -460,9 +460,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     ###############################
     # Preface: Create a new project
     ###############################
-
-
-    alpha = np.deg2rad(alpha_deg)
 
     # Initialize project
     project_from_surface_mesh = project_cgns_file_name is not None
@@ -782,7 +779,7 @@ def main():
     run = False
     n_test_cases = None
     enable_volume_refinements = True
-    boundary_layer_growth_rate = 1.15
+    boundary_layer_growth_rate = 1.1
     enable_alpha_controller = True
     aircraft_mass = 600.0
     alpha_controller_kp = 0.2
@@ -792,7 +789,8 @@ def main():
     results_dir = "C:/WDIR/flow360"
 
     #variant = "FlapletV2 WKS"
-    variant = "Original WKS"
+    #variant = "Original WKS"
+    variant = "FlapletV2 WK+2"
 
     sim_name = "V3 " + variant
 
@@ -837,24 +835,19 @@ def main():
             "project_cgns_file_name": "Ventus3_FlapletV2_WKS_B.cgns",
             "project_id": None,
             "symm_face": "symm face",
-            "LE_edge_list": [13, 24, 35, 46, 56, 78, 108, 172, 192, 215],
-            "TE_edge_list": [
-                                4, 16, 27, 38, 49, 62, 87, 129, 130, 131, 132, 133, 134, 191, 190, 189,
-                                188, 187, 186, 185, 184, 183, 182, 181, 180, 179, 212, 216, 7, 20, 31,
-                                42, 53, 66, 93, 146, 145, 144, 195, 196, 197, 198, 199, 200, 201, 202,
-                                203, 204, 205, 206, 207, 208, 217, 218,
-                            ],
+            "LE_edge_list": [],
+            "TE_edge_list": [],
             "turbulator_location_files": [
                 "Turbulator_wing_lower_FlapletV2_WKS.dat",
                 "Turbulator_Flaplet_upper_WKS.dat",
             ],
             "wake_refinement_files": ["TE_upper_Flaplet_WKS.dat"],
-            "target_lift_coefficient_range": [0.3],
-            "alpha_deg_range": [1.2],
+            "target_lift_coefficient_range": [0.5],
+            "alpha_deg_range": [3.0],
         },
-        "Flaplet V2 WK+2": {
+        "FlapletV2 WK+2": {
             "project_step_file_name": None,
-            "project_cgns_file_name": None,
+            "project_cgns_file_name": "Ventus3_FlapletV2_WK+2_B.cgns",
             "project_id": None,
             "symm_face": "symm face",
             "LE_edge_list": [],
@@ -863,8 +856,8 @@ def main():
                 "Turbulator_Flaplet_upper_WKS.dat",
             ],
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
-            "target_lift_coefficient_range": [0.3],
-            "alpha_deg_range": [0.75],
+            "target_lift_coefficient_range": [1.2],
+            "alpha_deg_range": [1.85],
         },
     }
 

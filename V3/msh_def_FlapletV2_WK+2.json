@@ -1,6 +1,6 @@
 {
   "geometry definition": {
-    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 FlapletV2\\WKS\\Ventus3_FlapletV2_WKS_B.stp",
+    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 FlapletV2\\WK+2\\Ventus3_FlapletV2_WK+2_B.stp",
     "geometry_preprocessing": {
       "enabled": false,
       "origin": [
@@ -39,7 +39,7 @@
     "generate_2d_mesh": true,
     "automatic_curve_sequences": {
       "enabled": true,
-      "start_pt": 60,
+      "start_pt": 59,
       "chordwise_direction": [
         -1.0,
         0.0,
