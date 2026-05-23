@@ -47,9 +47,57 @@
           70,
           85
         ]
+      },
+      {
+        "name": "winglet quasi-structured quad surfaces",
+        "algorithm": "quasi-structured quad",
+        "surfaces": [
+          48,
+          45,
+          47,
+          53,
+          63,
+          74,
+          75,
+          88,
+          89,
+          90,
+          97,
+          96,
+          95,
+          94,
+          93,
+          92,
+          91,
+          81,
+          78,
+          64,
+          54
+        ]
       }
     ],
     "unstructured_surfaces": [
+      45,
+      47,
+      48,
+      53,
+      54,
+      63,
+      64,
+      74,
+      75,
+      78,
+      81,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
       102,
       103,
       104,
@@ -330,6 +378,85 @@
               105
             ],
             "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ]
+          },
+          {
+            "name": "winglet line 130 boundary layer refinement",
+            "curve_ids": [
+              130
+            ],
+            "type": "Bump",
+            "mesh size mode": "ele size",
+            "target ele size 1": 0.75,
+            "target ele size 2": 1.5,
+            "invert_direction": [
+              false
+            ]
+          },
+          {
+            "name": "winglet line 119 boundary layer refinement",
+            "curve_ids": [
+              119
+            ],
+            "type": "Bump",
+            "mesh size mode": "ele size",
+            "target ele size 1": 0.75,
+            "target ele size 2": 1.5,
+            "invert_direction": [
+              false
+            ]
+          },
+          {
+            "name": "fixed two-point winglet bsplines",
+            "curve_ids": [
+              122,
+              123,
+              129,
+              153,
+              238,
+              239,
+              240,
+              267,
+              268,
+              269,
+              275,
+              274,
+              273,
+              272,
+              271,
+              270,
+              252,
+              247,
+              199,
+              155,
+              131
+            ],
+            "type": "Progression",
+            "Parameter": 1.0,
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
               false,
               false,
               false,
