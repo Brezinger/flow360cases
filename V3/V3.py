@@ -304,6 +304,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                    flow360folder=None, results_path=None,
                    generate_surf_mesh=True, generate_vol_mesh=True,
                    boundary_layer_growth_rate=1.1,
+                   n_timesteps=2000,
                    run_flag = False):
     """
     Define a V3 Flow360 setup and either prepare the next mesh step or run the case.
@@ -342,6 +343,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     :param generate_surf_mesh:  Generate the surface mesh when geometry-based meshing is used
     :param generate_vol_mesh:   Generate the volume mesh before returning or running the case
     :param boundary_layer_growth_rate: Boundary layer growth rate for volume meshing
+    :param n_timesteps:         Maximum steady solver pseudo-steps
     :param run_flag:            Flag, determines, if simulation is only set-up (False) or also run (True)
     :return:
     """
@@ -426,7 +428,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
     ns_solver_tolerance = 1.e-7            # Navier-Stokes and turbulence model solver tolerance
     turb_solver_tolerance = 1.e-6          # turbulence model solver tolerance
-    n_timesteps = 1000
     if enable_alpha_controller and alpha_controller_start_pseudo_step >= n_timesteps:
         raise ValueError(
             "alpha_controller_start_pseudo_step must be smaller than n_timesteps "
@@ -817,6 +818,7 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WKS.dat"],
             "target_lift_coefficient_range": [0.5],
             "alpha_deg_range": [3.0],
+            "n_timesteps": 2000,
         },
         "Original WK+2": {
             "project_step_file_name": None,
@@ -827,8 +829,9 @@ def main():
             "TE_edge_list": [],
             "turbulator_location_files": [],
             "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
-            "target_lift_coefficient_range": [1.4],
-            "alpha_deg_range": [4.],
+            "target_lift_coefficient_range": [1.2],
+            "alpha_deg_range": [1.85],
+            "n_timesteps": 2000,
         },
         "FlapletV2 WKS": {
             "project_step_file_name": None,
@@ -844,6 +847,7 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WKS.dat"],
             "target_lift_coefficient_range": [0.5],
             "alpha_deg_range": [3.0],
+            "n_timesteps": 2000,
         },
         "FlapletV2 WK+2": {
             "project_step_file_name": None,
@@ -858,6 +862,7 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
+            "n_timesteps": 2000,
         },
     }
 
@@ -877,6 +882,7 @@ def main():
     wake_refinement_files = variant_config["wake_refinement_files"]
     target_lift_coefficient_range = variant_config["target_lift_coefficient_range"]
     alpha_deg_range = variant_config["alpha_deg_range"]
+    n_timesteps = variant_config["n_timesteps"]
 
 
     has_airspeed_range = U_inf_range is not None
@@ -956,6 +962,7 @@ def main():
             generate_surf_mesh=generate_surf_mesh,
             generate_vol_mesh=generate_vol_mesh,
             boundary_layer_growth_rate=boundary_layer_growth_rate,
+            n_timesteps=n_timesteps,
             run_flag=run,
         )
 

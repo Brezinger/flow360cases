@@ -1339,6 +1339,54 @@ def _loop_split_points(traced_loop: TracedLoop) -> list[int]:
     ]
 
 
+def _zone_compound_subcurve_counts(
+    config: dict[str, Any],
+    traced_loop: TracedLoop,
+) -> list[int]:
+    for key in ("n_subcurvs_per_compound_curve", "n_subcurvs"):
+        if key in config:
+            group_sizes = [int(value) for value in config[key]]
+            break
+    else:
+        group_sizes = [1] * len(traced_loop.curve_ids) + [
+            len(traced_loop.blunt_curve_ids)
+        ]
+
+    if any(group_size < 1 for group_size in group_sizes):
+        raise ValueError(
+            "n_subcurvs_per_compound_curve values must be >= 1: "
+            f"{group_sizes}."
+        )
+
+    expected_total = len(traced_loop.curve_ids) + len(traced_loop.blunt_curve_ids)
+    if sum(group_sizes) != expected_total:
+        raise ValueError(
+            "n_subcurvs_per_compound_curve must sum to the number of curves in "
+            f"the first traced loop ({expected_total}), got {sum(group_sizes)}: "
+            f"{group_sizes}."
+        )
+    if group_sizes[-1] != len(traced_loop.blunt_curve_ids):
+        raise ValueError(
+            "The final n_subcurvs_per_compound_curve value must describe the "
+            f"blunt trailing-edge group ({len(traced_loop.blunt_curve_ids)}), "
+            f"got {group_sizes[-1]}."
+        )
+
+    return group_sizes
+
+
+def _loop_split_points_from_group_sizes(
+    traced_loop: TracedLoop,
+    group_sizes: list[int],
+) -> list[int]:
+    split_points = [traced_loop.points[0]]
+    curve_index = 0
+    for group_size in group_sizes[:-1]:
+        curve_index += group_size
+        split_points.append(traced_loop.points[curve_index])
+    return split_points
+
+
 def _select_adjacent_curve_excluding(
     point_id: int,
     direction: Sequence[float],
@@ -1899,17 +1947,38 @@ def _trace_spanwise_curves(
     return curve_ids, invert_directions, next_points, next_directions
 
 
-def _automatic_config(mesh_def: dict[str, Any]) -> dict[str, Any] | None:
-    config = mesh_def.get("automatic_curve_sequences")
-    if config is None:
-        return None
-    if config is True:
-        return {}
-    if not isinstance(config, dict):
-        raise TypeError("automatic_curve_sequences must be an object or true.")
-    if config.get("enabled", True) is False:
-        return None
-    return config
+def _mesh_zones(mesh_def: dict[str, Any]) -> list[dict[str, Any]]:
+    zones = mesh_def.get("mesh_zones")
+    if not isinstance(zones, list) or not zones:
+        raise ValueError("Mesh definition must contain a non-empty 'mesh_zones' list.")
+
+    for index, zone in enumerate(zones, start=1):
+        if not isinstance(zone, dict):
+            raise TypeError(f"mesh_zones[{index}] must be an object.")
+
+    return zones
+
+
+def _mesh_zone_name(zone: dict[str, Any], zone_index: int) -> str:
+    return str(zone.get("name", f"mesh zone {zone_index}"))
+
+
+def _mesh_zone_curve_source(zone: dict[str, Any], zone_name: str) -> str:
+    source = zone.get("curve_definition", zone.get("curve source", zone.get("type")))
+    if source is None:
+        raise ValueError(
+            f"Mesh zone {zone_name!r} must define 'curve_definition' as "
+            "'automatic' or 'manual'."
+        )
+    if isinstance(source, dict):
+        source = source.get("type", source.get("mode"))
+    source = str(source).lower()
+    if source not in {"automatic", "manual"}:
+        raise ValueError(
+            f"Mesh zone {zone_name!r} has unsupported curve_definition "
+            f"{source!r}; expected 'automatic' or 'manual'."
+        )
+    return source
 
 
 def _merge_transfinite_template(
@@ -2009,11 +2078,10 @@ def _automatic_spanwise_templates(config: dict[str, Any]) -> list[dict[str, Any]
     return []
 
 
-def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
-    config = _automatic_config(mesh_def)
-    if config is None:
-        return mesh_def
-
+def _automatic_curve_sequences_for_zone(
+    config: dict[str, Any],
+    zone_name: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     start_point = int(config.get("start_pt", config.get("start point", 66)))
     chordwise_direction = _as_vector(
         config.get(
@@ -2033,26 +2101,26 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
             config.get("v_blunt_te", [0.0, 0.0, -1.0]),
         )
     )
-    infer_n_subcurvs = bool(config.get("infer_n_subcurvs", True))
-
     spanwise_templates = [
         copy.deepcopy(entry)
-        for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", []))
+        for entry in _iter_curve_entries(config.get("spanwise_curve_sequences", []))
     ]
     if not spanwise_templates:
         spanwise_templates = _automatic_spanwise_templates(config)
     chordwise_templates = [
         copy.deepcopy(entry)
-        for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+        for entry in _iter_curve_entries(config.get("chordwise_curve_sequences", []))
     ]
     if not chordwise_templates:
         chordwise_templates = _automatic_chordwise_templates(
             config, len(spanwise_templates) + 1 if spanwise_templates else None
         )
     if not chordwise_templates:
-        raise ValueError("Automatic curve discovery requires chordwise templates.")
+        raise ValueError(
+            f"Automatic curve discovery in mesh zone {zone_name!r} requires "
+            "chordwise templates."
+        )
 
-    auto_mesh_def = copy.deepcopy(mesh_def)
     n_spanwise_sections = len(spanwise_templates)
     n_airfoil_loops = len(chordwise_templates)
     if n_airfoil_loops != n_spanwise_sections + 1:
@@ -2068,7 +2136,21 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
         spanwise_direction,
         set(),
     )
-    first_loop_split_points = _loop_split_points(first_loop)
+    first_loop_group_sizes = _zone_compound_subcurve_counts(config, first_loop)
+    first_loop_group_count = _entry_group_count(chordwise_templates[0])
+    if (
+        first_loop_group_count is not None
+        and len(first_loop_group_sizes) != first_loop_group_count
+    ):
+        raise ValueError(
+            "n_subcurvs_per_compound_curve defines "
+            f"{len(first_loop_group_sizes)} compound curves, but the first "
+            f"chordwise template defines {first_loop_group_count}."
+        )
+    first_loop_split_points = _loop_split_points_from_group_sizes(
+        first_loop,
+        first_loop_group_sizes,
+    )
     if len(first_loop_split_points) < 2:
         raise ValueError(
             "Could not identify compound curve defining points on the first "
@@ -2219,9 +2301,50 @@ def apply_automatic_curve_sequences(mesh_def: dict[str, Any]) -> dict[str, Any]:
             ]
         spanwise_entries.append(spanwise_entry)
 
-    auto_mesh_def["chordwise_curve_sequences"] = chordwise_entries
-    auto_mesh_def["spanwise_curve_sequences"] = spanwise_entries
-    return auto_mesh_def
+    return chordwise_entries, spanwise_entries
+
+
+def _zone_curve_entries(zone: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    return [copy.deepcopy(entry) for entry in _iter_curve_entries(zone.get(key, []))]
+
+
+def expand_mesh_zones(mesh_def: dict[str, Any]) -> dict[str, Any]:
+    expanded_mesh_def = copy.deepcopy(mesh_def)
+    chordwise_entries: list[dict[str, Any]] = []
+    spanwise_entries: list[dict[str, Any]] = []
+    explicit_entries: list[dict[str, Any]] = []
+
+    for zone_index, zone in enumerate(_mesh_zones(mesh_def), start=1):
+        zone_name = _mesh_zone_name(zone, zone_index)
+        curve_source = _mesh_zone_curve_source(zone, zone_name)
+
+        if curve_source == "automatic":
+            zone_chordwise_entries, zone_spanwise_entries = (
+                _automatic_curve_sequences_for_zone(zone, zone_name)
+            )
+            chordwise_entries.extend(zone_chordwise_entries)
+            spanwise_entries.extend(zone_spanwise_entries)
+            continue
+
+        manual_entries = (
+            _zone_curve_entries(zone, "chordwise_curve_sequences")
+            + _zone_curve_entries(zone, "spanwise_curve_sequences")
+            + _zone_curve_entries(zone, "explicit_curve_sequences")
+        )
+        if not manual_entries:
+            raise ValueError(
+                f"Manual mesh zone {zone_name!r} must define at least one curve "
+                "sequence."
+            )
+
+        chordwise_entries.extend(_zone_curve_entries(zone, "chordwise_curve_sequences"))
+        spanwise_entries.extend(_zone_curve_entries(zone, "spanwise_curve_sequences"))
+        explicit_entries.extend(_zone_curve_entries(zone, "explicit_curve_sequences"))
+
+    expanded_mesh_def["chordwise_curve_sequences"] = chordwise_entries
+    expanded_mesh_def["spanwise_curve_sequences"] = spanwise_entries
+    expanded_mesh_def["explicit_curve_sequences"] = explicit_entries
+    return expanded_mesh_def
 
 
 def _flatten_curve_group(curve_group: int | list[int]) -> list[int]:
@@ -2376,7 +2499,7 @@ def _spanwise_connector_curves(spanwise_entries: Iterable[dict[str, Any]]) -> se
 def _automatic_surfaces_enabled(mesh_def: dict[str, Any]) -> bool:
     if "automatic_transfinite_surfaces" in mesh_def:
         return bool(mesh_def["automatic_transfinite_surfaces"])
-    return _automatic_config(mesh_def) is not None
+    return bool(mesh_def.get("mesh_zones"))
 
 
 def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, Any]:
@@ -3500,6 +3623,21 @@ def normalize_mesh_def(mesh_def: dict[str, Any]) -> dict[str, Any]:
     normalized.update(copy.deepcopy(geometry_def))
     normalized.update(copy.deepcopy(mesh_settings))
 
+    old_curve_sequence_keys = {
+        "automatic_curve_sequences",
+        "chordwise_curve_sequences",
+        "spanwise_curve_sequences",
+        "explicit_curve_sequences",
+    }
+    deprecated_keys = sorted(old_curve_sequence_keys.intersection(normalized))
+    if deprecated_keys:
+        raise ValueError(
+            "Old top-level curve sequence keys are no longer supported: "
+            f"{deprecated_keys}. Define curve sequences inside 'mesh_zones' instead."
+        )
+    if "mesh_zones" not in normalized:
+        raise ValueError("Mesh definition must define curve sequences in 'mesh_zones'.")
+
     return normalized
 
 
@@ -3559,7 +3697,7 @@ def generate_surface_mesh(
                 show_gmsh()
             return
 
-        mesh_def = apply_automatic_curve_sequences(mesh_def)
+        mesh_def = expand_mesh_zones(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
         if generate_2d_mesh:
             mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
