@@ -1019,6 +1019,7 @@ def _trace_airfoil_loop(
     blunt_direction: Sequence[float],
     spanwise_direction: Sequence[float],
     excluded_curves: set[int],
+    expected_blunt_curve_count: int | None = None,
 ) -> TracedLoop:
     current_point = int(start_point)
     pointing = _as_vector(chordwise_direction)
@@ -1030,7 +1031,11 @@ def _trace_airfoil_loop(
     while True:
         if curve_ids:
             blunt_curve = _connecting_curve(current_point, start_point)
-            if blunt_curve is not None and blunt_curve not in local_excluded:
+            if (
+                blunt_curve is not None
+                and blunt_curve not in local_excluded
+                and expected_blunt_curve_count in (None, 1)
+            ):
                 blunt_vector = _point_vector(current_point, start_point)
                 if (
                     abs(
@@ -1058,7 +1063,10 @@ def _trace_airfoil_loop(
                 blunt_curves = []
                 blunt_points = []
             if len(blunt_curves) > 1 and (
-                _has_only_simple_intermediate_points(blunt_points)
+                (
+                    _has_only_simple_intermediate_points(blunt_points)
+                    or len(blunt_curves) == expected_blunt_curve_count
+                )
                 and
                 _curve_path_alignment(
                     blunt_curves,
@@ -1331,6 +1339,41 @@ def _loop_all_curve_ids(traced_loop: TracedLoop) -> list[int]:
     return traced_loop.curve_ids + traced_loop.blunt_curve_ids
 
 
+def _format_traced_loop_curve_ids(traced_loop: TracedLoop) -> str:
+    return (
+        f"curve_ids={traced_loop.curve_ids}, "
+        f"blunt_curve_ids={traced_loop.blunt_curve_ids}, "
+        f"all_curve_ids={_loop_all_curve_ids(traced_loop)}"
+    )
+
+
+def _format_compound_curve_groups(
+    traced_loop: TracedLoop,
+    group_sizes: list[int],
+) -> str:
+    all_curve_ids = _loop_all_curve_ids(traced_loop)
+    grouped_curve_ids: list[Any] = []
+    curve_index = 0
+    for group_size in group_sizes:
+        if group_size < 1:
+            grouped_curve_ids.append({"invalid_group_size": group_size})
+            continue
+        next_curve_index = curve_index + group_size
+        grouped_curve_ids.append(all_curve_ids[curve_index:next_curve_index])
+        curve_index = next_curve_index
+
+    if curve_index < len(all_curve_ids):
+        grouped_curve_ids.append(
+            {"unassigned_curve_ids": all_curve_ids[curve_index:]}
+        )
+    elif curve_index > len(all_curve_ids):
+        grouped_curve_ids.append(
+            {"missing_curve_count": curve_index - len(all_curve_ids)}
+        )
+
+    return str(grouped_curve_ids)
+
+
 def _loop_split_points(traced_loop: TracedLoop) -> list[int]:
     return [
         point_id
@@ -1352,10 +1395,20 @@ def _zone_compound_subcurve_counts(
             len(traced_loop.blunt_curve_ids)
         ]
 
+    traced_curve_ids = _format_traced_loop_curve_ids(traced_loop)
+    compound_curve_groups = _format_compound_curve_groups(traced_loop, group_sizes)
+
+    if not group_sizes:
+        raise ValueError(
+            "n_subcurvs_per_compound_curve must define at least one compound "
+            f"curve. Got {group_sizes}. Traced first loop: {traced_curve_ids}."
+        )
+
     if any(group_size < 1 for group_size in group_sizes):
         raise ValueError(
             "n_subcurvs_per_compound_curve values must be >= 1: "
-            f"{group_sizes}."
+            f"{group_sizes}. Traced first loop: {traced_curve_ids}. "
+            f"Compound groups from these counts: {compound_curve_groups}."
         )
 
     expected_total = len(traced_loop.curve_ids) + len(traced_loop.blunt_curve_ids)
@@ -1363,16 +1416,28 @@ def _zone_compound_subcurve_counts(
         raise ValueError(
             "n_subcurvs_per_compound_curve must sum to the number of curves in "
             f"the first traced loop ({expected_total}), got {sum(group_sizes)}: "
-            f"{group_sizes}."
+            f"{group_sizes}. Traced first loop: {traced_curve_ids}. "
+            f"Compound groups from these counts: {compound_curve_groups}."
         )
     if group_sizes[-1] != len(traced_loop.blunt_curve_ids):
         raise ValueError(
             "The final n_subcurvs_per_compound_curve value must describe the "
             f"blunt trailing-edge group ({len(traced_loop.blunt_curve_ids)}), "
-            f"got {group_sizes[-1]}."
+            f"got {group_sizes[-1]}. Traced first loop: {traced_curve_ids}. "
+            f"Compound groups from these counts: {compound_curve_groups}."
         )
 
     return group_sizes
+
+
+def _explicit_blunt_curve_count(config: dict[str, Any]) -> int | None:
+    for key in ("n_subcurvs_per_compound_curve", "n_subcurvs"):
+        if key in config:
+            group_sizes = [int(value) for value in config[key]]
+            if group_sizes:
+                return group_sizes[-1]
+            return None
+    return None
 
 
 def _loop_split_points_from_group_sizes(
@@ -2135,6 +2200,7 @@ def _automatic_curve_sequences_for_zone(
         blunt_direction,
         spanwise_direction,
         set(),
+        _explicit_blunt_curve_count(config),
     )
     first_loop_group_sizes = _zone_compound_subcurve_counts(config, first_loop)
     first_loop_group_count = _entry_group_count(chordwise_templates[0])
@@ -2145,7 +2211,10 @@ def _automatic_curve_sequences_for_zone(
         raise ValueError(
             "n_subcurvs_per_compound_curve defines "
             f"{len(first_loop_group_sizes)} compound curves, but the first "
-            f"chordwise template defines {first_loop_group_count}."
+            f"chordwise template defines {first_loop_group_count}. Traced "
+            f"first loop: {_format_traced_loop_curve_ids(first_loop)}. "
+            "Compound groups from these counts: "
+            f"{_format_compound_curve_groups(first_loop, first_loop_group_sizes)}."
         )
     first_loop_split_points = _loop_split_points_from_group_sizes(
         first_loop,
@@ -2502,6 +2571,23 @@ def _automatic_surfaces_enabled(mesh_def: dict[str, Any]) -> bool:
     return bool(mesh_def.get("mesh_zones"))
 
 
+def _surface_meshing_algorithm_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
+    entries = mesh_def.get("surface_meshing_algorithms", [])
+    if not entries:
+        return set()
+    if not isinstance(entries, list):
+        raise TypeError("surface_meshing_algorithms must be a list.")
+
+    surface_ids = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise TypeError(
+                "Each surface_meshing_algorithms entry must be an object."
+            )
+        surface_ids.update(int(surface_id) for surface_id in entry.get("surfaces", []))
+    return surface_ids
+
+
 def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, Any]:
     if not _automatic_surfaces_enabled(mesh_def):
         return mesh_def
@@ -2530,8 +2616,12 @@ def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, 
     transfinite_curves = chordwise_curves.union(spanwise_curves)
     transfinite_surfaces = []
     transfinite_surface_ids = set()
+    algorithm_surface_ids = _surface_meshing_algorithm_surface_ids(mesh_def)
 
     for _, surface_id in gmsh.model.getEntities(2):
+        if surface_id in algorithm_surface_ids:
+            continue
+
         boundary_curves = set(_surface_boundary_curves(surface_id))
         boundary_chordwise_curves = boundary_curves.intersection(chordwise_curves)
         boundary_spanwise_curves = boundary_curves.intersection(spanwise_curves)
@@ -3224,7 +3314,10 @@ def _align_opposite_chordwise_edge_divisions(
 
 
 def _unstructured_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
-    return {int(surface_id) for surface_id in mesh_def.get("unstructured_surfaces", [])}
+    return {
+        int(surface_id)
+        for surface_id in mesh_def.get("unstructured_surfaces", [])
+    }.union(_surface_meshing_algorithm_surface_ids(mesh_def))
 
 
 def _transfinite_surface_definitions(mesh_def: dict[str, Any]) -> dict[int, dict[str, Any]]:
@@ -3236,23 +3329,9 @@ def apply_transfinite_surfaces(mesh_def: dict[str, Any]) -> None:
     unstructured_surfaces = _unstructured_surface_ids(mesh_def)
     surface_definitions = _transfinite_surface_definitions(mesh_def)
 
-    for _, surface_id in gmsh.model.getEntities(2):
+    for surface_id, surface in surface_definitions.items():
         if surface_id in unstructured_surfaces:
             continue
-
-        surface = surface_definitions.get(surface_id, {})
-        explicitly_defined = surface_id in surface_definitions
-        if not explicitly_defined:
-            corner_points = _surface_corner_points(surface_id)
-            if len(corner_points) > 4:
-                warnings.warn(
-                    f"Skipping automatic transfinite surface {surface_id}: "
-                    f"surface has {len(corner_points)} corners {corner_points}. "
-                    f"Add it explicitly to transfinite_surfaces or list it in "
-                    f"unstructured_surfaces.",
-                    stacklevel=2,
-                )
-                continue
 
         arrangement = str(surface.get("Arrangement", "Left")).capitalize()
         boundary_points = [int(point) for point in surface.get("boundary points", [])]
@@ -3589,6 +3668,20 @@ def show_gmsh() -> None:
     gmsh.fltk.run()
 
 
+def show_geometry_after_error(error: Exception) -> None:
+    """Open Gmsh with geometry only, preserving the original failure."""
+    print(
+        "Mesh generation failed. Opening Gmsh with the imported geometry for "
+        f"inspection before re-raising the error: {error}"
+    )
+    try:
+        gmsh.model.mesh.clear()
+        gmsh.model.occ.synchronize()
+        show_gmsh()
+    except Exception as show_error:
+        print(f"Could not open Gmsh for error inspection: {show_error}")
+
+
 def load_mesh_def(mesh_def_file: Path) -> dict[str, Any]:
     with mesh_def_file.open("r", encoding="utf-8") as file:
         return normalize_mesh_def(json.load(file))
@@ -3715,6 +3808,10 @@ def generate_surface_mesh(
 
         if show:
             show_gmsh()
+    except Exception as error:
+        if show:
+            show_geometry_after_error(error)
+        raise
     finally:
         gmsh.finalize()
 

@@ -31,8 +31,8 @@ def calculate_flat_plate_turbulent_y1(
         y1: m
     """
     reynolds_number = density * freestream_velocity * boundary_layer_length / dynamic_viscosity
-    skin_friction_coefficient = 0.0576 / reynolds_number**0.2
-    wall_shear_stress = 0.5 * density * freestream_velocity**2 * skin_friction_coefficient
+    skin_friction_coefficient = 0.0576 / reynolds_number ** 0.2
+    wall_shear_stress = 0.5 * density * freestream_velocity ** 2 * skin_friction_coefficient
     friction_velocity = np.sqrt(wall_shear_stress / density)
     y1 = desired_yplus * dynamic_viscosity / (density * friction_velocity)
 
@@ -57,7 +57,7 @@ def calculate_standard_atmosphere_density(altitude=0.0):
 
     temperature = sea_level_temperature - temperature_lapse_rate * altitude
     pressure = sea_level_pressure * (
-        temperature / sea_level_temperature
+            temperature / sea_level_temperature
     ) ** (gravity / (gas_constant_air * temperature_lapse_rate))
 
     return pressure / (gas_constant_air * temperature)
@@ -65,7 +65,7 @@ def calculate_standard_atmosphere_density(altitude=0.0):
 
 def calculate_target_lift_coefficient(aircraft_mass, wing_area, freestream_velocity, density):
     gravity = 9.80665
-    dynamic_pressure = 0.5 * density * freestream_velocity**2
+    dynamic_pressure = 0.5 * density * freestream_velocity ** 2
 
     return aircraft_mass * gravity / (dynamic_pressure * wing_area)
 
@@ -93,8 +93,8 @@ def calc_ncrit_from_fsti(turbulence_intensity_perc=0.05):
     a3 = 1.5920
     a4 = -0.3532
 
-    tau = 2.5 * np.tanh(turbulence_intensity_perc/2.5)
-    Ncrit = a0 + a1 * tau + a2 * tau**2 + a3 * tau**3 + a4 * tau**4
+    tau = 2.5 * np.tanh(turbulence_intensity_perc / 2.5)
+    Ncrit = a0 + a1 * tau + a2 * tau ** 2 + a3 * tau ** 3 + a4 * tau ** 4
 
     return Ncrit
 
@@ -216,7 +216,7 @@ def geometric_spacing_values(initial_spacing, growth_rate, n_values, max_spacing
     if n_values <= 0:
         return []
 
-    spacings = [initial_spacing * growth_rate**idx for idx in range(n_values)]
+    spacings = [initial_spacing * growth_rate ** idx for idx in range(n_values)]
     if max_spacing is not None:
         spacings = [min(spacing, max_spacing) for spacing in spacings]
 
@@ -276,7 +276,7 @@ def read_highest_yz_curvature_vertex(vertices_coords_file, fallback_vertex=None)
 
         twice_triangle_area = abs(np.cross(previous_vector, next_vector))
         curvatures[idx] = 2 * twice_triangle_area / (
-            previous_length * next_length * chord_length
+                previous_length * next_length * chord_length
         )
 
     if not np.any(np.isfinite(curvatures)):
@@ -289,10 +289,8 @@ def read_highest_yz_curvature_vertex(vertices_coords_file, fallback_vertex=None)
     return tuple(coords[int(np.nanargmax(curvatures))])
 
 
-
-
 def define_and_run(project_cgns_file_name=None, project_step_file_name=None, project_id=None, name=None,
-                   symm_face = "body00001_face00003", U_inf=None, alpha_deg=0., half_model=True,
+                   symm_face="body00001_face00003", U_inf=None, alpha_deg=0., half_model=True,
                    y1_fac=1., surf_mesh_lvl=0, enable_volume_refinements=True,
                    enable_alpha_controller=False, target_lift_coefficient=None,
                    alpha_controller_kp=0.2, alpha_controller_ki=0.002,
@@ -305,7 +303,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                    generate_surf_mesh=True, generate_vol_mesh=True,
                    boundary_layer_growth_rate=1.1,
                    n_timesteps=2000,
-                   run_flag = False):
+                   run_flag=False):
     """
     Define a V3 Flow360 setup and either prepare the next mesh step or run the case.
 
@@ -356,8 +354,8 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # global parameters
     altitude = 0
     # mesh parameters
-    surf_mesh_refine_factor = 2**(surf_mesh_lvl/2)       # Surface mesh size multiplier
-    target_yplus_wall_modeled = 0.67    # Target y-plus value for wall-resolved meshing
+    surf_mesh_refine_factor = 2 ** (surf_mesh_lvl / 2)  # Surface mesh size multiplier
+    target_yplus_wall_modeled = 0.67  # Target y-plus value for wall-resolved meshing
 
     turbulence_intensity_perc = 0.05
 
@@ -399,7 +397,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     wake_refinement_delta_x = 100
     wake_refinement_box_overlap = 5
     wake_refinement_spanwise_overlap = 20
-    wake_refinement_initial_spacing = surf_mesh_refine_factor * 20 * 3**(1/2)
+    wake_refinement_initial_spacing = surf_mesh_refine_factor * 20 * 3 ** (1 / 2)
     wake_refinement_spacing_growth_rate = 1.2
     wake_refinement_max_spacing = None
 
@@ -410,7 +408,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     winglet_tip_refinement_initial_diameter = 100
     winglet_tip_refinement_growth_angle_deg = 5
     winglet_tip_refinement_cylinder_overlap = 5
-    winglet_tip_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
+    winglet_tip_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3 ** (1 / 2)
     winglet_tip_refinement_spacing_growth_rate = 1.2
     winglet_tip_refinement_max_spacing = None
 
@@ -422,12 +420,12 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     winglet_radius_refinement_initial_diameter = 100
     winglet_radius_refinement_growth_angle_deg = 5
     winglet_radius_refinement_cylinder_overlap = 5
-    winglet_radius_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3**(1/2)
+    winglet_radius_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3 ** (1 / 2)
     winglet_radius_refinement_spacing_growth_rate = 1.2
     winglet_radius_refinement_max_spacing = None
 
-    ns_solver_tolerance = 1.e-7            # Navier-Stokes and turbulence model solver tolerance
-    turb_solver_tolerance = 1.e-6          # turbulence model solver tolerance
+    ns_solver_tolerance = 1.e-7  # Navier-Stokes and turbulence model solver tolerance
+    turb_solver_tolerance = 1.e-6  # turbulence model solver tolerance
     if enable_alpha_controller and alpha_controller_start_pseudo_step >= n_timesteps:
         raise ValueError(
             "alpha_controller_start_pseudo_step must be smaller than n_timesteps "
@@ -439,7 +437,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
         freestream_velocity=U_inf,
         desired_yplus=target_yplus_wall_modeled,
     )
-    global_y1 = y1_fac * flat_plate_y1 * u.m    # First layer thickness for boundary layer meshing (wall-resolved)
+    global_y1 = y1_fac * flat_plate_y1 * u.m  # First layer thickness for boundary layer meshing (wall-resolved)
 
     # solver parameters
     surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec", "mutRatio", "solutionTransition"]
@@ -456,7 +454,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
     if surf_mesh_lvl != 0:
         sim_name += "_mshlvl{0:d}".format(surf_mesh_lvl)
-
 
     ###############################
     # Preface: Create a new project
@@ -498,7 +495,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
         geo = project.geometry  # Access the geometry of the project
 
         # Display available groupings in the geometry (helpful for identifying group names)
-        #geo.show_available_groupings(verbose_mode=True)
+        # geo.show_available_groupings(verbose_mode=True)
         #####################################################################################
         # Group edges and faces
         geo.group_faces_by_tag("faceId")
@@ -513,7 +510,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # 1) Define operating conditions
     ################################
     condition = fl.AerospaceCondition(velocity_magnitude=U_inf * u.m / u.s, alpha=alpha_deg * u.deg, beta=0 * u.deg)
-
 
     ################################
     # 2) Define mesh
@@ -539,14 +535,14 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                          "geo_item": [LE_edges, TE_edges],
                          "mesh size": [surf_mesh_refine_factor * 0.5 * u.mm,  # Leading edge refinement
                                        surf_mesh_refine_factor * 0.2 * u.mm,  # Trailing edge refinement
-                         ]}
+                                       ]}
         df_mesh_refinement = pd.DataFrame(surf_msh_data)
         # Height-based edge refinement
         for idx, data in df_mesh_refinement.iterrows():
             edge_refinement = fl.SurfaceEdgeRefinement(name=data.iloc[0],
-                edges=[data.iloc[1]],
-                method=fl.HeightBasedRefinement(value=data.iloc[2]),
-            )
+                                                       edges=[data.iloc[1]],
+                                                       method=fl.HeightBasedRefinement(value=data.iloc[2]),
+                                                       )
             refinements.append(edge_refinement)
 
     turbulator_boxes = list()
@@ -565,12 +561,12 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
         for file in wake_refinement_files:
             h_box = 0
             for i_row, x in enumerate(np.arange(0, wake_refinement_length, wake_refinement_delta_x)):
-                h_box += wake_refinement_delta_x * 2*np.sin(np.deg2rad(wake_refinement_angle_deg/2))
+                h_box += wake_refinement_delta_x * 2 * np.sin(np.deg2rad(wake_refinement_angle_deg / 2))
                 boxes = make_boxes(
                     vertices_coords_file=file,
                     x_size=wake_refinement_delta_x + wake_refinement_box_overlap,
                     z_size=h_box + wake_refinement_box_overlap,
-                    center_offset=(x + wake_refinement_delta_x/2, 0, -0.5),
+                    center_offset=(x + wake_refinement_delta_x / 2, 0, -0.5),
                     name_prefix="wakebox_row{0:0d}".format(i_row),
                     segment_overlap=wake_refinement_spanwise_overlap,
                 )
@@ -648,34 +644,35 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                 )
             )
 
-
     # make mesh parameters
     mesh_params = fl.MeshingParams(defaults=mesh_defaults,
                                    volume_zones=[far_field_zone],
-                                   refinements=refinements)
-
+                                   refinements=refinements if len(refinements) > 0 else None)
 
     ###########################
     # 4) Flow solver parameters
     ###########################
 
-    moment_ref_lengths = (wingspan/2, mac, wingspan/2)
+    moment_ref_lengths = (wingspan / 2, mac, wingspan / 2)
 
     ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 1.e-6, 0) * u.m,
                                         moment_length=moment_ref_lengths * u.mm,
-                                        area= wing_area/2 * u.m**2)
+                                        area=wing_area / 2 * u.m ** 2)
 
     ncrit = calc_ncrit_from_fsti(turbulence_intensity_perc)
 
-    navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=ns_solver_tolerance, linear_solver=fl.KrylovLinearSolver())
-    transition_solver = fl.TransitionModelSolver(N_crit=ncrit, trip_regions=turbulator_boxes)
+    navier_stokes_solver = fl.NavierStokesSolver(absolute_tolerance=ns_solver_tolerance,
+                                                 kappa_MUSCL=0.33,
+                                                 linear_solver=fl.KrylovLinearSolver())
+    transition_solver = fl.TransitionModelSolver(N_crit=ncrit,
+                                                 trip_regions=turbulator_boxes if len(turbulator_boxes) > 0 else None)
     turbulence_solver = fl.SpalartAllmaras(absolute_tolerance=turb_solver_tolerance)
 
     fl_models = [fl.Wall(surfaces=wall_surfaces, use_wall_function=None),
-                         fl.Freestream(surfaces=[far_field_zone.farfield]),
-                         fl.Fluid(navier_stokes_solver=navier_stokes_solver,
-                                  transition_model_solver=transition_solver,
-                                  turbulence_model_solver=turbulence_solver)]
+                 fl.Freestream(surfaces=[far_field_zone.farfield]),
+                 fl.Fluid(navier_stokes_solver=navier_stokes_solver,
+                          transition_model_solver=transition_solver,
+                          turbulence_model_solver=turbulence_solver)]
 
     if half_model:
         fl_models.append(fl.SymmetryPlane(surfaces=[far_field_zone.symmetry_planes]))
@@ -710,9 +707,11 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
                                      operating_condition=condition,
                                      time_stepping=fl.Steady(max_steps=n_timesteps),
                                      models=fl_models,
-                                     outputs=[fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests, write_single_file=True),
-                                              fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
-                                                              output_fields=vol_output_requests)]
+                                     outputs=[
+                                         fl.SurfaceOutput(surfaces=wall_surfaces, output_fields=surf_output_requests,
+                                                          write_single_file=True),
+                                         fl.VolumeOutput(name="VolumeOutput", output_format="paraview",
+                                                         output_fields=vol_output_requests)]
 
                                      )
         if user_defined_dynamics:
@@ -780,7 +779,7 @@ def main():
     run = False
     n_test_cases = None
     enable_volume_refinements = True
-    boundary_layer_growth_rate = 1.1
+    boundary_layer_growth_rate = 1.097
     enable_alpha_controller = True
     aircraft_mass = 600.0
     alpha_controller_kp = 0.2
@@ -789,9 +788,10 @@ def main():
 
     results_dir = "C:/WDIR/flow360"
 
-    #variant = "FlapletV2 WKS"
-    #variant = "Original WKS"
-    variant = "FlapletV2 WK+2"
+    # variant = "FlapletV2 WKS"
+    variant = "Original WKS"
+    # variant = "FlapletV2 WK+2"
+    # variant = "Original WK+2"
 
     sim_name = "V3 " + variant
 
@@ -805,7 +805,6 @@ def main():
     wing_area = 10.84
     U_inf_range = None
 
-
     variant_configs = {
         "Original WKS": {
             "project_step_file_name": None,
@@ -818,11 +817,11 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WKS.dat"],
             "target_lift_coefficient_range": [0.5],
             "alpha_deg_range": [3.0],
-            "n_timesteps": 2000,
+            "n_timesteps": 4000,
         },
         "Original WK+2": {
             "project_step_file_name": None,
-            "project_cgns_file_name": None,
+            "project_cgns_file_name": "Ventus_Original_WK+2.cgns",
             "project_id": None,
             "symm_face": "symm face",
             "LE_edge_list": [],
@@ -831,7 +830,7 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 2000,
+            "n_timesteps": 4000,
         },
         "FlapletV2 WKS": {
             "project_step_file_name": None,
@@ -847,7 +846,7 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WKS.dat"],
             "target_lift_coefficient_range": [0.5],
             "alpha_deg_range": [3.0],
-            "n_timesteps": 2000,
+            "n_timesteps": 4000,
         },
         "FlapletV2 WK+2": {
             "project_step_file_name": None,
@@ -862,7 +861,7 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 2000,
+            "n_timesteps": 4000,
         },
     }
 
@@ -883,7 +882,6 @@ def main():
     target_lift_coefficient_range = variant_config["target_lift_coefficient_range"]
     alpha_deg_range = variant_config["alpha_deg_range"]
     n_timesteps = variant_config["n_timesteps"]
-
 
     has_airspeed_range = U_inf_range is not None
     has_target_lift_coefficient_range = target_lift_coefficient_range is not None

@@ -49,8 +49,8 @@
         ]
       },
       {
-        "name": "winglet quasi-structured quad surfaces",
-        "algorithm": "quasi-structured quad",
+        "name": "flap gap section",
+        "algorithm": "frontal-delaunay for quads",
         "surfaces": [
           48,
           45,
