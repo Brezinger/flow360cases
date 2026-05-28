@@ -71,11 +71,7 @@
           1.0,
           0.0
         ],
-        "blunt_te_direction": [
-          0.0,
-          0.0,
-          -1.0
-        ],
+        "has_blunt_te": true,
         "n_subcurvs_per_compound_curve": [
           1,
           1,

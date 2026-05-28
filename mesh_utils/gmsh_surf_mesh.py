@@ -832,7 +832,6 @@ def _local_blunt_direction(
     first_curve_end_point: int,
     spanwise_direction: Sequence[float],
     excluded_curves: set[int],
-    fallback_direction: Sequence[float],
 ) -> list[float]:
     first_tangent = _curve_tangent_towards_point(
         first_curve_id,
@@ -852,7 +851,10 @@ def _local_blunt_direction(
 
     blunt_direction = _cross(spanwise_tangent, first_tangent)
     if _vector_norm(blunt_direction) <= 0.0:
-        return _as_vector(fallback_direction)
+        raise ValueError(
+            "Cannot infer blunt trailing-edge direction from parallel chordwise "
+            f"and spanwise tangents at point {start_point}."
+        )
     return blunt_direction
 
 
@@ -1016,14 +1018,14 @@ def _known_intermediate_points(
 def _trace_airfoil_loop(
     start_point: int,
     chordwise_direction: Sequence[float],
-    blunt_direction: Sequence[float],
+    has_blunt_te: bool,
     spanwise_direction: Sequence[float],
     excluded_curves: set[int],
     expected_blunt_curve_count: int | None = None,
 ) -> TracedLoop:
     current_point = int(start_point)
     pointing = _as_vector(chordwise_direction)
-    effective_blunt_direction = _as_vector(blunt_direction)
+    effective_blunt_direction = None
     curve_ids = []
     points = [current_point]
     local_excluded = set(excluded_curves)
@@ -1031,51 +1033,75 @@ def _trace_airfoil_loop(
     while True:
         if curve_ids:
             blunt_curve = _connecting_curve(current_point, start_point)
-            if (
-                blunt_curve is not None
-                and blunt_curve not in local_excluded
-                and expected_blunt_curve_count in (None, 1)
-            ):
-                blunt_vector = _point_vector(current_point, start_point)
-                if (
-                    abs(
-                        _dot(
-                            _normalized(blunt_vector),
-                            _normalized(effective_blunt_direction),
+            if blunt_curve is not None and blunt_curve not in local_excluded:
+                if not has_blunt_te:
+                    return TracedLoop(
+                        curve_ids + [blunt_curve],
+                        points + [start_point],
+                        [],
+                        [],
+                    )
+                if expected_blunt_curve_count in (None, 1):
+                    blunt_vector = _point_vector(current_point, start_point)
+                    if (
+                        abs(
+                            _dot(
+                                _normalized(blunt_vector),
+                                _normalized(effective_blunt_direction),
+                            )
                         )
+                        > 0.2
+                    ):
+                        return TracedLoop(
+                            curve_ids,
+                            points,
+                            [blunt_curve],
+                            [current_point, start_point],
+                        )
+
+            if has_blunt_te:
+                try:
+                    blunt_curves, blunt_points = _curve_path_between_points(
+                        current_point,
+                        start_point,
+                        local_excluded,
+                    )
+                except ValueError:
+                    blunt_curves = []
+                    blunt_points = []
+                if len(blunt_curves) > 1 and (
+                    (
+                        _has_only_simple_intermediate_points(blunt_points)
+                        or len(blunt_curves) == expected_blunt_curve_count
+                    )
+                    and
+                    _curve_path_alignment(
+                        blunt_curves,
+                        blunt_points,
+                        effective_blunt_direction,
                     )
                     > 0.2
                 ):
-                    return TracedLoop(
-                        curve_ids,
-                        points,
-                        [blunt_curve],
-                        [current_point, start_point],
+                    return TracedLoop(curve_ids, points, blunt_curves, blunt_points)
+            else:
+                try:
+                    closing_curves, closing_points = _curve_path_between_points(
+                        current_point,
+                        start_point,
+                        local_excluded,
                     )
-
-            try:
-                blunt_curves, blunt_points = _curve_path_between_points(
-                    current_point,
-                    start_point,
-                    local_excluded,
-                )
-            except ValueError:
-                blunt_curves = []
-                blunt_points = []
-            if len(blunt_curves) > 1 and (
-                (
-                    _has_only_simple_intermediate_points(blunt_points)
-                    or len(blunt_curves) == expected_blunt_curve_count
-                )
-                and
-                _curve_path_alignment(
-                    blunt_curves,
-                    blunt_points,
-                    effective_blunt_direction,
-                )
-                > 0.2
-            ):
-                return TracedLoop(curve_ids, points, blunt_curves, blunt_points)
+                except ValueError:
+                    closing_curves = []
+                    closing_points = []
+                if len(closing_curves) > 1 and _has_only_simple_intermediate_points(
+                    closing_points
+                ):
+                    return TracedLoop(
+                        curve_ids + closing_curves,
+                        points + closing_points[1:],
+                        [],
+                        [],
+                    )
 
         selected = _select_adjacent_curve(
             current_point,
@@ -1094,14 +1120,13 @@ def _trace_airfoil_loop(
         curve_ids.append(curve_id)
         points.append(next_point)
         local_excluded.add(abs(curve_id))
-        if len(curve_ids) == 1:
+        if len(curve_ids) == 1 and has_blunt_te:
             effective_blunt_direction = _local_blunt_direction(
                 start_point,
                 curve_id,
                 next_point,
                 spanwise_direction,
                 local_excluded,
-                blunt_direction,
             )
         tangent = _curve_tangent_for_traversal(curve_id, next_point, current_point)
         current_point = next_point
@@ -1391,9 +1416,9 @@ def _zone_compound_subcurve_counts(
             group_sizes = [int(value) for value in config[key]]
             break
     else:
-        group_sizes = [1] * len(traced_loop.curve_ids) + [
-            len(traced_loop.blunt_curve_ids)
-        ]
+        group_sizes = [1] * len(traced_loop.curve_ids)
+        if traced_loop.blunt_curve_ids:
+            group_sizes.append(len(traced_loop.blunt_curve_ids))
 
     traced_curve_ids = _format_traced_loop_curve_ids(traced_loop)
     compound_curve_groups = _format_compound_curve_groups(traced_loop, group_sizes)
@@ -1420,12 +1445,13 @@ def _zone_compound_subcurve_counts(
             f"Compound groups from these counts: {compound_curve_groups}."
         )
     if group_sizes[-1] != len(traced_loop.blunt_curve_ids):
-        raise ValueError(
-            "The final n_subcurvs_per_compound_curve value must describe the "
-            f"blunt trailing-edge group ({len(traced_loop.blunt_curve_ids)}), "
-            f"got {group_sizes[-1]}. Traced first loop: {traced_curve_ids}. "
-            f"Compound groups from these counts: {compound_curve_groups}."
-        )
+        if traced_loop.blunt_curve_ids:
+            raise ValueError(
+                "The final n_subcurvs_per_compound_curve value must describe the "
+                f"blunt trailing-edge group ({len(traced_loop.blunt_curve_ids)}), "
+                f"got {group_sizes[-1]}. Traced first loop: {traced_curve_ids}. "
+                f"Compound groups from these counts: {compound_curve_groups}."
+            )
 
     return group_sizes
 
@@ -1438,6 +1464,26 @@ def _explicit_blunt_curve_count(config: dict[str, Any]) -> int | None:
                 return group_sizes[-1]
             return None
     return None
+
+
+def _has_blunt_te(config: dict[str, Any]) -> bool:
+    return bool(config.get("has_blunt_te", False))
+
+
+def _zone_direction(
+    config: dict[str, Any],
+    primary_key: str,
+    alternate_key: str,
+    legacy_key: str,
+    default: Sequence[float],
+) -> list[float]:
+    if primary_key in config:
+        return _as_vector(config[primary_key])
+    if alternate_key in config:
+        return _as_vector(config[alternate_key])
+    if legacy_key in config:
+        return _as_vector(config[legacy_key])
+    return _as_vector(default)
 
 
 def _loop_split_points_from_group_sizes(
@@ -1608,12 +1654,13 @@ def _group_loop_curves_by_split_points(
         raise ValueError(
             f"Could not close chordwise curve group at split points {split_points}."
         )
-    curve_groups.append(
-        traced_loop.blunt_curve_ids[0]
-        if len(traced_loop.blunt_curve_ids) == 1
-        else list(traced_loop.blunt_curve_ids)
-    )
-    group_sizes.append(len(traced_loop.blunt_curve_ids))
+    if traced_loop.blunt_curve_ids:
+        curve_groups.append(
+            traced_loop.blunt_curve_ids[0]
+            if len(traced_loop.blunt_curve_ids) == 1
+            else list(traced_loop.blunt_curve_ids)
+        )
+        group_sizes.append(len(traced_loop.blunt_curve_ids))
     if len(curve_groups) != len(split_points):
         raise ValueError(
             f"Split points define {len(split_points)} groups, but traced loop "
@@ -1670,7 +1717,7 @@ def _trace_airfoil_loop_through_split_points(
     split_points: list[int],
     forbidden_curves: set[int],
     spanwise_direction: Sequence[float] | None = None,
-    blunt_direction: Sequence[float] | None = None,
+    has_blunt_te: bool = False,
     known_loop_points: set[int] | None = None,
 ) -> TracedLoop:
     split_points = _unique_ordered(split_points)
@@ -1689,7 +1736,7 @@ def _trace_airfoil_loop_through_split_points(
         points.extend(path_points[1:])
         local_forbidden.update(abs(curve_id) for curve_id in path_curves)
 
-    if curve_ids and spanwise_direction is not None and blunt_direction is not None:
+    if curve_ids and spanwise_direction is not None and has_blunt_te:
         closing_curve = _connecting_curve(split_points[-1], split_points[0])
         if closing_curve is not None and closing_curve not in local_forbidden:
             local_blunt_direction = _local_blunt_direction(
@@ -1698,7 +1745,6 @@ def _trace_airfoil_loop_through_split_points(
                 points[1],
                 spanwise_direction,
                 local_forbidden,
-                blunt_direction,
             )
             closing_vector = _point_vector(split_points[-1], split_points[0])
             if (
@@ -1720,6 +1766,11 @@ def _trace_airfoil_loop_through_split_points(
     closing_curves, closing_points = _curve_path_between_points(
         split_points[-1], split_points[0], local_forbidden
     )
+    if not has_blunt_te:
+        curve_ids.extend(closing_curves)
+        points.extend(closing_points[1:])
+        return TracedLoop(curve_ids, points, [], [])
+
     known_intermediate_points = _known_intermediate_points(
         closing_points,
         known_loop_points or set(split_points),
@@ -1732,7 +1783,7 @@ def _trace_airfoil_loop_through_split_points(
         )
     if (
         spanwise_direction is not None
-        and blunt_direction is not None
+        and has_blunt_te
         and curve_ids
     ):
         local_blunt_direction = _local_blunt_direction(
@@ -1741,7 +1792,6 @@ def _trace_airfoil_loop_through_split_points(
             points[1],
             spanwise_direction,
             local_forbidden,
-            blunt_direction,
         )
         if (
             _curve_path_alignment(
@@ -2148,24 +2198,21 @@ def _automatic_curve_sequences_for_zone(
     zone_name: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     start_point = int(config.get("start_pt", config.get("start point", 66)))
-    chordwise_direction = _as_vector(
-        config.get(
-            "chordwise_direction",
-            config.get("v_chordwise", [-1.0, 0.0, 0.0]),
-        )
+    chordwise_direction = _zone_direction(
+        config,
+        "chordwise_direction",
+        "circumferential_direction",
+        "v_chordwise",
+        [-1.0, 0.0, 0.0],
     )
-    spanwise_direction = _as_vector(
-        config.get(
-            "spanwise_direction",
-            config.get("v_spanwise", [0.0, 1.0, 0.0]),
-        )
+    spanwise_direction = _zone_direction(
+        config,
+        "spanwise_direction",
+        "longitudinal_direction",
+        "v_spanwise",
+        [0.0, 1.0, 0.0],
     )
-    blunt_direction = _as_vector(
-        config.get(
-            "blunt_te_direction",
-            config.get("v_blunt_te", [0.0, 0.0, -1.0]),
-        )
-    )
+    has_blunt_te = _has_blunt_te(config)
     spanwise_templates = [
         copy.deepcopy(entry)
         for entry in _iter_curve_entries(config.get("spanwise_curve_sequences", []))
@@ -2197,10 +2244,10 @@ def _automatic_curve_sequences_for_zone(
     first_loop = _trace_airfoil_loop(
         start_point,
         chordwise_direction,
-        blunt_direction,
+        has_blunt_te,
         spanwise_direction,
         set(),
-        _explicit_blunt_curve_count(config),
+        _explicit_blunt_curve_count(config) if has_blunt_te else None,
     )
     first_loop_group_sizes = _zone_compound_subcurve_counts(config, first_loop)
     first_loop_group_count = _entry_group_count(chordwise_templates[0])
@@ -2258,7 +2305,7 @@ def _automatic_curve_sequences_for_zone(
                 loop_split_points,
                 chordwise_curve_set,
                 loop_spanwise_direction,
-                blunt_direction,
+                has_blunt_te,
                 known_loop_points,
             )
         except ValueError as exc:
