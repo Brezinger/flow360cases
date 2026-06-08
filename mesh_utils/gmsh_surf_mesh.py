@@ -3798,7 +3798,7 @@ def mesh_def_step_file(mesh_def: dict[str, Any], mesh_def_file: Path) -> Path:
 def generate_surface_mesh(
     step_file: Path,
     mesh_def: dict[str, Any],
-    output_file: Path,
+    output_file: Path | None,
     *,
     recombine: bool = True,
     mesh_format: str = "msh2",
@@ -3809,7 +3809,7 @@ def generate_surface_mesh(
     try:
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber("Mesh.SaveAll", 1)
-        if output_file.suffix.lower() == ".msh":
+        if output_file is not None and output_file.suffix.lower() == ".msh":
             gmsh.option.setNumber(
                 "Mesh.MshFileVersion", 2.2 if mesh_format == "msh2" else 4.1
         )
@@ -3851,7 +3851,8 @@ def generate_surface_mesh(
 
         if generate_2d_mesh:
             apply_export_surface_names(mesh_def)
-        gmsh.write(str(output_file))
+        if output_file is not None:
+            gmsh.write(str(output_file))
 
         if show:
             show_gmsh()
@@ -3884,6 +3885,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Output mesh path. Defaults to <step-file>.cgns.",
+    )
+    parser.add_argument(
+        "--no-write",
+        action="store_true",
+        help="Generate the mesh but do not write an output file.",
     )
     parser.add_argument(
         "--recombine",
@@ -3921,7 +3927,7 @@ def main() -> None:
     args = parse_args()
     mesh_def = load_mesh_def(args.mesh_def)
     step_file = args.step or mesh_def_step_file(mesh_def, args.mesh_def)
-    output_file = args.out or step_file.with_suffix(".cgns")
+    output_file = None if args.no_write else (args.out or step_file.with_suffix(".cgns"))
 
     generate_surface_mesh(
         step_file,
@@ -3935,6 +3941,8 @@ def main() -> None:
 
     if args.no_mesh:
         print("Imported geometry without generating a mesh.")
+    elif output_file is None:
+        print("Generated mesh without writing an output file.")
     else:
         print(f"Wrote surface mesh to {output_file}")
 
