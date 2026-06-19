@@ -2577,6 +2577,31 @@ def _tag_zone_curve_entries(
     return tagged_entries
 
 
+def _tag_zone_surface_entries(
+    entries: list[dict[str, Any]],
+    *,
+    zone_name: str,
+) -> list[dict[str, Any]]:
+    tagged_entries = []
+    for entry in entries:
+        tagged_entry = copy.deepcopy(entry)
+        tagged_entry["_mesh_zone_name"] = zone_name
+        tagged_entries.append(tagged_entry)
+    return tagged_entries
+
+
+def _mesh_zone_name_from_entry(entry: dict[str, Any]) -> str | None:
+    zone_name = entry.get("_mesh_zone_name")
+    return None if zone_name is None else str(zone_name)
+
+
+def _raise_with_mesh_zone(entry: dict[str, Any], error: Exception) -> None:
+    zone_name = _mesh_zone_name_from_entry(entry)
+    if zone_name is not None:
+        raise MeshZoneError(zone_name, error) from error
+    raise error
+
+
 def expand_mesh_zones(mesh_def: dict[str, Any]) -> dict[str, Any]:
     expanded_mesh_def = copy.deepcopy(mesh_def)
     circumferential_entries: list[dict[str, Any]] = []
@@ -2642,7 +2667,12 @@ def expand_mesh_zones(mesh_def: dict[str, Any]) -> dict[str, Any]:
                     curve_source=curve_source,
                 )
             )
-            surface_entries.extend(zone_surface_entries)
+            surface_entries.extend(
+                _tag_zone_surface_entries(
+                    zone_surface_entries,
+                    zone_name=zone_name,
+                )
+            )
         except Exception as error:
             raise MeshZoneError(zone_name, error) from error
 
@@ -3254,51 +3284,54 @@ def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstra
     ):
         section = mesh_def.get(section_name, {})
         for entry in _iter_curve_entries(section):
-            curve_specs = list(_iter_curve_specs(entry))
-            if section_name == "circumferential_curve_sequences":
-                curve_specs = _propagate_circumferential_element_size_specs(
-                    entry,
-                    curve_specs,
-                    circumferential_reference_specs_by_zone,
-                )
-            if (
-                section_name == "longitudinal_curve_sequences"
-                and curve_specs
-                and _uses_element_size_mode(entry, len(curve_specs))
-            ):
-                first_spec = curve_specs[0]
-                curve_specs = [
-                    replace(
-                        curve_spec,
-                        n_pts=first_spec.n_pts,
-                        mesh_type=first_spec.mesh_type,
-                        coef=first_spec.coef,
+            try:
+                curve_specs = list(_iter_curve_specs(entry))
+                if section_name == "circumferential_curve_sequences":
+                    curve_specs = _propagate_circumferential_element_size_specs(
+                        entry,
+                        curve_specs,
+                        circumferential_reference_specs_by_zone,
                     )
-                    for curve_spec in curve_specs
-                ]
-
-            for curve_spec in curve_specs:
-                for curve_id, curve_n_pts, invert, curve_base_coef in _curve_node_counts(
-                    curve_spec.curve_ids,
-                    curve_spec.invert_directions,
-                    curve_spec.group_invert_direction,
-                    curve_spec.n_pts,
-                    entry,
-                    curve_spec.mesh_type,
-                    curve_spec.coef,
+                if (
+                    section_name == "longitudinal_curve_sequences"
+                    and curve_specs
+                    and _uses_element_size_mode(entry, len(curve_specs))
                 ):
-                    curve_coef = _curve_coef(
-                        curve_spec.mesh_type, curve_base_coef, invert
-                    )
-                    gmsh.model.mesh.setTransfiniteCurve(
-                        curve_id,
-                        curve_n_pts,
+                    first_spec = curve_specs[0]
+                    curve_specs = [
+                        replace(
+                            curve_spec,
+                            n_pts=first_spec.n_pts,
+                            mesh_type=first_spec.mesh_type,
+                            coef=first_spec.coef,
+                        )
+                        for curve_spec in curve_specs
+                    ]
+
+                for curve_spec in curve_specs:
+                    for curve_id, curve_n_pts, invert, curve_base_coef in _curve_node_counts(
+                        curve_spec.curve_ids,
+                        curve_spec.invert_directions,
+                        curve_spec.group_invert_direction,
+                        curve_spec.n_pts,
+                        entry,
                         curve_spec.mesh_type,
-                        curve_coef,
-                    )
-                    constraints[abs(curve_id)] = CurveConstraint(
-                        curve_n_pts, curve_spec.mesh_type, curve_coef
-                    )
+                        curve_spec.coef,
+                    ):
+                        curve_coef = _curve_coef(
+                            curve_spec.mesh_type, curve_base_coef, invert
+                        )
+                        gmsh.model.mesh.setTransfiniteCurve(
+                            curve_id,
+                            curve_n_pts,
+                            curve_spec.mesh_type,
+                            curve_coef,
+                        )
+                        constraints[abs(curve_id)] = CurveConstraint(
+                            curve_n_pts, curve_spec.mesh_type, curve_coef
+                        )
+            except Exception as error:
+                _raise_with_mesh_zone(entry, error)
 
     return constraints
 
@@ -3337,52 +3370,75 @@ def _complete_surface_boundary_curves_once(
     protected_curve_counts = _protected_curve_counts(mesh_def)
 
     for surface in _iter_surface_entries(section):
-        surface_id = int(surface["id"])
-        if surface_id in unstructured_surfaces:
-            continue
-
-        corners = [int(point) for point in surface.get("boundary points", [])]
-
-        if len(corners) != 4:
-            continue
-
-        if _is_triangular_transfinite_surface(corners):
-            continue
-
-        edge_curves = _surface_edge_curves(surface_id, corners)
-        if _has_protected_opposite_edge_mismatch(
-            edge_curves, constraints, protected_curve_counts
-        ):
-            _add_unstructured_surface(mesh_def, surface_id)
-            unstructured_surfaces.add(surface_id)
-            continue
-
-        for edge_index, curves in enumerate(edge_curves):
-            if len(curves) != 1 or curves[0] in constraints:
-                continue
-
-            opposite_curves = edge_curves[(edge_index + 2) % 4]
-            if len(opposite_curves) != 1:
-                continue
-
-            opposite_constraint = constraints.get(opposite_curves[0])
-            if opposite_constraint is None:
-                continue
-
-            curve_id = curves[0]
-            _set_curve_constraint(
-                curve_id,
-                opposite_constraint,
+        try:
+            _complete_surface_boundary_curves_for_surface(
+                mesh_def,
+                surface,
                 constraints,
+                unstructured_surfaces,
+                circumferential_curve_loop_indices,
+                circumferential_curve_groups,
+                protected_curve_counts,
             )
+        except Exception as error:
+            _raise_with_mesh_zone(surface, error)
 
-        _align_opposite_edge_divisions(
-            edge_curves,
+
+def _complete_surface_boundary_curves_for_surface(
+    mesh_def: dict[str, Any],
+    surface: dict[str, Any],
+    constraints: dict[int, CurveConstraint],
+    unstructured_surfaces: set[int],
+    circumferential_curve_loop_indices: dict[int, int],
+    circumferential_curve_groups: dict[int, list[int]],
+    protected_curve_counts: set[int],
+) -> None:
+    surface_id = int(surface["id"])
+    if surface_id in unstructured_surfaces:
+        return
+
+    corners = [int(point) for point in surface.get("boundary points", [])]
+
+    if len(corners) != 4:
+        return
+
+    if _is_triangular_transfinite_surface(corners):
+        return
+
+    edge_curves = _surface_edge_curves(surface_id, corners)
+    if _has_protected_opposite_edge_mismatch(
+        edge_curves, constraints, protected_curve_counts
+    ):
+        _add_unstructured_surface(mesh_def, surface_id)
+        unstructured_surfaces.add(surface_id)
+        return
+
+    for edge_index, curves in enumerate(edge_curves):
+        if len(curves) != 1 or curves[0] in constraints:
+            continue
+
+        opposite_curves = edge_curves[(edge_index + 2) % 4]
+        if len(opposite_curves) != 1:
+            continue
+
+        opposite_constraint = constraints.get(opposite_curves[0])
+        if opposite_constraint is None:
+            continue
+
+        curve_id = curves[0]
+        _set_curve_constraint(
+            curve_id,
+            opposite_constraint,
             constraints,
-            circumferential_curve_loop_indices,
-            circumferential_curve_groups,
-            protected_curve_counts,
         )
+
+    _align_opposite_edge_divisions(
+        edge_curves,
+        constraints,
+        circumferential_curve_loop_indices,
+        circumferential_curve_groups,
+        protected_curve_counts,
+    )
 
 
 def _circumferential_curve_loop_indices(mesh_def: dict[str, Any]) -> dict[int, int]:
@@ -3653,15 +3709,18 @@ def apply_transfinite_surfaces(mesh_def: dict[str, Any]) -> None:
     surface_definitions = _transfinite_surface_definitions(mesh_def)
 
     for surface_id, surface in surface_definitions.items():
-        if surface_id in unstructured_surfaces:
-            continue
+        try:
+            if surface_id in unstructured_surfaces:
+                continue
 
-        arrangement = str(surface.get("Arrangement", "Left")).capitalize()
-        boundary_points = [int(point) for point in surface.get("boundary points", [])]
+            arrangement = str(surface.get("Arrangement", "Left")).capitalize()
+            boundary_points = [int(point) for point in surface.get("boundary points", [])]
 
-        gmsh.model.mesh.setTransfiniteSurface(
-            surface_id, arrangement, boundary_points
-        )
+            gmsh.model.mesh.setTransfiniteSurface(
+                surface_id, arrangement, boundary_points
+            )
+        except Exception as error:
+            _raise_with_mesh_zone(surface, error)
 
 
 def apply_geometry_healing(mesh_def: dict[str, Any]) -> None:
@@ -4001,13 +4060,20 @@ def _mesh_zone_name_from_error(error: BaseException) -> str | None:
     return None
 
 
+def _root_error_message(error: BaseException) -> str:
+    current: BaseException = error
+    while isinstance(current, MeshZoneError) and current.__cause__ is not None:
+        current = current.__cause__
+    return str(current)
+
+
 def show_geometry_after_error(error: Exception) -> None:
     """Open Gmsh with geometry only, preserving the original failure."""
     zone_name = _mesh_zone_name_from_error(error)
     prefix = f"Mesh zone {zone_name!r}: " if zone_name is not None else ""
     print(
         f"{prefix}Mesh generation failed. Opening Gmsh with the imported geometry for "
-        f"inspection before re-raising the error: {error}"
+        f"inspection before re-raising the error: {_root_error_message(error)}"
     )
     try:
         gmsh.model.mesh.clear()
