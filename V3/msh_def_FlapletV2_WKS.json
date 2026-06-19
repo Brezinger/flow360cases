@@ -37,18 +37,17 @@
   "mesh definition": {
     "generate_1d_mesh": true,
     "generate_2d_mesh": true,
-    "automatic_transfinite_surfaces": true,
     "mesh_zones": [
       {
         "name": "main",
         "curve_definition": "automatic",
         "start_pt": 60,
-        "chordwise_direction": [
+        "circumferential_direction": [
           -1.0,
           0.0,
           0.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           0.0,
           1.0,
           0.0
@@ -63,7 +62,7 @@
           1,
           1
         ],
-        "chordwise_transfinite_def": {
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
@@ -101,7 +100,7 @@
             13
           ]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [

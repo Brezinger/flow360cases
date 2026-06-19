@@ -1,292 +1,24 @@
-# Import necessary modules from the Flow360 library
 import os
 from itertools import product
+
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
-from scipy.spatial.transform import Rotation as R
 
 import flow360 as fl
 from flow360 import u
 
-
-def calculate_flat_plate_turbulent_y1(
-        freestream_velocity=55.0,
-        density=1.225,
-        dynamic_viscosity=1.82e-5,
-        boundary_layer_length=0.745,
-        desired_yplus=0.67):
-    """
-    Estimate first-cell wall distance from turbulent flat-plate boundary layer theory.
-
-    Units:
-        freestream_velocity: m/s
-        density: kg/m3
-        dynamic_viscosity: kg/(m s)
-        boundary_layer_length: m
-        desired_yplus: nondimensional
-
-    Returns:
-        reynolds_number: nondimensional
-        y1: m
-    """
-    reynolds_number = density * freestream_velocity * boundary_layer_length / dynamic_viscosity
-    skin_friction_coefficient = 0.0576 / reynolds_number ** 0.2
-    wall_shear_stress = 0.5 * density * freestream_velocity ** 2 * skin_friction_coefficient
-    friction_velocity = np.sqrt(wall_shear_stress / density)
-    y1 = desired_yplus * dynamic_viscosity / (density * friction_velocity)
-
-    return reynolds_number, y1
-
-
-def calculate_standard_atmosphere_density(altitude=0.0):
-    """
-    Calculate ISA density in the troposphere.
-
-    Units:
-        altitude: m
-
-    Returns:
-        density: kg/m3
-    """
-    sea_level_temperature = 288.15
-    sea_level_pressure = 101325.0
-    temperature_lapse_rate = 0.0065
-    gas_constant_air = 287.05287
-    gravity = 9.80665
-
-    temperature = sea_level_temperature - temperature_lapse_rate * altitude
-    pressure = sea_level_pressure * (
-            temperature / sea_level_temperature
-    ) ** (gravity / (gas_constant_air * temperature_lapse_rate))
-
-    return pressure / (gas_constant_air * temperature)
-
-
-def calculate_target_lift_coefficient(aircraft_mass, wing_area, freestream_velocity, density):
-    gravity = 9.80665
-    dynamic_pressure = 0.5 * density * freestream_velocity ** 2
-
-    return aircraft_mass * gravity / (dynamic_pressure * wing_area)
-
-
-def calculate_freestream_velocity_for_target_lift_coefficient(
-        aircraft_mass, wing_area, target_lift_coefficient, density):
-    gravity = 9.80665
-
-    if target_lift_coefficient <= 0:
-        raise ValueError("target_lift_coefficient must be positive to calculate freestream velocity.")
-
-    return np.sqrt(aircraft_mass * gravity / (0.5 * density * wing_area * target_lift_coefficient))
-
-
-def calc_ncrit_from_fsti(turbulence_intensity_perc=0.05):
-    """
-    calculates critical N factor from freestream turbulence intensity according to paper from Djeddi, Coder et al.
-    "Adjoint-Based Uncertainty Quantiﬁcation and Calibration of RANS-Based Transition Modeling" DOI: 10.2514/6.2021-3036
-    :param turbulence_intensity_perc: Turbulence intensity in percent
-    :return: NCrit: critical amplification factor
-    """
-    a0 = 9.0064
-    a1 = -4.4958
-    a2 = -1.4208
-    a3 = 1.5920
-    a4 = -0.3532
-
-    tau = 2.5 * np.tanh(turbulence_intensity_perc / 2.5)
-    Ncrit = a0 + a1 * tau + a2 * tau ** 2 + a3 * tau ** 3 + a4 * tau ** 4
-
-    return Ncrit
-
-
-def _resolve_existing_path(filename):
-    """Resolve a data file from cwd first, then relative to this script."""
-    if filename is None:
-        return None
-
-    candidate_paths = [
-        filename,
-        os.path.join(os.path.dirname(__file__), filename),
-    ]
-    for candidate_path in candidate_paths:
-        if os.path.isfile(candidate_path):
-            return candidate_path
-
-    raise FileNotFoundError(
-        f"Could not find turbulator location file '{filename}' in the current working directory "
-        f"or next to {__file__}."
-    )
-
-
-def _axis_perpendicular_to(segment_axis, preferred_axis):
-    """Return preferred_axis projected onto the plane normal to segment_axis."""
-    segment_axis = np.asarray(segment_axis, dtype=float)
-    preferred_axis = np.asarray(preferred_axis, dtype=float)
-
-    projected_axis = preferred_axis - np.dot(preferred_axis, segment_axis) * segment_axis
-    projected_norm = np.linalg.norm(projected_axis)
-    if projected_norm < 1e-12:
-        return None
-
-    return projected_axis / projected_norm
-
-
-def make_boxes(vertices_coords_file, x_size, z_size, center_offset=(0, 0, 0),
-               name_prefix="turbulator_box", segment_overlap=0):
-    vertices_coords_path = _resolve_existing_path(vertices_coords_file)
-    points = pd.read_csv(vertices_coords_path, sep=r"\s+", engine="python")
-
-    required_columns = {"X", "Y", "Z"}
-    missing_columns = required_columns - set(points.columns)
-    if missing_columns:
-        raise ValueError(
-            f"Turbulator location file '{vertices_coords_path}' is missing columns: "
-            f"{sorted(missing_columns)}"
-        )
-
-    coords = points[["X", "Y", "Z"]].to_numpy(dtype=float)
-    if len(coords) < 2:
-        raise ValueError(
-            f"Turbulator location file '{vertices_coords_path}' must contain at least two points."
-        )
-    center_offset = np.asarray(center_offset, dtype=float)
-    if center_offset.shape != (3,):
-        raise ValueError("center_offset must contain exactly three values: x, y, z.")
-
-    boxes = []
-    for idx, (start, end) in enumerate(zip(coords[:-1], coords[1:]), start=1):
-        segment = end - start
-        segment_length = np.linalg.norm(segment)
-        if segment_length <= 0:
-            raise ValueError(
-                f"Turbulator segment {idx} in '{vertices_coords_path}' has zero length."
-            )
-
-        y_axis = segment / segment_length
-        x_axis = _axis_perpendicular_to(y_axis, (1, 0, 0))
-        if x_axis is None:
-            x_axis = _axis_perpendicular_to(y_axis, (0, 0, 1))
-
-        boxes.append(
-            fl.Box.from_principal_axes(
-                name=f"{name_prefix}_{idx:03d}",
-                axes=[tuple(x_axis), tuple(y_axis)],
-                center=((start + end) / 2 + center_offset) * u.mm,
-                size=(x_size, segment_length + segment_overlap, z_size) * u.mm,
-            )
-        )
-
-    return boxes
-
-
-def make_winglet_tip_refinement_cylinders(
-        name_prefix, start_center, axis, total_length, n_cylinders, initial_diameter,
-        growth_angle_deg, cylinder_overlap=0):
-    axis = np.asarray(axis, dtype=float)
-    axis_norm = np.linalg.norm(axis)
-    if axis_norm <= 0:
-        raise ValueError("Cylinder axis must have non-zero length.")
-    axis = axis / axis_norm
-
-    if n_cylinders <= 0:
-        raise ValueError("n_cylinders must be positive.")
-
-    cylinder_length = total_length / n_cylinders
-    diameter_growth_per_cylinder = 2 * cylinder_length * np.tan(np.deg2rad(growth_angle_deg))
-    start_center = np.asarray(start_center, dtype=float)
-
-    cylinders = []
-    for idx in range(n_cylinders):
-        center = start_center + axis * (idx + 0.5) * cylinder_length
-        diameter = initial_diameter + idx * diameter_growth_per_cylinder
-        cylinders.append(
-            fl.Cylinder(
-                name=f"{name_prefix}_{idx + 1:03d}",
-                center=center * u.mm,
-                axis=tuple(axis),
-                outer_radius=diameter / 2 * u.mm,
-                height=(cylinder_length + cylinder_overlap) * u.mm,
-            )
-        )
-
-    return cylinders
-
-
-def geometric_spacing_values(initial_spacing, growth_rate, n_values, max_spacing=None):
-    if n_values <= 0:
-        return []
-
-    spacings = [initial_spacing * growth_rate ** idx for idx in range(n_values)]
-    if max_spacing is not None:
-        spacings = [min(spacing, max_spacing) for spacing in spacings]
-
-    return spacings
-
-
-def read_last_vertex(vertices_coords_file):
-    vertices_coords_path = _resolve_existing_path(vertices_coords_file)
-    points = pd.read_csv(vertices_coords_path, sep=r"\s+", engine="python")
-
-    required_columns = {"X", "Y", "Z"}
-    missing_columns = required_columns - set(points.columns)
-    if missing_columns:
-        raise ValueError(
-            f"Vertex coordinate file '{vertices_coords_path}' is missing columns: "
-            f"{sorted(missing_columns)}"
-        )
-    if points.empty:
-        raise ValueError(f"Vertex coordinate file '{vertices_coords_path}' does not contain any points.")
-
-    return tuple(points[["X", "Y", "Z"]].iloc[-1].to_numpy(dtype=float))
-
-
-def read_highest_yz_curvature_vertex(vertices_coords_file, fallback_vertex=None):
-    vertices_coords_path = _resolve_existing_path(vertices_coords_file)
-    points = pd.read_csv(vertices_coords_path, sep=r"\s+", engine="python")
-
-    required_columns = {"X", "Y", "Z"}
-    missing_columns = required_columns - set(points.columns)
-    if missing_columns:
-        raise ValueError(
-            f"Vertex coordinate file '{vertices_coords_path}' is missing columns: "
-            f"{sorted(missing_columns)}"
-        )
-
-    coords = points[["X", "Y", "Z"]].to_numpy(dtype=float)
-    if len(coords) < 3:
-        if fallback_vertex is not None:
-            return fallback_vertex
-        raise ValueError(
-            f"Vertex coordinate file '{vertices_coords_path}' must contain at least three points "
-            "for curvature detection."
-        )
-
-    yz_coords = coords[:, [1, 2]]
-    curvatures = np.full(len(coords), -np.inf)
-    for idx in range(1, len(coords) - 1):
-        previous_vector = yz_coords[idx] - yz_coords[idx - 1]
-        next_vector = yz_coords[idx + 1] - yz_coords[idx]
-        chord_vector = yz_coords[idx + 1] - yz_coords[idx - 1]
-
-        previous_length = np.linalg.norm(previous_vector)
-        next_length = np.linalg.norm(next_vector)
-        chord_length = np.linalg.norm(chord_vector)
-        if min(previous_length, next_length, chord_length) <= 0:
-            continue
-
-        twice_triangle_area = abs(np.cross(previous_vector, next_vector))
-        curvatures[idx] = 2 * twice_triangle_area / (
-                previous_length * next_length * chord_length
-        )
-
-    if not np.any(np.isfinite(curvatures)):
-        if fallback_vertex is not None:
-            return fallback_vertex
-        raise ValueError(
-            f"Could not determine finite y-z curvature from '{vertices_coords_path}'."
-        )
-
-    return tuple(coords[int(np.nanargmax(curvatures))])
+from flow360_utils.flow360_tools import (
+    calc_ncrit_from_fsti,
+    calculate_flat_plate_turbulent_y1,
+    calculate_freestream_velocity_for_target_lift_coefficient,
+    calculate_standard_atmosphere_density,
+    calculate_target_lift_coefficient,
+    geometric_spacing_values,
+    make_refinement_cylinders_along_axis,
+    make_segment_boxes,
+    read_highest_yz_curvature_vertex,
+    read_last_vertex,
+)
 
 
 def define_and_run(project_cgns_file_name=None, project_step_file_name=None, project_id=None, name=None,
@@ -547,7 +279,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
     turbulator_boxes = list()
     for file in turbulator_location_files:
-        boxes = make_boxes(
+        boxes = make_segment_boxes(
             vertices_coords_file=file,
             x_size=turbulator_box_x_size,
             z_size=turbulator_box_z_size,
@@ -562,7 +294,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             h_box = 0
             for i_row, x in enumerate(np.arange(0, wake_refinement_length, wake_refinement_delta_x)):
                 h_box += wake_refinement_delta_x * 2 * np.sin(np.deg2rad(wake_refinement_angle_deg / 2))
-                boxes = make_boxes(
+                boxes = make_segment_boxes(
                     vertices_coords_file=file,
                     x_size=wake_refinement_delta_x + wake_refinement_box_overlap,
                     z_size=h_box + wake_refinement_box_overlap,
@@ -574,7 +306,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
         # Volume refinement at winglet tip: staggered cylinders with 5 deg diameter growth
         winglet_tip_refinement_start_center = read_last_vertex(wake_refinement_files[-1])
-        winglet_tip_cylinders = make_winglet_tip_refinement_cylinders(
+        winglet_tip_cylinders = make_refinement_cylinders_along_axis(
             name_prefix="winglet_tip_cylinder",
             start_center=winglet_tip_refinement_start_center,
             axis=winglet_tip_refinement_axis,
@@ -604,7 +336,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             wake_refinement_files[-1],
             fallback_vertex=winglet_radius_refinement_fallback_start_center,
         )
-        winglet_radius_cylinders = make_winglet_tip_refinement_cylinders(
+        winglet_radius_cylinders = make_refinement_cylinders_along_axis(
             name_prefix="winglet_radius_cylinder",
             start_center=winglet_radius_refinement_start_center,
             axis=winglet_radius_refinement_axis,

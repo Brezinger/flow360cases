@@ -103,18 +103,17 @@
       104,
       105
     ],
-    "automatic_transfinite_surfaces": true,
     "mesh_zones": [
       {
         "name": "main wing",
         "curve_definition": "automatic",
         "start_pt": 1,
-        "chordwise_direction": [
+        "circumferential_direction": [
           -1.0,
           0.0,
           0.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           0.0,
           1.0,
           0.0
@@ -129,7 +128,7 @@
           1,
           1
         ],
-        "chordwise_transfinite_def": {
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
@@ -167,7 +166,7 @@
             13
           ]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [
@@ -230,12 +229,12 @@
         "name": "winglet zone",
         "curve_definition": "automatic",
         "start_pt": 89,
-        "chordwise_direction": [
+        "circumferential_direction": [
           -1.0,
           0.0,
           0.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           0.0,
           1.0,
           0.0
@@ -250,7 +249,7 @@
           3,
           1
         ],
-        "chordwise_transfinite_def": {
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
@@ -288,7 +287,7 @@
             13
           ]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [

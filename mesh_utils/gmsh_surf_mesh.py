@@ -27,6 +27,12 @@ class CurveConstraint:
         self.coef = coef
 
 
+class MeshZoneError(RuntimeError):
+    def __init__(self, zone_name: str, error: Exception) -> None:
+        self.zone_name = zone_name
+        super().__init__(f"Mesh zone {zone_name!r}: {error}")
+
+
 @dataclass(frozen=True)
 class CurveSpec:
     curve_ids: int | list[int]
@@ -46,7 +52,7 @@ class TracedLoop:
 
 
 @dataclass(frozen=True)
-class SpanwisePath:
+class LongitudinalPath:
     points: list[int]
     curve_segments: list[list[int]]
 
@@ -830,7 +836,7 @@ def _local_blunt_direction(
     start_point: int,
     first_curve_id: int,
     first_curve_end_point: int,
-    spanwise_direction: Sequence[float],
+    longitudinal_direction: Sequence[float],
     excluded_curves: set[int],
 ) -> list[float]:
     first_tangent = _curve_tangent_towards_point(
@@ -841,19 +847,19 @@ def _local_blunt_direction(
     if first_tangent is None:
         first_tangent = _point_vector(start_point, first_curve_end_point)
 
-    spanwise_tangent = _best_adjacent_tangent(
+    longitudinal_tangent = _best_adjacent_tangent(
         start_point,
-        spanwise_direction,
+        longitudinal_direction,
         set(excluded_curves).union({abs(first_curve_id)}),
     )
-    if spanwise_tangent is None:
-        spanwise_tangent = _as_vector(spanwise_direction)
+    if longitudinal_tangent is None:
+        longitudinal_tangent = _as_vector(longitudinal_direction)
 
-    blunt_direction = _cross(spanwise_tangent, first_tangent)
+    blunt_direction = _cross(longitudinal_tangent, first_tangent)
     if _vector_norm(blunt_direction) <= 0.0:
         raise ValueError(
-            "Cannot infer blunt trailing-edge direction from parallel chordwise "
-            f"and spanwise tangents at point {start_point}."
+            "Cannot infer blunt trailing-edge direction from parallel circumferential "
+            f"and longitudinal tangents at point {start_point}."
         )
     return blunt_direction
 
@@ -947,14 +953,18 @@ def _select_adjacent_curve(
         if curve_norm <= 0.0:
             continue
 
-        curve_unit = _normalized(curve_vector)
+        candidate_vector = _curve_tangent_towards_point(curve_id, point_id, next_point)
+        if candidate_vector is None or _vector_norm(candidate_vector) <= 0.0:
+            candidate_vector = curve_vector
+
+        candidate_unit = _normalized(candidate_vector)
         if (
             reject_unit is not None
-            and abs(_dot(curve_unit, reject_unit)) > reject_alignment
+            and abs(_dot(candidate_unit, reject_unit)) > reject_alignment
         ):
             continue
 
-        score = _dot(curve_unit, direction)
+        score = _dot(candidate_unit, direction)
         if score > best_score:
             best_curve = curve_id
             best_next_point = next_point
@@ -1015,23 +1025,72 @@ def _known_intermediate_points(
     return [point_id for point_id in point_path[1:-1] if point_id in known_points]
 
 
-def _trace_airfoil_loop(
+def _trace_circumferential_loop(
     start_point: int,
-    chordwise_direction: Sequence[float],
+    circumferential_direction: Sequence[float],
     has_blunt_te: bool,
-    spanwise_direction: Sequence[float],
+    longitudinal_direction: Sequence[float],
     excluded_curves: set[int],
     expected_blunt_curve_count: int | None = None,
+    expected_total_curve_count: int | None = None,
+    closed_circumferential_loop: bool = True,
 ) -> TracedLoop:
     current_point = int(start_point)
-    pointing = _as_vector(chordwise_direction)
+    pointing = _as_vector(circumferential_direction)
     effective_blunt_direction = None
     curve_ids = []
     points = [current_point]
     local_excluded = set(excluded_curves)
+    expected_body_curve_count = None
+    if expected_total_curve_count is not None:
+        expected_body_curve_count = int(expected_total_curve_count)
+        if closed_circumferential_loop and has_blunt_te:
+            expected_body_curve_count -= int(expected_blunt_curve_count or 0)
+        if expected_body_curve_count < 1:
+            raise ValueError(
+                "Expected circumferential loop curve count must leave at least one "
+                f"non-blunt curve, got {expected_total_curve_count}."
+            )
 
     while True:
-        if curve_ids:
+        if (
+            expected_body_curve_count is not None
+            and len(curve_ids) >= expected_body_curve_count
+        ):
+            if not closed_circumferential_loop or not has_blunt_te:
+                return TracedLoop(curve_ids, points, [], [])
+
+            blunt_curves, blunt_points = _curve_path_between_points(
+                current_point,
+                start_point,
+                local_excluded,
+            )
+            if (
+                expected_blunt_curve_count is not None
+                and len(blunt_curves) != expected_blunt_curve_count
+            ):
+                raise ValueError(
+                    f"Expected {expected_blunt_curve_count} blunt trailing-edge "
+                    f"curves from point {current_point} to {start_point}, got "
+                    f"{len(blunt_curves)}: {blunt_curves}."
+                )
+            if (
+                effective_blunt_direction is not None
+                and _curve_path_alignment(
+                    blunt_curves,
+                    blunt_points,
+                    effective_blunt_direction,
+                )
+                <= 0.2
+            ):
+                raise ValueError(
+                    f"Closing curve path from {current_point} to {start_point} "
+                    f"is not aligned with the local blunt trailing-edge direction: "
+                    f"{blunt_curves}."
+                )
+            return TracedLoop(curve_ids, points, blunt_curves, blunt_points)
+
+        if curve_ids and expected_body_curve_count is None:
             blunt_curve = _connecting_curve(current_point, start_point)
             if blunt_curve is not None and blunt_curve not in local_excluded:
                 if not has_blunt_te:
@@ -1108,12 +1167,14 @@ def _trace_airfoil_loop(
             pointing,
             local_excluded,
             min_score=-1.0,
-            reject_direction=spanwise_direction,
+            reject_direction=(
+                None if expected_body_curve_count is not None else longitudinal_direction
+            ),
             reject_alignment=0.85,
         )
         if selected is None:
             raise ValueError(
-                f"Could not continue airfoil loop trace from point {current_point}."
+                f"Could not continue circumferential loop trace from point {current_point}."
             )
 
         curve_id, next_point, curve_vector = selected
@@ -1125,7 +1186,7 @@ def _trace_airfoil_loop(
                 start_point,
                 curve_id,
                 next_point,
-                spanwise_direction,
+                longitudinal_direction,
                 local_excluded,
             )
         tangent = _curve_tangent_for_traversal(curve_id, next_point, current_point)
@@ -1270,7 +1331,7 @@ def _combine_grouped_invert_directions(
 
 def _infer_n_subcurvs(
     traced_loop: TracedLoop,
-    split_spanwise_curve_count: int,
+    split_longitudinal_curve_count: int,
 ) -> list[int]:
     loop_curve_set = {abs(curve_id) for curve_id in _loop_all_curve_ids(traced_loop)}
     group_sizes = []
@@ -1283,7 +1344,7 @@ def _infer_n_subcurvs(
             if abs(curve_id) not in loop_curve_set
         ]
 
-        if len(adjacent_non_loop_curves) >= split_spanwise_curve_count:
+        if len(adjacent_non_loop_curves) >= split_longitudinal_curve_count:
             group_sizes.append(current_group_size)
             current_group_size = 1
         else:
@@ -1295,7 +1356,18 @@ def _infer_n_subcurvs(
 
 
 def _template_group_count(template_entry: dict[str, Any]) -> int | None:
-    for key in ("n_pts", "type", "Parameter", "invert_direction", "_invert_direction"):
+    for key in (
+        "n_subcurvs_per_compound_curve",
+        "n_subcurvs",
+        "n_pts",
+        "type",
+        "mesh size mode",
+        "target ele size 1",
+        "target ele size 2",
+        "Parameter",
+        "invert_direction",
+        "_invert_direction",
+    ):
         value = template_entry.get(key)
         if isinstance(value, list):
             return len(value)
@@ -1305,11 +1377,11 @@ def _template_group_count(template_entry: dict[str, Any]) -> int | None:
 def _infer_n_subcurvs_for_template(
     traced_loop: TracedLoop,
     template_entry: dict[str, Any],
-    default_split_spanwise_curve_count: int,
+    default_split_longitudinal_curve_count: int,
     previous_group_sizes: list[int] | None = None,
 ) -> list[int]:
     target_group_count = _template_group_count(template_entry)
-    candidate_thresholds = [default_split_spanwise_curve_count, 1, 2, 3]
+    candidate_thresholds = [default_split_longitudinal_curve_count, 1, 2, 3]
     candidate_group_sizes = []
 
     for threshold in candidate_thresholds:
@@ -1466,33 +1538,55 @@ def _explicit_blunt_curve_count(config: dict[str, Any]) -> int | None:
     return None
 
 
+def _explicit_total_curve_count(config: dict[str, Any]) -> int | None:
+    for key in ("n_subcurvs_per_compound_curve", "n_subcurvs"):
+        if key in config:
+            return sum(int(value) for value in config[key])
+    return None
+
+
+def _closed_circumferential_loop(config: dict[str, Any]) -> bool:
+    return bool(config.get("closed_circumferential_loop", True))
+
+
+def _expected_circumferential_trace_curve_count(
+    config: dict[str, Any],
+    circumferential_template: dict[str, Any],
+    closed_circumferential_loop: bool,
+) -> int | None:
+    explicit_curve_count = _explicit_total_curve_count(config)
+    if explicit_curve_count is not None:
+        return explicit_curve_count
+
+    if closed_circumferential_loop:
+        return None
+
+    return _entry_group_count(circumferential_template)
+
+
 def _has_blunt_te(config: dict[str, Any]) -> bool:
     return bool(config.get("has_blunt_te", False))
 
 
 def _zone_direction(
     config: dict[str, Any],
-    primary_key: str,
-    alternate_key: str,
-    legacy_key: str,
+    key: str,
     default: Sequence[float],
 ) -> list[float]:
-    if primary_key in config:
-        return _as_vector(config[primary_key])
-    if alternate_key in config:
-        return _as_vector(config[alternate_key])
-    if legacy_key in config:
-        return _as_vector(config[legacy_key])
+    if key in config:
+        return _as_vector(config[key])
     return _as_vector(default)
 
 
 def _loop_split_points_from_group_sizes(
     traced_loop: TracedLoop,
     group_sizes: list[int],
+    closed_circumferential_loop: bool = True,
 ) -> list[int]:
     split_points = [traced_loop.points[0]]
     curve_index = 0
-    for group_size in group_sizes[:-1]:
+    split_group_sizes = group_sizes[:-1] if closed_circumferential_loop else group_sizes
+    for group_size in split_group_sizes:
         curve_index += group_size
         split_points.append(traced_loop.points[curve_index])
     return split_points
@@ -1515,7 +1609,7 @@ def _select_adjacent_curve_excluding(
     )
 
 
-def _trace_spanwise_segment_to_crossing(
+def _trace_longitudinal_segment_to_crossing(
     start_point: int,
     direction: Sequence[float],
     excluded_curves: set[int],
@@ -1549,13 +1643,13 @@ def _trace_spanwise_segment_to_crossing(
             return segment_curves, current_point, last_vector
 
 
-def _trace_spanwise_path_by_crossings(
+def _trace_longitudinal_path_by_crossings(
     start_point: int,
     direction: Sequence[float],
     n_segments: int,
     excluded_curves: set[int],
     forbidden_curves: set[int],
-) -> SpanwisePath:
+) -> LongitudinalPath:
     points = [int(start_point)]
     curve_segments = []
     current_point = int(start_point)
@@ -1563,7 +1657,7 @@ def _trace_spanwise_path_by_crossings(
     local_excluded = set(excluded_curves)
 
     for _ in range(n_segments):
-        segment = _trace_spanwise_segment_to_crossing(
+        segment = _trace_longitudinal_segment_to_crossing(
             current_point,
             current_direction,
             local_excluded,
@@ -1571,7 +1665,7 @@ def _trace_spanwise_path_by_crossings(
         )
         if segment is None:
             raise ValueError(
-                f"Could not continue spanwise path from point {current_point}."
+                f"Could not continue longitudinal path from point {current_point}."
             )
 
         segment_curves, next_point, next_direction = segment
@@ -1581,11 +1675,11 @@ def _trace_spanwise_path_by_crossings(
         current_point = next_point
         current_direction = next_direction
 
-    return SpanwisePath(points, curve_segments)
+    return LongitudinalPath(points, curve_segments)
 
 
-def _spanwise_direction_at_path_point(
-    path: SpanwisePath,
+def _longitudinal_direction_at_path_point(
+    path: LongitudinalPath,
     point_index: int,
     fallback_direction: Sequence[float],
 ) -> list[float]:
@@ -1604,9 +1698,9 @@ def _spanwise_direction_at_path_point(
                 return tangent
         previous_point = path.points[point_index - 1]
         current_point = path.points[point_index]
-        spanwise_vector = _point_vector(previous_point, current_point)
-        if _vector_norm(spanwise_vector) > 0.0:
-            return spanwise_vector
+        longitudinal_vector = _point_vector(previous_point, current_point)
+        if _vector_norm(longitudinal_vector) > 0.0:
+            return longitudinal_vector
 
     if point_index < len(path.curve_segments):
         segment = path.curve_segments[point_index]
@@ -1619,9 +1713,9 @@ def _spanwise_direction_at_path_point(
                 return tangent
         current_point = path.points[point_index]
         next_point = path.points[point_index + 1]
-        spanwise_vector = _point_vector(current_point, next_point)
-        if _vector_norm(spanwise_vector) > 0.0:
-            return spanwise_vector
+        longitudinal_vector = _point_vector(current_point, next_point)
+        if _vector_norm(longitudinal_vector) > 0.0:
+            return longitudinal_vector
 
     return _as_vector(fallback_direction)
 
@@ -1629,11 +1723,12 @@ def _spanwise_direction_at_path_point(
 def _group_loop_curves_by_split_points(
     traced_loop: TracedLoop,
     split_points: list[int],
+    closed_circumferential_loop: bool = True,
 ) -> tuple[list[int | list[int]], list[int]]:
     split_points = _unique_ordered(split_points)
     if not split_points or traced_loop.points[0] != split_points[0]:
         raise ValueError(
-            "Chordwise split points must start at the airfoil loop start point."
+            "Circumferential split points must start at the circumferential loop start point."
         )
 
     split_point_set = set(split_points)
@@ -1652,7 +1747,7 @@ def _group_loop_curves_by_split_points(
 
     if current_group:
         raise ValueError(
-            f"Could not close chordwise curve group at split points {split_points}."
+            f"Could not close circumferential curve group at split points {split_points}."
         )
     if traced_loop.blunt_curve_ids:
         curve_groups.append(
@@ -1661,9 +1756,12 @@ def _group_loop_curves_by_split_points(
             else list(traced_loop.blunt_curve_ids)
         )
         group_sizes.append(len(traced_loop.blunt_curve_ids))
-    if len(curve_groups) != len(split_points):
+    expected_group_count = (
+        len(split_points) if closed_circumferential_loop else len(split_points) - 1
+    )
+    if len(curve_groups) != expected_group_count:
         raise ValueError(
-            f"Split points define {len(split_points)} groups, but traced loop "
+            f"Split points define {expected_group_count} groups, but traced loop "
             f"produced {len(curve_groups)} groups."
         )
 
@@ -1713,16 +1811,17 @@ def _curve_path_between_points(
     raise ValueError(f"Could not find curve path from point {start_point} to {end_point}.")
 
 
-def _trace_airfoil_loop_through_split_points(
+def _trace_circumferential_loop_through_split_points(
     split_points: list[int],
     forbidden_curves: set[int],
-    spanwise_direction: Sequence[float] | None = None,
+    longitudinal_direction: Sequence[float] | None = None,
     has_blunt_te: bool = False,
     known_loop_points: set[int] | None = None,
+    closed_circumferential_loop: bool = True,
 ) -> TracedLoop:
     split_points = _unique_ordered(split_points)
     if len(split_points) < 2:
-        raise ValueError("Need at least two split points to trace an airfoil loop.")
+        raise ValueError("Need at least two split points to trace an circumferential loop.")
 
     curve_ids = []
     points = [split_points[0]]
@@ -1736,14 +1835,17 @@ def _trace_airfoil_loop_through_split_points(
         points.extend(path_points[1:])
         local_forbidden.update(abs(curve_id) for curve_id in path_curves)
 
-    if curve_ids and spanwise_direction is not None and has_blunt_te:
+    if not closed_circumferential_loop:
+        return TracedLoop(curve_ids, points, [], [])
+
+    if curve_ids and longitudinal_direction is not None and has_blunt_te:
         closing_curve = _connecting_curve(split_points[-1], split_points[0])
         if closing_curve is not None and closing_curve not in local_forbidden:
             local_blunt_direction = _local_blunt_direction(
                 split_points[0],
                 curve_ids[0],
                 points[1],
-                spanwise_direction,
+                longitudinal_direction,
                 local_forbidden,
             )
             closing_vector = _point_vector(split_points[-1], split_points[0])
@@ -1778,11 +1880,11 @@ def _trace_airfoil_loop_through_split_points(
     if known_intermediate_points:
         raise ValueError(
             f"Closing blunt trailing-edge curve path from {split_points[-1]} to "
-            f"{split_points[0]} passes through already identified loop/spanwise "
+            f"{split_points[0]} passes through already identified loop/longitudinal "
             f"points {known_intermediate_points}: {closing_points}."
         )
     if (
-        spanwise_direction is not None
+        longitudinal_direction is not None
         and has_blunt_te
         and curve_ids
     ):
@@ -1790,7 +1892,7 @@ def _trace_airfoil_loop_through_split_points(
             split_points[0],
             curve_ids[0],
             points[1],
-            spanwise_direction,
+            longitudinal_direction,
             local_forbidden,
         )
         if (
@@ -1823,23 +1925,32 @@ def _best_loop_split_points(
     traced_loop: TracedLoop,
     defining_split_points: list[int],
     template_entry: dict[str, Any],
+    closed_circumferential_loop: bool = True,
 ) -> list[int]:
     target_group_count = _entry_group_count(template_entry)
+    target_split_point_count = (
+        None
+        if target_group_count is None
+        else target_group_count if closed_circumferential_loop else target_group_count + 1
+    )
     split_points = [
         point_id
         for point_id in defining_split_points
         if point_id in set(_loop_ordered_points(traced_loop))
     ]
-    if target_group_count is not None and len(split_points) != target_group_count:
+    if (
+        target_split_point_count is not None
+        and len(split_points) != target_split_point_count
+    ):
         local_split_points = _loop_split_points(traced_loop)
-        if len(local_split_points) == target_group_count:
+        if len(local_split_points) == target_split_point_count:
             return local_split_points
     return split_points
 
 
-def _chordwise_entry_from_grouped_loop(
+def _circumferential_entry_from_grouped_loop(
     traced_loop: TracedLoop,
-    chordwise_template: dict[str, Any],
+    circumferential_template: dict[str, Any],
     curve_groups: list[int | list[int]],
     group_sizes: list[int],
 ) -> dict[str, Any]:
@@ -1861,31 +1972,31 @@ def _chordwise_entry_from_grouped_loop(
         for curve_index, curve_id in enumerate(traced_loop.blunt_curve_ids)
     )
 
-    chordwise_entry = copy.deepcopy(chordwise_template)
-    chordwise_entry["curve_ids"] = curve_groups
+    circumferential_entry = copy.deepcopy(circumferential_template)
+    circumferential_entry["curve_ids"] = curve_groups
     inferred_invert_directions = _group_values_by_curve_groups(
         traced_invert_directions, curve_groups
     )
     _remap_template_values_to_groups(
-        chordwise_entry,
-        chordwise_template,
+        circumferential_entry,
+        circumferential_template,
         group_sizes,
         len(traced_curve_ids),
     )
     user_invert_directions = _grouped_template_invert_directions(
-        chordwise_template,
+        circumferential_template,
         group_sizes,
         len(traced_curve_ids),
     )
-    chordwise_entry["invert_direction"] = inferred_invert_directions
-    _normalize_invert_directions_for_curve_groups(chordwise_entry)
-    chordwise_entry["_group_invert_direction"] = [
+    circumferential_entry["invert_direction"] = inferred_invert_directions
+    _normalize_invert_directions_for_curve_groups(circumferential_entry)
+    circumferential_entry["_group_invert_direction"] = [
         _group_invert_direction(user_invert_direction)
         for user_invert_direction in (
             user_invert_directions or [False] * len(curve_groups)
         )
     ]
-    return chordwise_entry
+    return circumferential_entry
 
 
 def _template_group_sizes(template_entry: dict[str, Any], total_curves: int) -> list[int]:
@@ -2005,7 +2116,7 @@ def _normalize_invert_directions_for_curve_groups(entry: dict[str, Any]) -> None
     entry["invert_direction"] = normalized_directions
 
 
-def _trace_spanwise_curves(
+def _trace_longitudinal_curves(
     point_ids: list[int],
     directions: list[list[float]],
     excluded_curves: set[int],
@@ -2110,32 +2221,32 @@ def _merge_transfinite_template(
     return merged_template
 
 
-def _merge_spanwise_transfinite_template(
-    spanwise_template: dict[str, Any],
+def _merge_longitudinal_transfinite_template(
+    longitudinal_template: dict[str, Any],
     section_template: dict[str, Any],
 ) -> dict[str, Any]:
     merged_template = _merge_transfinite_template(
-        spanwise_template,
+        longitudinal_template,
         section_template,
         {"sections", "default type"},
     )
-    if "type" not in merged_template and "default type" in spanwise_template:
-        merged_template["type"] = copy.deepcopy(spanwise_template["default type"])
+    if "type" not in merged_template and "default type" in longitudinal_template:
+        merged_template["type"] = copy.deepcopy(longitudinal_template["default type"])
     return merged_template
 
 
-def _automatic_chordwise_templates(
+def _automatic_circumferential_templates(
     config: dict[str, Any],
     loop_count: int | None = None,
 ) -> list[dict[str, Any]]:
-    chordwise_def = config.get("chordwise_transfinite_def", {})
-    if not chordwise_def:
+    circumferential_def = config.get("circumferential_transfinite_def", {})
+    if not circumferential_def:
         return []
 
-    loop_defs = chordwise_def.get("loops")
+    loop_defs = circumferential_def.get("loops")
     if isinstance(loop_defs, list) and loop_defs:
         return [
-            _merge_transfinite_template(chordwise_def, loop_def, {"loops"})
+            _merge_transfinite_template(circumferential_def, loop_def, {"loops"})
             for loop_def in loop_defs
         ]
 
@@ -2144,46 +2255,46 @@ def _automatic_chordwise_templates(
 
     common_template = {
         key: copy.deepcopy(value)
-        for key, value in chordwise_def.items()
+        for key, value in circumferential_def.items()
         if key != "loops"
     }
     return [
         {
             **copy.deepcopy(common_template),
-            "name": f"airfoil loop {loop_index + 1}",
+            "name": f"circumferential loop {loop_index + 1}",
         }
         for loop_index in range(loop_count)
     ]
 
 
-def _automatic_spanwise_templates(config: dict[str, Any]) -> list[dict[str, Any]]:
-    spanwise_def = config.get("spanwise_transfinite_def")
-    if spanwise_def is None:
-        spanwise_def = config.get("chordwise_transfinite_def", {}).get(
-            "spanwise_transfinite_def", {}
+def _automatic_longitudinal_templates(config: dict[str, Any]) -> list[dict[str, Any]]:
+    longitudinal_def = config.get("longitudinal_transfinite_def")
+    if longitudinal_def is None:
+        longitudinal_def = config.get("circumferential_transfinite_def", {}).get(
+            "longitudinal_transfinite_def", {}
         )
-    if not spanwise_def:
+    if not longitudinal_def:
         return []
 
-    section_defs = spanwise_def.get("sections")
+    section_defs = longitudinal_def.get("sections")
     if isinstance(section_defs, list) and section_defs:
         return [
-            _merge_spanwise_transfinite_template(spanwise_def, section_def)
+            _merge_longitudinal_transfinite_template(longitudinal_def, section_def)
             for section_def in section_defs
         ]
 
-    target_sizes = spanwise_def.get("target ele sizes")
+    target_sizes = longitudinal_def.get("target ele sizes")
     if isinstance(target_sizes, list) and len(target_sizes) >= 2:
         common_template = {
             key: copy.deepcopy(value)
-            for key, value in spanwise_def.items()
+            for key, value in longitudinal_def.items()
             if key != "target ele sizes"
         }
         common_template.setdefault("mesh size mode", "ele size")
         return [
             {
                 **copy.deepcopy(common_template),
-                "name": f"spanwise section {index + 1}",
+                "name": f"longitudinal section {index + 1}",
                 "target ele size 1": target_sizes[index],
                 "target ele size 2": target_sizes[index + 1],
             }
@@ -2198,59 +2309,74 @@ def _automatic_curve_sequences_for_zone(
     zone_name: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     start_point = int(config.get("start_pt", config.get("start point", 66)))
-    chordwise_direction = _zone_direction(
+    circumferential_direction = _zone_direction(
         config,
-        "chordwise_direction",
         "circumferential_direction",
-        "v_chordwise",
         [-1.0, 0.0, 0.0],
     )
-    spanwise_direction = _zone_direction(
+    longitudinal_direction = _zone_direction(
         config,
-        "spanwise_direction",
         "longitudinal_direction",
-        "v_spanwise",
         [0.0, 1.0, 0.0],
     )
     has_blunt_te = _has_blunt_te(config)
-    spanwise_templates = [
+    closed_circumferential_loop = _closed_circumferential_loop(config)
+    longitudinal_templates = [
         copy.deepcopy(entry)
-        for entry in _iter_curve_entries(config.get("spanwise_curve_sequences", []))
+        for entry in _iter_curve_entries(config.get("longitudinal_curve_sequences", []))
     ]
-    if not spanwise_templates:
-        spanwise_templates = _automatic_spanwise_templates(config)
-    chordwise_templates = [
+    if not longitudinal_templates:
+        longitudinal_templates = _automatic_longitudinal_templates(config)
+    circumferential_templates = [
         copy.deepcopy(entry)
-        for entry in _iter_curve_entries(config.get("chordwise_curve_sequences", []))
+        for entry in _iter_curve_entries(config.get("circumferential_curve_sequences", []))
     ]
-    if not chordwise_templates:
-        chordwise_templates = _automatic_chordwise_templates(
-            config, len(spanwise_templates) + 1 if spanwise_templates else None
+    if not circumferential_templates:
+        circumferential_templates = _automatic_circumferential_templates(
+            config, len(longitudinal_templates) + 1 if longitudinal_templates else None
         )
-    if not chordwise_templates:
+    if not circumferential_templates:
         raise ValueError(
             f"Automatic curve discovery in mesh zone {zone_name!r} requires "
-            "chordwise templates."
+            "circumferential templates."
         )
 
-    n_spanwise_sections = len(spanwise_templates)
-    n_airfoil_loops = len(chordwise_templates)
-    if n_airfoil_loops != n_spanwise_sections + 1:
+    n_longitudinal_sections = len(longitudinal_templates)
+    n_circumferential_loops = len(circumferential_templates)
+    if n_circumferential_loops != n_longitudinal_sections + 1:
         raise ValueError(
-            f"Automatic tracing needs one more chordwise template than spanwise "
-            f"sections, got {n_airfoil_loops} and {n_spanwise_sections}."
+            f"Automatic tracing needs one more circumferential template than longitudinal "
+            f"sections, got {n_circumferential_loops} and {n_longitudinal_sections}."
         )
 
-    first_loop = _trace_airfoil_loop(
+    expected_circumferential_curve_count = _expected_circumferential_trace_curve_count(
+        config,
+        circumferential_templates[0],
+        closed_circumferential_loop,
+    )
+    if not closed_circumferential_loop and expected_circumferential_curve_count is None:
+        raise ValueError(
+            f"Open circumferential loop tracing in mesh zone {zone_name!r} requires a "
+            "curve count from 'n_subcurvs_per_compound_curve', 'n_subcurvs', or "
+            "a list-valued circumferential transfinite definition."
+        )
+
+    first_loop = _trace_circumferential_loop(
         start_point,
-        chordwise_direction,
+        circumferential_direction,
         has_blunt_te,
-        spanwise_direction,
+        longitudinal_direction,
         set(),
-        _explicit_blunt_curve_count(config) if has_blunt_te else None,
+        (
+            _explicit_blunt_curve_count(config)
+            if closed_circumferential_loop and has_blunt_te
+            else None
+        ),
+        expected_circumferential_curve_count,
+        closed_circumferential_loop,
     )
     first_loop_group_sizes = _zone_compound_subcurve_counts(config, first_loop)
-    first_loop_group_count = _entry_group_count(chordwise_templates[0])
+    first_loop_group_count = _entry_group_count(circumferential_templates[0])
     if (
         first_loop_group_count is not None
         and len(first_loop_group_sizes) != first_loop_group_count
@@ -2258,7 +2384,7 @@ def _automatic_curve_sequences_for_zone(
         raise ValueError(
             "n_subcurvs_per_compound_curve defines "
             f"{len(first_loop_group_sizes)} compound curves, but the first "
-            f"chordwise template defines {first_loop_group_count}. Traced "
+            f"circumferential template defines {first_loop_group_count}. Traced "
             f"first loop: {_format_traced_loop_curve_ids(first_loop)}. "
             "Compound groups from these counts: "
             f"{_format_compound_curve_groups(first_loop, first_loop_group_sizes)}."
@@ -2266,19 +2392,20 @@ def _automatic_curve_sequences_for_zone(
     first_loop_split_points = _loop_split_points_from_group_sizes(
         first_loop,
         first_loop_group_sizes,
+        closed_circumferential_loop,
     )
     if len(first_loop_split_points) < 2:
         raise ValueError(
             "Could not identify compound curve defining points on the first "
-            "airfoil loop."
+            "circumferential loop."
         )
 
     first_loop_curves = {abs(curve_id) for curve_id in _loop_all_curve_ids(first_loop)}
     defining_paths = [
-        _trace_spanwise_path_by_crossings(
+        _trace_longitudinal_path_by_crossings(
             split_point,
-            spanwise_direction,
-            n_spanwise_sections,
+            longitudinal_direction,
+            n_longitudinal_sections,
             set(),
             first_loop_curves,
         )
@@ -2289,41 +2416,42 @@ def _automatic_curve_sequences_for_zone(
     }
     loop_start_points = defining_paths[0].points
     traced_loops = [first_loop]
-    chordwise_curve_set = set(first_loop_curves)
+    circumferential_curve_set = set(first_loop_curves)
 
-    for loop_index in range(1, n_airfoil_loops):
+    for loop_index in range(1, n_circumferential_loops):
         loop_split_points = [
             defining_path.points[loop_index] for defining_path in defining_paths
         ]
-        loop_spanwise_direction = _spanwise_direction_at_path_point(
+        loop_longitudinal_direction = _longitudinal_direction_at_path_point(
             defining_paths[0],
             loop_index,
-            spanwise_direction,
+            longitudinal_direction,
         )
         try:
-            traced_loop = _trace_airfoil_loop_through_split_points(
+            traced_loop = _trace_circumferential_loop_through_split_points(
                 loop_split_points,
-                chordwise_curve_set,
-                loop_spanwise_direction,
+                circumferential_curve_set,
+                loop_longitudinal_direction,
                 has_blunt_te,
                 known_loop_points,
+                closed_circumferential_loop,
             )
         except ValueError as exc:
             warnings.warn(
-                f"Stopping automatic airfoil-loop tracing before loop "
+                f"Stopping automatic circumferential-loop tracing before loop "
                 f"{loop_index + 1}: {exc}",
                 stacklevel=2,
             )
             break
         traced_loops.append(traced_loop)
-        chordwise_curve_set.update(
+        circumferential_curve_set.update(
             abs(curve_id) for curve_id in _loop_all_curve_ids(traced_loop)
         )
 
-    chordwise_templates = chordwise_templates[: len(traced_loops)]
-    spanwise_templates = spanwise_templates[: max(0, len(traced_loops) - 1)]
+    circumferential_templates = circumferential_templates[: len(traced_loops)]
+    longitudinal_templates = longitudinal_templates[: max(0, len(traced_loops) - 1)]
 
-    chordwise_entries = []
+    circumferential_entries = []
     for loop_index, traced_loop in enumerate(traced_loops):
         split_points = [
             defining_path.points[loop_index] for defining_path in defining_paths
@@ -2331,23 +2459,26 @@ def _automatic_curve_sequences_for_zone(
         split_points = _best_loop_split_points(
             traced_loop,
             split_points,
-            chordwise_templates[loop_index],
+            circumferential_templates[loop_index],
+            closed_circumferential_loop,
         )
         curve_groups, group_sizes = _group_loop_curves_by_split_points(
-            traced_loop, split_points
+            traced_loop,
+            split_points,
+            closed_circumferential_loop,
         )
-        chordwise_entries.append(
-            _chordwise_entry_from_grouped_loop(
+        circumferential_entries.append(
+            _circumferential_entry_from_grouped_loop(
                 traced_loop,
-                chordwise_templates[loop_index],
+                circumferential_templates[loop_index],
                 curve_groups,
                 group_sizes,
             )
         )
 
-    spanwise_entries = []
-    used_spanwise_curves: set[int] = set()
-    for section_index, spanwise_template in enumerate(spanwise_templates):
+    longitudinal_entries = []
+    used_longitudinal_curves: set[int] = set()
+    for section_index, longitudinal_template in enumerate(longitudinal_templates):
         section_curve_ids = []
         section_invert_directions = []
         section_direction = _point_vector(
@@ -2356,11 +2487,11 @@ def _automatic_curve_sequences_for_zone(
         )
 
         for start_point_candidate in _loop_ordered_points(traced_loops[section_index]):
-            segment = _trace_spanwise_segment_to_crossing(
+            segment = _trace_longitudinal_segment_to_crossing(
                 start_point_candidate,
                 section_direction,
-                used_spanwise_curves,
-                chordwise_curve_set,
+                used_longitudinal_curves,
+                circumferential_curve_set,
             )
             if segment is None:
                 continue
@@ -2379,7 +2510,7 @@ def _automatic_curve_sequences_for_zone(
                         curve_id, current_point, next_point
                     )
                 )
-                used_spanwise_curves.add(abs(curve_id))
+                used_longitudinal_curves.add(abs(curve_id))
                 current_point = next_point
             section_curve_ids.append(
                 segment_curves[0] if len(segment_curves) == 1 else list(segment_curves)
@@ -2390,18 +2521,18 @@ def _automatic_curve_sequences_for_zone(
                 else segment_invert_directions
             )
 
-        spanwise_entry = copy.deepcopy(spanwise_template)
-        spanwise_entry["curve_ids"] = section_curve_ids
+        longitudinal_entry = copy.deepcopy(longitudinal_template)
+        longitudinal_entry["curve_ids"] = section_curve_ids
         if (
-            "_invert_direction" in spanwise_entry
-            and "invert_direction" not in spanwise_entry
+            "_invert_direction" in longitudinal_entry
+            and "invert_direction" not in longitudinal_entry
         ):
             spec_count = len(section_curve_ids)
-            spanwise_entry["invert_direction"] = section_invert_directions
-            spanwise_entry["_group_invert_direction"] = [
+            longitudinal_entry["invert_direction"] = section_invert_directions
+            longitudinal_entry["_group_invert_direction"] = [
                 _group_invert_direction(
                     _per_spec_value(
-                        spanwise_entry,
+                        longitudinal_entry,
                         "_invert_direction",
                         spec_index,
                         spec_count,
@@ -2411,55 +2542,120 @@ def _automatic_curve_sequences_for_zone(
                 for spec_index in range(spec_count)
             ]
         else:
-            spanwise_entry["invert_direction"] = section_invert_directions
-            spanwise_entry["_group_invert_direction"] = [
-                False for _ in spanwise_entry["invert_direction"]
+            longitudinal_entry["invert_direction"] = section_invert_directions
+            longitudinal_entry["_group_invert_direction"] = [
+                False for _ in longitudinal_entry["invert_direction"]
             ]
-        spanwise_entries.append(spanwise_entry)
+        longitudinal_entries.append(longitudinal_entry)
 
-    return chordwise_entries, spanwise_entries
+    return circumferential_entries, longitudinal_entries
 
 
 def _zone_curve_entries(zone: dict[str, Any], key: str) -> list[dict[str, Any]]:
     return [copy.deepcopy(entry) for entry in _iter_curve_entries(zone.get(key, []))]
 
 
+def _zone_surface_entries(zone: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        copy.deepcopy(entry)
+        for entry in _iter_surface_entries(zone.get("transfinite_surfaces", []))
+    ]
+
+
+def _tag_zone_curve_entries(
+    entries: list[dict[str, Any]],
+    *,
+    zone_name: str,
+    curve_source: str,
+) -> list[dict[str, Any]]:
+    tagged_entries = []
+    for entry in entries:
+        tagged_entry = copy.deepcopy(entry)
+        tagged_entry["_mesh_zone_name"] = zone_name
+        tagged_entry["_mesh_zone_curve_source"] = curve_source
+        tagged_entries.append(tagged_entry)
+    return tagged_entries
+
+
 def expand_mesh_zones(mesh_def: dict[str, Any]) -> dict[str, Any]:
     expanded_mesh_def = copy.deepcopy(mesh_def)
-    chordwise_entries: list[dict[str, Any]] = []
-    spanwise_entries: list[dict[str, Any]] = []
+    circumferential_entries: list[dict[str, Any]] = []
+    longitudinal_entries: list[dict[str, Any]] = []
     explicit_entries: list[dict[str, Any]] = []
+    surface_entries: list[dict[str, Any]] = []
 
     for zone_index, zone in enumerate(_mesh_zones(mesh_def), start=1):
         zone_name = _mesh_zone_name(zone, zone_index)
-        curve_source = _mesh_zone_curve_source(zone, zone_name)
+        try:
+            curve_source = _mesh_zone_curve_source(zone, zone_name)
 
-        if curve_source == "automatic":
-            zone_chordwise_entries, zone_spanwise_entries = (
-                _automatic_curve_sequences_for_zone(zone, zone_name)
+            if curve_source == "automatic":
+                zone_circumferential_entries, zone_longitudinal_entries = (
+                    _automatic_curve_sequences_for_zone(zone, zone_name)
+                )
+                circumferential_entries.extend(
+                    _tag_zone_curve_entries(
+                        zone_circumferential_entries,
+                        zone_name=zone_name,
+                        curve_source=curve_source,
+                    )
+                )
+                longitudinal_entries.extend(
+                    _tag_zone_curve_entries(
+                        zone_longitudinal_entries,
+                        zone_name=zone_name,
+                        curve_source=curve_source,
+                    )
+                )
+                continue
+
+            manual_entries = (
+                _zone_curve_entries(zone, "circumferential_curve_sequences")
+                + _zone_curve_entries(zone, "longitudinal_curve_sequences")
+                + _zone_curve_entries(zone, "explicit_curve_sequences")
             )
-            chordwise_entries.extend(zone_chordwise_entries)
-            spanwise_entries.extend(zone_spanwise_entries)
-            continue
+            zone_surface_entries = _zone_surface_entries(zone)
+            if not manual_entries and not zone_surface_entries:
+                raise ValueError(
+                    f"Manual mesh zone {zone_name!r} must define at least one curve "
+                    "sequence or transfinite surface."
+                )
 
-        manual_entries = (
-            _zone_curve_entries(zone, "chordwise_curve_sequences")
-            + _zone_curve_entries(zone, "spanwise_curve_sequences")
-            + _zone_curve_entries(zone, "explicit_curve_sequences")
-        )
-        if not manual_entries:
-            raise ValueError(
-                f"Manual mesh zone {zone_name!r} must define at least one curve "
-                "sequence."
+            circumferential_entries.extend(
+                _tag_zone_curve_entries(
+                    _zone_curve_entries(zone, "circumferential_curve_sequences"),
+                    zone_name=zone_name,
+                    curve_source=curve_source,
+                )
             )
+            longitudinal_entries.extend(
+                _tag_zone_curve_entries(
+                    _zone_curve_entries(zone, "longitudinal_curve_sequences"),
+                    zone_name=zone_name,
+                    curve_source=curve_source,
+                )
+            )
+            explicit_entries.extend(
+                _tag_zone_curve_entries(
+                    _zone_curve_entries(zone, "explicit_curve_sequences"),
+                    zone_name=zone_name,
+                    curve_source=curve_source,
+                )
+            )
+            surface_entries.extend(zone_surface_entries)
+        except Exception as error:
+            raise MeshZoneError(zone_name, error) from error
 
-        chordwise_entries.extend(_zone_curve_entries(zone, "chordwise_curve_sequences"))
-        spanwise_entries.extend(_zone_curve_entries(zone, "spanwise_curve_sequences"))
-        explicit_entries.extend(_zone_curve_entries(zone, "explicit_curve_sequences"))
-
-    expanded_mesh_def["chordwise_curve_sequences"] = chordwise_entries
-    expanded_mesh_def["spanwise_curve_sequences"] = spanwise_entries
+    expanded_mesh_def["circumferential_curve_sequences"] = circumferential_entries
+    expanded_mesh_def["longitudinal_curve_sequences"] = longitudinal_entries
     expanded_mesh_def["explicit_curve_sequences"] = explicit_entries
+    if surface_entries:
+        expanded_mesh_def["transfinite_surfaces"] = (
+            copy.deepcopy(
+                list(_iter_surface_entries(mesh_def.get("transfinite_surfaces", {})))
+            )
+            + surface_entries
+        )
     return expanded_mesh_def
 
 
@@ -2560,19 +2756,19 @@ def _curve_incident_boundary_points(curve_ids: Iterable[int]) -> dict[int, set[i
 
 def _surface_transfinite_corners(
     surface_id: int,
-    chordwise_curves: set[int],
-    spanwise_curves: set[int],
+    circumferential_curves: set[int],
+    longitudinal_curves: set[int],
 ) -> list[int]:
     boundary_curves = _surface_boundary_curves(surface_id)
-    boundary_chordwise_curves = [
-        curve_id for curve_id in boundary_curves if curve_id in chordwise_curves
+    boundary_circumferential_curves = [
+        curve_id for curve_id in boundary_curves if curve_id in circumferential_curves
     ]
-    boundary_spanwise_curves = [
-        curve_id for curve_id in boundary_curves if curve_id in spanwise_curves
+    boundary_longitudinal_curves = [
+        curve_id for curve_id in boundary_curves if curve_id in longitudinal_curves
     ]
-    incident_chordwise = _curve_incident_boundary_points(boundary_chordwise_curves)
-    incident_spanwise = _curve_incident_boundary_points(boundary_spanwise_curves)
-    corner_set = set(incident_chordwise).intersection(incident_spanwise)
+    incident_circumferential = _curve_incident_boundary_points(boundary_circumferential_curves)
+    incident_longitudinal = _curve_incident_boundary_points(boundary_longitudinal_curves)
+    corner_set = set(incident_circumferential).intersection(incident_longitudinal)
 
     ordered_corners = []
     for point_id in _surface_ordered_boundary_points(surface_id):
@@ -2582,7 +2778,7 @@ def _surface_transfinite_corners(
     return ordered_corners
 
 
-def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
+def _longitudinal_curve_map(curve_ids: list[int]) -> dict[int, int]:
     curve_map = {}
     for curve_id in curve_ids:
         point_a, point_b = _curve_endpoints(curve_id)
@@ -2591,9 +2787,9 @@ def _spanwise_curve_map(curve_ids: list[int]) -> dict[int, int]:
     return curve_map
 
 
-def _spanwise_connector_curves(spanwise_entries: Iterable[dict[str, Any]]) -> set[int]:
+def _longitudinal_connector_curves(longitudinal_entries: Iterable[dict[str, Any]]) -> set[int]:
     connector_curves = set()
-    for entry in spanwise_entries:
+    for entry in longitudinal_entries:
         curve_ids = [
             abs(curve_id)
             for curve_group in _entry_curve_groups(entry)
@@ -2613,9 +2809,20 @@ def _spanwise_connector_curves(spanwise_entries: Iterable[dict[str, Any]]) -> se
 
 
 def _automatic_surfaces_enabled(mesh_def: dict[str, Any]) -> bool:
-    if "automatic_transfinite_surfaces" in mesh_def:
-        return bool(mesh_def["automatic_transfinite_surfaces"])
-    return bool(mesh_def.get("mesh_zones"))
+    return any(
+        _mesh_zone_curve_source(zone, _mesh_zone_name(zone, zone_index)) == "automatic"
+        for zone_index, zone in enumerate(_mesh_zones(mesh_def), start=1)
+    )
+
+
+def _automatic_zone_curve_entries(
+    section: dict[str, Any] | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        entry
+        for entry in _iter_curve_entries(section)
+        if entry.get("_mesh_zone_curve_source") == "automatic"
+    ]
 
 
 def _surface_meshing_algorithm_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
@@ -2639,48 +2846,52 @@ def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, 
     if not _automatic_surfaces_enabled(mesh_def):
         return mesh_def
 
-    chordwise_entries = list(
-        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+    circumferential_entries = _automatic_zone_curve_entries(
+        mesh_def.get("circumferential_curve_sequences", [])
     )
-    spanwise_entries = list(
-        _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", []))
+    longitudinal_entries = _automatic_zone_curve_entries(
+        mesh_def.get("longitudinal_curve_sequences", [])
     )
-    if len(chordwise_entries) < 2 or not spanwise_entries:
+    if len(circumferential_entries) < 2 or not longitudinal_entries:
         return mesh_def
 
-    chordwise_curves = {
+    circumferential_curves = {
         abs(curve_id)
-        for entry in chordwise_entries
+        for entry in circumferential_entries
         for curve_group in _entry_curve_groups(entry)
         for curve_id in curve_group
     }
-    spanwise_curves = {
+    longitudinal_curves = {
         abs(curve_id)
-        for entry in spanwise_entries
+        for entry in longitudinal_entries
         for curve_group in _entry_curve_groups(entry)
         for curve_id in curve_group
     }
-    transfinite_curves = chordwise_curves.union(spanwise_curves)
+    transfinite_curves = circumferential_curves.union(longitudinal_curves)
     transfinite_surfaces = []
     transfinite_surface_ids = set()
     algorithm_surface_ids = _surface_meshing_algorithm_surface_ids(mesh_def)
+    manual_surfaces = copy.deepcopy(
+        list(_iter_surface_entries(mesh_def.get("transfinite_surfaces", {})))
+    )
+    manual_surface_ids = {int(surface["id"]) for surface in manual_surfaces}
 
     for _, surface_id in gmsh.model.getEntities(2):
-        if surface_id in algorithm_surface_ids:
+        if surface_id in algorithm_surface_ids or surface_id in manual_surface_ids:
             continue
 
         boundary_curves = set(_surface_boundary_curves(surface_id))
-        boundary_chordwise_curves = boundary_curves.intersection(chordwise_curves)
-        boundary_spanwise_curves = boundary_curves.intersection(spanwise_curves)
+        boundary_circumferential_curves = boundary_curves.intersection(circumferential_curves)
+        boundary_longitudinal_curves = boundary_curves.intersection(longitudinal_curves)
         if (
             not boundary_curves.issubset(transfinite_curves)
-            or not boundary_chordwise_curves
-            or not boundary_spanwise_curves
+            or not boundary_circumferential_curves
+            or not boundary_longitudinal_curves
         ):
             continue
 
         boundary_points = _surface_transfinite_corners(
-            surface_id, chordwise_curves, spanwise_curves
+            surface_id, circumferential_curves, longitudinal_curves
         )
         if len(boundary_points) == 4:
             transfinite_surfaces.append(
@@ -2694,9 +2905,9 @@ def apply_automatic_transfinite_surfaces(mesh_def: dict[str, Any]) -> dict[str, 
 
     all_surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
     auto_mesh_def = copy.deepcopy(mesh_def)
-    auto_mesh_def["transfinite_surfaces"] = transfinite_surfaces
+    auto_mesh_def["transfinite_surfaces"] = manual_surfaces + transfinite_surfaces
     auto_mesh_def["unstructured_surfaces"] = sorted(
-        all_surface_ids - transfinite_surface_ids
+        all_surface_ids - transfinite_surface_ids - manual_surface_ids
     )
     return auto_mesh_def
 
@@ -2831,6 +3042,57 @@ def _curve_coef(mesh_type: str, base_coef: float, invert: bool) -> float:
     return base_coef
 
 
+def _automatic_circumferential_zone_name(entry: dict[str, Any]) -> str | None:
+    if entry.get("_mesh_zone_curve_source") != "automatic":
+        return None
+    zone_name = entry.get("_mesh_zone_name")
+    return None if zone_name is None else str(zone_name)
+
+
+def _propagate_circumferential_element_size_specs(
+    entry: dict[str, Any],
+    curve_specs: list[CurveSpec],
+    reference_specs_by_zone: dict[str, list[CurveSpec]],
+) -> list[CurveSpec]:
+    zone_name = _automatic_circumferential_zone_name(entry)
+    if zone_name is None:
+        return curve_specs
+
+    reference_specs = reference_specs_by_zone.get(zone_name)
+    if reference_specs is None:
+        reference_specs_by_zone[zone_name] = curve_specs
+        return curve_specs
+
+    if len(reference_specs) != len(curve_specs):
+        raise ValueError(
+            f"Automatic circumferential loop {entry.get('name', entry)!r} in mesh zone "
+            f"{zone_name!r} has {len(curve_specs)} curve groups, but the first "
+            f"loop has {len(reference_specs)}."
+        )
+
+    spec_count = len(curve_specs)
+    propagated_specs = []
+    for index, curve_spec in enumerate(curve_specs):
+        if _entry_mesh_size_mode(entry, index, spec_count) in (
+            "ele size",
+            "element size",
+            "element_size",
+        ):
+            reference_spec = reference_specs[index]
+            propagated_specs.append(
+                replace(
+                    curve_spec,
+                    n_pts=reference_spec.n_pts,
+                    mesh_type=reference_spec.mesh_type,
+                    coef=reference_spec.coef,
+                )
+            )
+        else:
+            propagated_specs.append(curve_spec)
+
+    return propagated_specs
+
+
 def _curve_endpoints(curve_id: int) -> tuple[int, int]:
     boundary = gmsh.model.getBoundary([(1, abs(curve_id))], oriented=False)
     points = [tag for dim, tag in boundary if dim == 0]
@@ -2892,6 +3154,10 @@ def _surface_edge_curves(surface_id: int, corners: list[int]) -> list[list[int]]
     return edge_curves
 
 
+def _is_triangular_transfinite_surface(corners: list[int]) -> bool:
+    return len(set(corners)) == 3
+
+
 def _edge_divisions(
     curves: list[int],
     constraints: dict[int, CurveConstraint],
@@ -2934,11 +3200,11 @@ def _short_curve_threshold(curve_lengths: list[float]) -> float:
     return max(1.0e-9, median_length * 1.0e-3)
 
 
-def _normalize_spanwise_sequence_counts(
+def _normalize_longitudinal_sequence_counts(
     mesh_def: dict[str, Any],
     constraints: dict[int, CurveConstraint],
 ) -> None:
-    for entry in _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])):
+    for entry in _iter_curve_entries(mesh_def.get("longitudinal_curve_sequences", [])):
         curve_ids = [
             abs(curve_id)
             for curve_group in _entry_curve_groups(entry)
@@ -2979,17 +3245,24 @@ def _normalize_spanwise_sequence_counts(
 
 def apply_transfinite_curves(mesh_def: dict[str, Any]) -> dict[int, CurveConstraint]:
     constraints = {}
+    circumferential_reference_specs_by_zone: dict[str, list[CurveSpec]] = {}
 
     for section_name in (
-        "chordwise_curve_sequences",
-        "spanwise_curve_sequences",
+        "circumferential_curve_sequences",
+        "longitudinal_curve_sequences",
         "explicit_curve_sequences",
     ):
         section = mesh_def.get(section_name, {})
         for entry in _iter_curve_entries(section):
             curve_specs = list(_iter_curve_specs(entry))
+            if section_name == "circumferential_curve_sequences":
+                curve_specs = _propagate_circumferential_element_size_specs(
+                    entry,
+                    curve_specs,
+                    circumferential_reference_specs_by_zone,
+                )
             if (
-                section_name == "spanwise_curve_sequences"
+                section_name == "longitudinal_curve_sequences"
                 and curve_specs
                 and _uses_element_size_mode(entry, len(curve_specs))
             ):
@@ -3059,8 +3332,8 @@ def _complete_surface_boundary_curves_once(
 ) -> None:
     section = mesh_def.get("transfinite_surfaces", {})
     unstructured_surfaces = _unstructured_surface_ids(mesh_def)
-    chordwise_curve_loop_indices = _chordwise_curve_loop_indices(mesh_def)
-    chordwise_curve_groups = _chordwise_curve_groups(mesh_def)
+    circumferential_curve_loop_indices = _circumferential_curve_loop_indices(mesh_def)
+    circumferential_curve_groups = _circumferential_curve_groups(mesh_def)
     protected_curve_counts = _protected_curve_counts(mesh_def)
 
     for surface in _iter_surface_entries(section):
@@ -3071,6 +3344,9 @@ def _complete_surface_boundary_curves_once(
         corners = [int(point) for point in surface.get("boundary points", [])]
 
         if len(corners) != 4:
+            continue
+
+        if _is_triangular_transfinite_surface(corners):
             continue
 
         edge_curves = _surface_edge_curves(surface_id, corners)
@@ -3103,16 +3379,16 @@ def _complete_surface_boundary_curves_once(
         _align_opposite_edge_divisions(
             edge_curves,
             constraints,
-            chordwise_curve_loop_indices,
-            chordwise_curve_groups,
+            circumferential_curve_loop_indices,
+            circumferential_curve_groups,
             protected_curve_counts,
         )
 
 
-def _chordwise_curve_loop_indices(mesh_def: dict[str, Any]) -> dict[int, int]:
+def _circumferential_curve_loop_indices(mesh_def: dict[str, Any]) -> dict[int, int]:
     loop_indices = {}
     for loop_index, entry in enumerate(
-        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", []))
+        _iter_curve_entries(mesh_def.get("circumferential_curve_sequences", []))
     ):
         for curve_group in entry.get("curve_ids", []):
             for curve_id in _as_list(curve_group):
@@ -3120,9 +3396,9 @@ def _chordwise_curve_loop_indices(mesh_def: dict[str, Any]) -> dict[int, int]:
     return loop_indices
 
 
-def _chordwise_curve_groups(mesh_def: dict[str, Any]) -> dict[int, list[int]]:
+def _circumferential_curve_groups(mesh_def: dict[str, Any]) -> dict[int, list[int]]:
     curve_groups = {}
-    for entry in _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])):
+    for entry in _iter_curve_entries(mesh_def.get("circumferential_curve_sequences", [])):
         for curve_group in entry.get("curve_ids", []):
             group = [abs(curve_id) for curve_id in _as_list(curve_group)]
             for curve_id in group:
@@ -3133,7 +3409,7 @@ def _chordwise_curve_groups(mesh_def: dict[str, Any]) -> dict[int, list[int]]:
 def _protected_curve_counts(mesh_def: dict[str, Any]) -> set[int]:
     protected_curves = set()
     sections = (
-        mesh_def.get("spanwise_curve_sequences", []),
+        mesh_def.get("longitudinal_curve_sequences", []),
         mesh_def.get("explicit_curve_sequences", []),
     )
     for section in sections:
@@ -3181,8 +3457,8 @@ def _add_unstructured_surface(mesh_def: dict[str, Any], surface_id: int) -> None
 def _align_opposite_edge_divisions(
     edge_curves: list[list[int]],
     constraints: dict[int, CurveConstraint],
-    chordwise_curve_loop_indices: dict[int, int],
-    chordwise_curve_groups: dict[int, list[int]],
+    circumferential_curve_loop_indices: dict[int, int],
+    circumferential_curve_groups: dict[int, list[int]],
     protected_curve_counts: set[int],
 ) -> None:
     for edge_index in range(2):
@@ -3194,16 +3470,16 @@ def _align_opposite_edge_divisions(
             continue
 
         loop_indices_a = [
-            chordwise_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_a
+            circumferential_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_a
         ]
         loop_indices_b = [
-            chordwise_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_b
+            circumferential_curve_loop_indices.get(abs(curve_id)) for curve_id in curves_b
         ]
-        chordwise_a = all(loop_index is not None for loop_index in loop_indices_a)
-        chordwise_b = all(loop_index is not None for loop_index in loop_indices_b)
+        circumferential_a = all(loop_index is not None for loop_index in loop_indices_a)
+        circumferential_b = all(loop_index is not None for loop_index in loop_indices_b)
 
-        if chordwise_a and chordwise_b:
-            _align_opposite_chordwise_edge_divisions(
+        if circumferential_a and circumferential_b:
+            _align_opposite_circumferential_edge_divisions(
                 curves_a,
                 divisions_a,
                 loop_indices_a,
@@ -3211,14 +3487,14 @@ def _align_opposite_edge_divisions(
                 divisions_b,
                 loop_indices_b,
                 constraints,
-                chordwise_curve_groups,
+                circumferential_curve_groups,
             )
             continue
-        if chordwise_a:
+        if circumferential_a:
             source_divisions = divisions_a
             target_edge_divisions = divisions_b
             target_curves = curves_b
-        elif chordwise_b:
+        elif circumferential_b:
             source_divisions = divisions_b
             target_edge_divisions = divisions_a
             target_curves = curves_a
@@ -3227,23 +3503,23 @@ def _align_opposite_edge_divisions(
             target_edge_divisions = min(divisions_a, divisions_b)
             target_curves = curves_a if divisions_a < divisions_b else curves_b
 
-        non_chordwise_target_curves = [
+        non_circumferential_target_curves = [
             abs(curve_id)
             for curve_id in target_curves
-            if abs(curve_id) not in chordwise_curve_loop_indices
+            if abs(curve_id) not in circumferential_curve_loop_indices
             and abs(curve_id) not in protected_curve_counts
         ]
-        if not non_chordwise_target_curves:
+        if not non_circumferential_target_curves:
             warnings.warn(
                 "Could not align opposite surface edge divisions without changing "
-                f"chordwise or protected curves {target_curves}. Leaving counts "
+                f"circumferential or protected curves {target_curves}. Leaving counts "
                 "unchanged.",
                 stacklevel=2,
             )
             continue
 
         target_curve = max(
-            non_chordwise_target_curves,
+            non_circumferential_target_curves,
             key=_curve_length,
         )
 
@@ -3267,7 +3543,7 @@ def _align_opposite_edge_divisions(
         )
 
 
-def _align_opposite_chordwise_edge_divisions(
+def _align_opposite_circumferential_edge_divisions(
     curves_a: list[int],
     divisions_a: int,
     loop_indices_a: list[int | None],
@@ -3275,7 +3551,7 @@ def _align_opposite_chordwise_edge_divisions(
     divisions_b: int,
     loop_indices_b: list[int | None],
     constraints: dict[int, CurveConstraint],
-    chordwise_curve_groups: dict[int, list[int]],
+    circumferential_curve_groups: dict[int, list[int]],
 ) -> None:
     mean_loop_a = sum(
         loop_index for loop_index in loop_indices_a if loop_index is not None
@@ -3300,7 +3576,7 @@ def _align_opposite_chordwise_edge_divisions(
         return
 
     target_curve = max((abs(curve_id) for curve_id in target_curves), key=_curve_length)
-    target_group = chordwise_curve_groups.get(target_curve, [target_curve])
+    target_group = circumferential_curve_groups.get(target_curve, [target_curve])
     compensation_curves = [
         curve_id
         for curve_id in target_group
@@ -3309,9 +3585,9 @@ def _align_opposite_chordwise_edge_divisions(
     ]
     if not compensation_curves:
         warnings.warn(
-            "Opposite chordwise surface edges have inconsistent divisions, but "
+            "Opposite circumferential surface edges have inconsistent divisions, but "
             f"curve {target_curve} is not part of a larger grouped curve. "
-            "Leaving chordwise group total unchanged.",
+            "Leaving circumferential group total unchanged.",
             stacklevel=2,
         )
         return
@@ -3334,7 +3610,7 @@ def _align_opposite_chordwise_edge_divisions(
     compensation_n_pts = compensation_constraint.n_pts - missing_divisions
     if compensation_n_pts < 2:
         warnings.warn(
-            "Cannot align chordwise subcurve divisions while preserving grouped "
+            "Cannot align circumferential subcurve divisions while preserving grouped "
             f"curve total for group {target_group}. Leaving counts unchanged.",
             stacklevel=2,
         )
@@ -3582,12 +3858,12 @@ def _unique_physical_name(name: str, used_names: set[str]) -> str:
     return unique_name
 
 
-def _curve_to_chordwise_group_map(
+def _curve_to_circumferential_group_map(
     mesh_def: dict[str, Any],
 ) -> dict[int, tuple[int, int]]:
     curve_map = {}
     for loop_index, entry in enumerate(
-        _iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])),
+        _iter_curve_entries(mesh_def.get("circumferential_curve_sequences", [])),
         start=1,
     ):
         for group_index, curve_group in enumerate(_entry_curve_groups(entry), start=1):
@@ -3596,10 +3872,10 @@ def _curve_to_chordwise_group_map(
     return curve_map
 
 
-def _curve_to_spanwise_section_map(mesh_def: dict[str, Any]) -> dict[int, int]:
+def _curve_to_longitudinal_section_map(mesh_def: dict[str, Any]) -> dict[int, int]:
     curve_map = {}
     for section_index, entry in enumerate(
-        _iter_curve_entries(mesh_def.get("spanwise_curve_sequences", [])),
+        _iter_curve_entries(mesh_def.get("longitudinal_curve_sequences", [])),
         start=1,
     ):
         for curve_group in _entry_curve_groups(entry):
@@ -3609,16 +3885,16 @@ def _curve_to_spanwise_section_map(mesh_def: dict[str, Any]) -> dict[int, int]:
 
 
 def _blunt_trailing_edge_group_index(mesh_def: dict[str, Any]) -> int | None:
-    chordwise_entries = list(_iter_curve_entries(mesh_def.get("chordwise_curve_sequences", [])))
-    if not chordwise_entries:
+    circumferential_entries = list(_iter_curve_entries(mesh_def.get("circumferential_curve_sequences", [])))
+    if not circumferential_entries:
         return None
-    return max(len(_entry_curve_groups(entry)) for entry in chordwise_entries)
+    return max(len(_entry_curve_groups(entry)) for entry in circumferential_entries)
 
 
 def _structured_surface_export_names(mesh_def: dict[str, Any]) -> dict[int, str]:
     surface_definitions = _transfinite_surface_definitions(mesh_def)
-    chordwise_curve_map = _curve_to_chordwise_group_map(mesh_def)
-    spanwise_curve_map = _curve_to_spanwise_section_map(mesh_def)
+    circumferential_curve_map = _curve_to_circumferential_group_map(mesh_def)
+    longitudinal_curve_map = _curve_to_longitudinal_section_map(mesh_def)
     blunt_group_index = _blunt_trailing_edge_group_index(mesh_def)
     structured_names = {}
 
@@ -3628,27 +3904,27 @@ def _structured_surface_export_names(mesh_def: dict[str, Any]) -> dict[int, str]
             continue
 
         boundary_curves = [abs(curve_id) for curve_id in _surface_boundary_curves(surface_id)]
-        chordwise_groups = {
-            chordwise_curve_map[curve_id][1]
+        circumferential_groups = {
+            circumferential_curve_map[curve_id][1]
             for curve_id in boundary_curves
-            if curve_id in chordwise_curve_map
+            if curve_id in circumferential_curve_map
         }
-        spanwise_sections = {
-            spanwise_curve_map[curve_id]
+        longitudinal_sections = {
+            longitudinal_curve_map[curve_id]
             for curve_id in boundary_curves
-            if curve_id in spanwise_curve_map
+            if curve_id in longitudinal_curve_map
         }
 
-        if len(chordwise_groups) != 1 or len(spanwise_sections) != 1:
+        if len(circumferential_groups) != 1 or len(longitudinal_sections) != 1:
             continue
 
-        chordwise_index = next(iter(chordwise_groups))
-        spanwise_index = next(iter(spanwise_sections))
-        if blunt_group_index is not None and chordwise_index == blunt_group_index:
-            structured_names[surface_id] = f"struct_bluntTE_S{spanwise_index:02d}"
+        circumferential_index = next(iter(circumferential_groups))
+        longitudinal_index = next(iter(longitudinal_sections))
+        if blunt_group_index is not None and circumferential_index == blunt_group_index:
+            structured_names[surface_id] = f"struct_bluntTE_S{longitudinal_index:02d}"
         else:
             structured_names[surface_id] = (
-                f"struct_surf_S{spanwise_index:02d}_C{chordwise_index:02d}"
+                f"struct_surf_S{longitudinal_index:02d}_C{circumferential_index:02d}"
             )
 
     return structured_names
@@ -3715,10 +3991,22 @@ def show_gmsh() -> None:
     gmsh.fltk.run()
 
 
+def _mesh_zone_name_from_error(error: BaseException) -> str | None:
+    current: BaseException | None = error
+    while current is not None:
+        zone_name = getattr(current, "zone_name", None)
+        if zone_name is not None:
+            return str(zone_name)
+        current = current.__cause__
+    return None
+
+
 def show_geometry_after_error(error: Exception) -> None:
     """Open Gmsh with geometry only, preserving the original failure."""
+    zone_name = _mesh_zone_name_from_error(error)
+    prefix = f"Mesh zone {zone_name!r}: " if zone_name is not None else ""
     print(
-        "Mesh generation failed. Opening Gmsh with the imported geometry for "
+        f"{prefix}Mesh generation failed. Opening Gmsh with the imported geometry for "
         f"inspection before re-raising the error: {error}"
     )
     try:
@@ -3763,13 +4051,13 @@ def normalize_mesh_def(mesh_def: dict[str, Any]) -> dict[str, Any]:
     normalized.update(copy.deepcopy(geometry_def))
     normalized.update(copy.deepcopy(mesh_settings))
 
-    old_curve_sequence_keys = {
+    top_level_curve_sequence_keys = {
         "automatic_curve_sequences",
-        "chordwise_curve_sequences",
-        "spanwise_curve_sequences",
+        "circumferential_curve_sequences",
+        "longitudinal_curve_sequences",
         "explicit_curve_sequences",
     }
-    deprecated_keys = sorted(old_curve_sequence_keys.intersection(normalized))
+    deprecated_keys = sorted(top_level_curve_sequence_keys.intersection(normalized))
     if deprecated_keys:
         raise ValueError(
             "Old top-level curve sequence keys are no longer supported: "

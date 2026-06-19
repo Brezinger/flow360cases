@@ -46,10 +46,9 @@
         ]
       }
     ],
-    "automatic_transfinite_surfaces": true,
     "mesh_zones": [
       {
-        "name": "manual curve parameters",
+        "name": "fuse nose",
         "curve_definition": "manual",
         "explicit_curve_sequences": [
           {
@@ -61,181 +60,351 @@
               866
             ],
             "type": "Progression",
-            "mesh size mode": "ele size",
-            "target ele size 1": 10,
-            "target ele size 2": 0.75
+            "mesh size mode": "npts",
+            "n_pts": 67,
+            "Parameter": 0.962077
           }
-        ]
+        ],
+        "transfinite_surfaces": [
+        {
+          "id": 358,
+          "Arrangement": "Left",
+          "boundary points": [
+            594,
+            528,
+            744
+          ]
+        },
+        {
+          "id": 394,
+          "Arrangement": "Left",
+          "boundary points": [
+            594,
+            744,
+            683
+          ]
+        },
+        {
+          "id": 333,
+          "Arrangement": "Left",
+          "boundary points": [
+            594,
+            683,
+            557
+          ]
+        },
+        {
+          "id": 279,
+          "Arrangement": "Left",
+          "boundary points": [
+            594,
+            557,
+            528
+          ]
+        }
+      ]
       },
       {
-        "name": "fuselage main",
+        "name": "fuselage section 1",
         "curve_definition": "automatic",
         "start_pt": 528,
-        "chordwise_direction": [
+        "circumferential_direction": [
           0.0,
           0.0,
           -1.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           1.0,
           0.0,
           0.0
         ],
-        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1],
-        "chordwise_transfinite_def": {
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
+            "Bump",
             "Progression",
             "Progression",
             "Progression",
             "Progression",
+            "Bump",
             "Progression",
             "Progression",
             "Progression",
             "Progression",
+            "Bump",
             "Progression",
             "Progression",
             "Progression",
             "Progression",
-            "Progression",
-            "Progression",
+            "Bump",
             "Progression",
             "Progression"
           ],
-          "Parameter": [
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0
+          "mesh size mode": [
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size"
           ],
-          "invert_direction": [
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false
-          ],
-          "n_pts": [
-            5,
-            2,
-            13,
-            2,
-            8,
-            2,
-            13,
-            2,
-            4,
-            5,
-            2,
-            13,
-            2,
-            8,
-            2,
-            13,
-            2,
-            4
-          ]
+          "target ele size 1": [3.00, 0.81, 0.81, 0.81, 0.81, 3.00, 0.81, 0.81, 0.81, 0.81, 3.00, 0.81, 0.81, 0.81, 0.81, 3.00, 0.81, 0.81, 0.81, 0.81],
+          "target ele size 2": [0.81, 0.81, 4.28, 0.81, 3.00, 0.81, 0.81, 4.28, 0.81, 3.00, 0.81, 0.81, 4.28, 0.81, 3.00, 0.81, 0.81, 4.28, 0.81, 3.00]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [
             {
-              "name": "Fuse section 2",
-              "type": "Progression",
+              "name": "Fuse section 1",
+              "type": "Bump",
               "_invert_direction": false,
               "mesh size mode": "ele size",
               "target ele size 1": 10,
               "target ele size 2": 10
-            },
+            }
+
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q1-2a",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 438,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            0.896630
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            14
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
             {
-              "name": "Fuse section 3",
-              "type": "Progression",
+              "name": "Fuse section Q1-2a span 1",
+              "type": "Bump",
               "_invert_direction": false,
               "mesh size mode": "ele size",
               "target ele size 1": 10,
-              "target ele size 2": 10
+              "target ele size 2": 15
             },
             {
-              "name": "Fuse section 4",
+              "name": "Fuse section Q1-2a span 2",
               "type": "Progression",
               "_invert_direction": false,
-              "mesh size mode": "ele size",
-              "target ele size 1": 10,
-              "target ele size 2": 10
+              "mesh size mode": "npts",
+              "n_pts": 75,
+              "Parameter": 0.986394
             },
             {
-              "name": "Fuse section 5",
-              "type": "Progression",
+              "name": "Fuse section Q1-2a span 3",
+              "type": "Bump",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 10,
-              "target ele size 2": 10
-            },
-            {
-              "name": "Fuse section 6",
-              "type": "Progression",
-              "_invert_direction": false,
-              "mesh size mode": "ele size",
-              "target ele size 1": 10,
-              "target ele size 2": 10
-            },
-            {
-              "name": "Fuse section 7",
-              "type": "Progression",
-              "_invert_direction": false,
-              "mesh size mode": "ele size",
-              "target ele size 1": 10,
+              "target ele size 1": 3,
               "target ele size 2": 10
             }
           ]
         }
       },
       {
-        "name": "wing 1 outboard",
+        "name": "fuse section Q1-2b",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 526,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Fuse section Q1-2b span 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "Fuse section Q1-2b span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 4
+            },
+            {
+              "name": "Fuse section Q1-2b span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "Fuse section Q1-2b span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q1-2d",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 751,
+        "circumferential_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            4
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Fuse section Q1-2d span 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "Fuse section Q1-2d span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 4
+            },
+            {
+              "name": "Fuse section Q1-2d span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "Fuse section Q1-2d span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 1",
         "curve_definition": "automatic",
         "start_pt": 178,
-        "chordwise_direction": [
+        "circumferential_direction": [
           -1.0,
           0.0,
           0.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           0.0,
           -0.8191520442889918,
           0.573576436351046
         ],
         "has_blunt_te": true,
         "n_subcurvs_per_compound_curve": [2, 1, 1, 1, 1, 1, 1],
-        "chordwise_transfinite_def": {
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
@@ -273,46 +442,46 @@
             5
           ]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [
             {
               "name": "Trapezoid 1",
-              "type": "Progression",
+              "type": "Bump",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 10,
-              "target ele size 2": 10
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
             },
             {
               "name": "Trapezoid 2",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 10,
-              "target ele size 2": 10
+              "target ele size 1": 1.25,
+              "target ele size 2": 0.85
             }
           ]
         }
       },
       {
-        "name": "wing 1 inboard",
+        "name": "wing 2",
         "curve_definition": "automatic",
-        "start_pt": 178,
-        "chordwise_direction": [
+        "start_pt": 113,
+        "circumferential_direction": [
           -1.0,
           0.0,
           0.0
         ],
-        "spanwise_direction": [
+        "longitudinal_direction": [
           0.0,
           0.8191520442889918,
-          -0.573576436351046
+          0.573576436351046
         ],
         "has_blunt_te": true,
-        "n_subcurvs_per_compound_curve": [2, 1, 1, 1, 1, 1, 1],
-        "chordwise_transfinite_def": {
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
           "type": [
             "Progression",
             "Progression",
@@ -350,17 +519,455 @@
             5
           ]
         },
-        "spanwise_transfinite_def": {
+        "longitudinal_transfinite_def": {
           "default type": "Progression",
           "Parameter": 1.0,
           "sections": [
             {
               "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 5,
-              "target ele size 2": 2
+              "target ele size 1": 1.25,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 3",
+        "curve_definition": "automatic",
+        "start_pt": 954,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 4",
+        "curve_definition": "automatic",
+        "start_pt": 147,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [2, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.5,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 1",
+        "curve_definition": "automatic",
+        "start_pt": 84,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [1, 4, 1, 1, 4, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 2",
+        "curve_definition": "automatic",
+        "start_pt": 4,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 3",
+        "curve_definition": "automatic",
+        "start_pt": 32,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 4",
+        "curve_definition": "automatic",
+        "start_pt": 58,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [1, 1, 1, 1, 1, 1, 1],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
             }
           ]
         }
