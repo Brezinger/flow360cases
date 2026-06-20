@@ -342,20 +342,43 @@ def _bump_corner_middle_sizes(
     n_elements: int,
     coef: float,
 ) -> tuple[float, float]:
-    node_positions = _bump_node_positions(n_elements + 1, coef)
-    element_sizes = [
-        curve_length * (node_positions[index + 1] - node_positions[index])
-        for index in range(n_elements)
-    ]
-    corner_size = 0.5 * (element_sizes[0] + element_sizes[-1])
+    if abs(coef - 1.0) < 1e-14:
+        return curve_length / n_elements, curve_length / n_elements
+
+    if coef > 1.0:
+        sqrt_a = math.sqrt(coef - 1.0)
+        angle = math.atan(sqrt_a)
+
+        def node_position(index: int) -> float:
+            return 0.5 * (
+                1.0 - math.tan(angle * (1.0 - 2.0 * index / n_elements)) / sqrt_a
+            )
+    elif coef > 0.0:
+        sqrt_a = math.sqrt(1.0 - coef)
+        angle = math.atanh(sqrt_a)
+
+        def node_position(index: int) -> float:
+            return 0.5 * (
+                1.0 - math.tanh(angle * (1.0 - 2.0 * index / n_elements)) / sqrt_a
+            )
+    else:
+        raise ValueError(f"Bump coefficient must be positive, got {coef}.")
+
+    def element_size(index: int) -> float:
+        return curve_length * (node_position(index + 1) - node_position(index))
+
+    first_size = element_size(0)
+    last_size = element_size(n_elements - 1)
+    corner_size = 0.5 * (first_size + last_size)
 
     middle_index = n_elements // 2
     if n_elements % 2 == 0:
         middle_size = 0.5 * (
-            element_sizes[middle_index - 1] + element_sizes[middle_index]
+            element_size(middle_index - 1)
+            + element_size(middle_index)
         )
     else:
-        middle_size = element_sizes[middle_index]
+        middle_size = element_size(middle_index)
 
     return corner_size, middle_size
 
