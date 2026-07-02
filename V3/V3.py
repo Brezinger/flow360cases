@@ -156,8 +156,8 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     winglet_radius_refinement_spacing_growth_rate = 1.2
     winglet_radius_refinement_max_spacing = None
 
-    ns_solver_tolerance = 1.e-7  # Navier-Stokes and turbulence model solver tolerance
-    turb_solver_tolerance = 1.e-6  # turbulence model solver tolerance
+    ns_solver_tolerance = 1.0e-10
+    turb_solver_tolerance = 1.0e-8
     if enable_alpha_controller and alpha_controller_start_pseudo_step >= n_timesteps:
         raise ValueError(
             "alpha_controller_start_pseudo_step must be smaller than n_timesteps "
