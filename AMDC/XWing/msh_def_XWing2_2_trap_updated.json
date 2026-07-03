@@ -1,0 +1,7112 @@
+{
+  "geometry definition": {
+    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\20_AMDC_XWing2\\05_CAD\\2026-05-12_AMDC-simplified-XWingV22_getrennt.stp",
+    "geometry_preprocessing": {
+      "enabled": true,
+      "origin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "rotation_deg": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 180.0
+      },
+      "translation": [
+        1394.0,
+        0.0,
+        0.0
+      ]
+    },
+    "geometry_healing": {
+      "enabled": true,
+      "tolerance": 0.05,
+      "fix_degenerated": true,
+      "fix_small_edges": true,
+      "fix_small_faces": true,
+      "sew_faces": true,
+      "make_solids": false
+    }
+  },
+  "mesh definition": {
+    "generate_1d_mesh": true,
+    "generate_2d_mesh": true,
+    "surface_meshing_algorithms": [
+      {
+        "name": "wing fuselage connection 1",
+        "algorithm": "quasi-structured quad",
+        "surfaces": [
+          90
+        ]
+      }
+    ],
+    "mesh_zones": [
+      {
+        "name": "fuse nose",
+        "curve_definition": "manual",
+        "explicit_curve_sequences": [
+          {
+            "name": "fuse nose",
+            "curve_ids": [
+              1100,
+              1013,
+              865,
+              866
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 67,
+            "Parameter": 0.962077
+          }
+        ],
+        "transfinite_surfaces": [
+          {
+            "id": 358,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              528,
+              744
+            ]
+          },
+          {
+            "id": 394,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              744,
+              683
+            ]
+          },
+          {
+            "id": 333,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              683,
+              557
+            ]
+          },
+          {
+            "id": 279,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              557,
+              528
+            ]
+          }
+        ]
+      },
+      {
+        "name": "manual progression curves",
+        "curve_definition": "manual",
+        "explicit_curve_sequences": [
+          {
+            "name": "manual progression curves",
+            "curve_ids": [
+              194,
+              195,
+              239,
+              240,
+              171,
+              172,
+              1495,
+              1496
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 58,
+            "Parameter": 1.0
+          }
+        ]
+      },
+      {
+        "name": "manual progression curves 61 pts",
+        "curve_definition": "manual",
+        "explicit_curve_sequences": [
+          {
+            "name": "manual progression curves 61 pts",
+            "curve_ids": [
+              147,
+              129,
+              130,
+              109,
+              90,
+              91,
+              13,
+              14,
+              32,
+              52,
+              53,
+              70
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 61,
+            "Parameter": 1.0
+          }
+        ]
+      },
+      {
+        "name": "fuselage section 1",
+        "curve_definition": "automatic",
+        "start_pt": 528,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Bump",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Bump",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Bump",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Bump",
+            "Progression",
+            "Progression"
+          ],
+          "mesh size mode": [
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size",
+            "ele size"
+          ],
+          "target ele size 1": [
+            3.0,
+            0.81,
+            0.81,
+            0.81,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            0.81,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            0.81,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            0.81,
+            0.81
+          ],
+          "target ele size 2": [
+            0.81,
+            0.81,
+            4.28,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            4.28,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            4.28,
+            0.81,
+            3.0,
+            0.81,
+            0.81,
+            4.28,
+            0.81,
+            3.0
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Fuse section 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q1-2b",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 526,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q1-2c",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 613,
+        "circumferential_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Bump"
+          ],
+          "mesh size mode": [
+            "npts"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            30
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 2,
+              "Parameter": 1.0
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 42,
+              "Parameter": 0.967496
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 23,
+              "Parameter": 1.01379
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 86,
+              "Parameter": 0.291921
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q2-2c",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 826,
+        "circumferential_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Bump"
+          ],
+          "mesh size mode": [
+            "npts"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            30
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 2,
+              "Parameter": 1.0
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 42,
+              "Parameter": 0.967496
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 23,
+              "Parameter": 1.01379
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 86,
+              "Parameter": 0.291921
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q3-2c",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 679,
+        "circumferential_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Bump"
+          ],
+          "mesh size mode": [
+            "npts"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            30
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 2,
+              "Parameter": 1.0
+            },
+            {
+              "name": "pan 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 42,
+              "Parameter": 0.967496
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 23,
+              "Parameter": 1.01379
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 86,
+              "Parameter": 0.291921
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q4-2c",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 414,
+        "circumferential_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Bump"
+          ],
+          "mesh size mode": [
+            "npts"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            30
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 2,
+              "Parameter": 1.0
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 42,
+              "Parameter": 0.967496
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 23,
+              "Parameter": 1.01379
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 86,
+              "Parameter": 0.291921
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q2-2b",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 749,
+        "circumferential_direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q3-2b",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 772,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q4-2b",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 460,
+        "circumferential_direction": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            4
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q1-2d",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 751,
+        "circumferential_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            4
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q2-2d",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 826,
+        "circumferential_direction": [
+          0.0,
+          0.8191520442889918,
+          -0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q3-2d",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 555,
+        "circumferential_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            4
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q4-2d",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 413,
+        "circumferential_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.0
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 10,
+              "target ele size 2": 15
+            },
+            {
+              "name": "span 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 15,
+              "target ele size 2": 4
+            },
+            {
+              "name": "span 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 4,
+              "target ele size 2": 3
+            },
+            {
+              "name": "span 4",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 3,
+              "target ele size 2": 10
+            }
+          ]
+        }
+      },
+      {
+        "name": "fuse section Q3-2a span2",
+        "curve_definition": "automatic",
+        "closed_circumferential_loop": false,
+        "start_pt": 317,
+        "circumferential_direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "longitudinal_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "n_subcurvs_per_compound_curve": [
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression"
+          ],
+          "Parameter": [
+            1.11529
+          ],
+          "invert_direction": [
+            false
+          ],
+          "n_pts": [
+            14
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Bump",
+          "Parameter": 291911,
+          "sections": [
+            {
+              "name": "span 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 86,
+              "Parameter": 0.291911
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 1",
+        "curve_definition": "automatic",
+        "start_pt": 178,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 2",
+        "curve_definition": "automatic",
+        "start_pt": 113,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 3",
+        "curve_definition": "automatic",
+        "start_pt": 954,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "wing 4",
+        "curve_definition": "automatic",
+        "start_pt": 147,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 5
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 0.85
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 1",
+        "curve_definition": "automatic",
+        "start_pt": 84,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          4,
+          1,
+          1,
+          4,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 2",
+        "curve_definition": "automatic",
+        "start_pt": 4,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          -0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 3",
+        "curve_definition": "automatic",
+        "start_pt": 32,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          -0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "stabilizer 4",
+        "curve_definition": "automatic",
+        "start_pt": 58,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          0.8191520442889918,
+          0.573576436351046
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.1,
+            1.0,
+            1.1,
+            1.1,
+            1.0,
+            1.1,
+            1.0
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            13,
+            90,
+            21,
+            21,
+            90,
+            13,
+            5
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 1.25,
+              "target ele size 2": 5
+            }
+          ]
+        }
+      },
+      {
+        "name": "manual gmsh geo import",
+        "curve_definition": "manual",
+        "explicit_curve_sequences": [
+          {
+            "name": "geo transfinite curves 1",
+            "curve_ids": [
+              143
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 2",
+            "curve_ids": [
+              144
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 3",
+            "curve_ids": [
+              139,
+              139
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 4",
+            "curve_ids": [
+              141
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 5",
+            "curve_ids": [
+              141
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 36,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 6",
+            "curve_ids": [
+              137
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 75,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 7",
+            "curve_ids": [
+              135
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 39,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 8",
+            "curve_ids": [
+              133
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 19,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 9",
+            "curve_ids": [
+              98,
+              98,
+              155
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.95238
+          },
+          {
+            "name": "geo transfinite curves 10",
+            "curve_ids": [
+              201
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 132,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 11",
+            "curve_ids": [
+              208,
+              208
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 12",
+            "curve_ids": [
+              197
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 26,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 13",
+            "curve_ids": [
+              207
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 14",
+            "curve_ids": [
+              205
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 70,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 15",
+            "curve_ids": [
+              207,
+              207
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 16,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 16",
+            "curve_ids": [
+              222,
+              222
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 17",
+            "curve_ids": [
+              529
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 18",
+            "curve_ids": [
+              529
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 19",
+            "curve_ids": [
+              529
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 20",
+            "curve_ids": [
+              529,
+              529,
+              529
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 21",
+            "curve_ids": [
+              529,
+              529
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 22",
+            "curve_ids": [
+              529
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.115287
+          },
+          {
+            "name": "geo transfinite curves 23",
+            "curve_ids": [
+              147
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 61,
+            "Parameter": 1.005
+          },
+          {
+            "name": "geo transfinite curves 24",
+            "curve_ids": [
+              147,
+              147
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 61,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 25",
+            "curve_ids": [
+              1409
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 26",
+            "curve_ids": [
+              1417,
+              1435
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.90909
+          },
+          {
+            "name": "geo transfinite curves 27",
+            "curve_ids": [
+              1435
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 90,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 28",
+            "curve_ids": [
+              1437
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 29",
+            "curve_ids": [
+              1434
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 30",
+            "curve_ids": [
+              1437
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 0.9090909
+          },
+          {
+            "name": "geo transfinite curves 31",
+            "curve_ids": [
+              1439
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 32",
+            "curve_ids": [
+              1440,
+              1439,
+              1440
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 33",
+            "curve_ids": [
+              1440,
+              1440
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 34",
+            "curve_ids": [
+              1423,
+              1424,
+              1423
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 16,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 35",
+            "curve_ids": [
+              1423,
+              1423
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 90,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 36",
+            "curve_ids": [
+              272
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 37",
+            "curve_ids": [
+              719,
+              1418,
+              1436
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.05
+          },
+          {
+            "name": "geo transfinite curves 38",
+            "curve_ids": [
+              1418,
+              1436
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 39",
+            "curve_ids": [
+              1422
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 40",
+            "curve_ids": [
+              275
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 41",
+            "curve_ids": [
+              1411,
+              273
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 51,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 42",
+            "curve_ids": [
+              273
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 51,
+            "Parameter": 0.9756
+          },
+          {
+            "name": "geo transfinite curves 43",
+            "curve_ids": [
+              1410
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 44",
+            "curve_ids": [
+              261,
+              260
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 8,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 45",
+            "curve_ids": [
+              259
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 46",
+            "curve_ids": [
+              1413
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 47",
+            "curve_ids": [
+              1413
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 25,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 48",
+            "curve_ids": [
+              1412,
+              1407
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 49",
+            "curve_ids": [
+              1412,
+              1407
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 50",
+            "curve_ids": [
+              1417
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 51",
+            "curve_ids": [
+              272
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.90909
+          },
+          {
+            "name": "geo transfinite curves 52",
+            "curve_ids": [
+              1432,
+              1429
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 101,
+            "Parameter": 1.05
+          },
+          {
+            "name": "geo transfinite curves 53",
+            "curve_ids": [
+              1432
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 101,
+            "Parameter": 0.95238
+          },
+          {
+            "name": "geo transfinite curves 54",
+            "curve_ids": [
+              1326,
+              1432,
+              1432
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 101,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 55",
+            "curve_ids": [
+              1432
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 55,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 56",
+            "curve_ids": [
+              1429
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 55,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 57",
+            "curve_ids": [
+              1431
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 58",
+            "curve_ids": [
+              1430
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 45,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 59",
+            "curve_ids": [
+              1429
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 101,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 60",
+            "curve_ids": [
+              1429
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 101,
+            "Parameter": 0.6
+          },
+          {
+            "name": "geo transfinite curves 61",
+            "curve_ids": [
+              1438
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 62",
+            "curve_ids": [
+              1414
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 8,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 63",
+            "curve_ids": [
+              724,
+              1329,
+              1330
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 64",
+            "curve_ids": [
+              1325,
+              1324,
+              1321,
+              157,
+              1320,
+              1318,
+              1317,
+              1315
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 65",
+            "curve_ids": [
+              1273,
+              89
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 66",
+            "curve_ids": [
+              1433
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 67",
+            "curve_ids": [
+              1433,
+              1433
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 68",
+            "curve_ids": [
+              1425
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 69",
+            "curve_ids": [
+              1426
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 70",
+            "curve_ids": [
+              1428
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 71",
+            "curve_ids": [
+              1424
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 72",
+            "curve_ids": [
+              1424
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 73",
+            "curve_ids": [
+              1424
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 16,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 74",
+            "curve_ids": [
+              1274
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 18,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 75",
+            "curve_ids": [
+              1319
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 76",
+            "curve_ids": [
+              1382
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 11,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 77",
+            "curve_ids": [
+              1418,
+              1316
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 78",
+            "curve_ids": [
+              1336
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 79",
+            "curve_ids": [
+              1335
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 80",
+            "curve_ids": [
+              1322,
+              1326
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 81",
+            "curve_ids": [
+              1323
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 26,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 82",
+            "curve_ids": [
+              593,
+              273,
+              1276
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 26,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 83",
+            "curve_ids": [
+              1275,
+              1277
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 84",
+            "curve_ids": [
+              1278
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 31,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 85",
+            "curve_ids": [
+              1279
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 11,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 86",
+            "curve_ids": [
+              1328
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 11,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 87",
+            "curve_ids": [
+              1331,
+              1280
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 88",
+            "curve_ids": [
+              1332,
+              1320
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 23,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 89",
+            "curve_ids": [
+              1281
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 52,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 90",
+            "curve_ids": [
+              1216
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 522,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 91",
+            "curve_ids": [
+              1333
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 92",
+            "curve_ids": [
+              1334
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 93",
+            "curve_ids": [
+              1418
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 94",
+            "curve_ids": [
+              1273
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 95",
+            "curve_ids": [
+              1246,
+              1106
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 0.967496
+          },
+          {
+            "name": "geo transfinite curves 96",
+            "curve_ids": [
+              1107
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 97",
+            "curve_ids": [
+              868,
+              909,
+              743,
+              742
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 1.2
+          },
+          {
+            "name": "geo transfinite curves 98",
+            "curve_ids": [
+              1106
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 1.2
+          },
+          {
+            "name": "geo transfinite curves 99",
+            "curve_ids": [
+              1106
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 1.03366
+          },
+          {
+            "name": "geo transfinite curves 100",
+            "curve_ids": [
+              593
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 101",
+            "curve_ids": [
+              719
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 102",
+            "curve_ids": [
+              1051,
+              836
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 103",
+            "curve_ids": [
+              1123,
+              910,
+              867,
+              514,
+              440,
+              406,
+              404,
+              418,
+              464,
+              682
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 104",
+            "curve_ids": [
+              831,
+              514,
+              1053
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 37,
+            "Parameter": 1.03
+          },
+          {
+            "name": "geo transfinite curves 105",
+            "curve_ids": [
+              831,
+              1053
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 37,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 106",
+            "curve_ids": [
+              1052,
+              830
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 50,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 107",
+            "curve_ids": [
+              1038
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 48,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 108",
+            "curve_ids": [
+              843
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 109",
+            "curve_ids": [
+              1259,
+              1159,
+              627,
+              531
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 0.8966
+          },
+          {
+            "name": "geo transfinite curves 110",
+            "curve_ids": [
+              1259,
+              1159,
+              627,
+              531
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 111",
+            "curve_ids": [
+              1158,
+              530
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 64,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 112",
+            "curve_ids": [
+              529,
+              448,
+              1193,
+              1037
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 113",
+            "curve_ids": [
+              1056,
+              841
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 114",
+            "curve_ids": [
+              1055,
+              839,
+              444,
+              410
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 115",
+            "curve_ids": [
+              836,
+              690,
+              409,
+              441
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 116",
+            "curve_ids": [
+              1216
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 23,
+            "Parameter": 0.986
+          },
+          {
+            "name": "geo transfinite curves 117",
+            "curve_ids": [
+              630
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 118",
+            "curve_ids": [
+              1258
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 119",
+            "curve_ids": [
+              1243
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 120",
+            "curve_ids": [
+              560
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 121",
+            "curve_ids": [
+              475,
+              465
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 1.2
+          },
+          {
+            "name": "geo transfinite curves 122",
+            "curve_ids": [
+              475,
+              465
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 1.2
+          },
+          {
+            "name": "geo transfinite curves 123",
+            "curve_ids": [
+              465,
+              475
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 0.8
+          },
+          {
+            "name": "geo transfinite curves 124",
+            "curve_ids": [
+              909,
+              868
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 0.8
+          },
+          {
+            "name": "geo transfinite curves 125",
+            "curve_ids": [
+              420,
+              423,
+              742,
+              743
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 0.8
+          },
+          {
+            "name": "geo transfinite curves 126",
+            "curve_ids": [
+              422,
+              468,
+              564,
+              671,
+              771,
+              744,
+              1147
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 127",
+            "curve_ids": [
+              1116,
+              902
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 128",
+            "curve_ids": [
+              1106
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 0.967496
+          },
+          {
+            "name": "geo transfinite curves 129",
+            "curve_ids": [
+              691
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 130",
+            "curve_ids": [
+              836
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 131",
+            "curve_ids": [
+              441,
+              409
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 132",
+            "curve_ids": [
+              444,
+              410
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 133",
+            "curve_ids": [
+              66,
+              682,
+              837
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 134",
+            "curve_ids": [
+              406,
+              682
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.29190212
+          },
+          {
+            "name": "geo transfinite curves 135",
+            "curve_ids": [
+              830,
+              1052
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 54,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 136",
+            "curve_ids": [
+              831,
+              1053
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 33,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 137",
+            "curve_ids": [
+              831,
+              1053
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 33,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 138",
+            "curve_ids": [
+              1038
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 54,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 139",
+            "curve_ids": [
+              842
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 140",
+            "curve_ids": [
+              844
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 141",
+            "curve_ids": [
+              843
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 29,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 142",
+            "curve_ids": [
+              1039
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 143",
+            "curve_ids": [
+              1038
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 53,
+            "Parameter": 1.02
+          },
+          {
+            "name": "geo transfinite curves 144",
+            "curve_ids": [
+              1470,
+              1472,
+              1452,
+              1456
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 145",
+            "curve_ids": [
+              230
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 35,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 146",
+            "curve_ids": [
+              1529,
+              1539,
+              1546,
+              1581,
+              1593,
+              1566,
+              464,
+              1514
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 147",
+            "curve_ids": [
+              1445,
+              1478,
+              178
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 51,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 148",
+            "curve_ids": [
+              228,
+              1509,
+              1562
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 26,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 149",
+            "curve_ids": [
+              1444
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 150",
+            "curve_ids": [
+              214,
+              1491,
+              167
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 151",
+            "curve_ids": [
+              273,
+              1562,
+              228
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 50,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 152",
+            "curve_ids": [
+              1562,
+              1509
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 51,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 153",
+            "curve_ids": [
+              215,
+              216,
+              1448,
+              166,
+              165,
+              1490,
+              1479
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 8,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 154",
+            "curve_ids": [
+              886,
+              890,
+              891,
+              872,
+              874,
+              879,
+              881,
+              882,
+              885
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 155",
+            "curve_ids": [
+              997,
+              995,
+              992,
+              991,
+              988,
+              987,
+              985,
+              982,
+              1000
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 156",
+            "curve_ids": [
+              507,
+              505,
+              496,
+              495,
+              491,
+              490,
+              488,
+              485,
+              510
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 157",
+            "curve_ids": [
+              561,
+              731,
+              892,
+              433,
+              506,
+              996,
+              792
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 158",
+            "curve_ids": [
+              791,
+              994,
+              432,
+              504,
+              889,
+              730,
+              1110,
+              878,
+              484,
+              486,
+              983,
+              801
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 11,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 159",
+            "curve_ids": [
+              873,
+              511,
+              1001
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 160",
+            "curve_ids": [
+              1319,
+              880,
+              729,
+              431,
+              487,
+              790,
+              984
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 31,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 161",
+            "curve_ids": [
+              1327
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 162",
+            "curve_ids": [
+              878
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 163",
+            "curve_ids": [
+              484
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 164",
+            "curve_ids": [
+              801
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 165",
+            "curve_ids": [
+              989,
+              788,
+              429,
+              492,
+              884,
+              727
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 26,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 166",
+            "curve_ids": [
+              887,
+              728,
+              883,
+              726,
+              990,
+              789,
+              986,
+              787,
+              493,
+              430,
+              489,
+              428
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 167",
+            "curve_ids": [
+              277,
+              232
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 168",
+            "curve_ids": [
+              276,
+              231
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 169",
+            "curve_ids": [
+              732,
+              434,
+              793
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 52,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 170",
+            "curve_ids": [
+              725,
+              786,
+              427
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 18,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 171",
+            "curve_ids": [
+              993,
+              503
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 18,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 172",
+            "curve_ids": [
+              893
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 23,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 173",
+            "curve_ids": [
+              894,
+              895,
+              896
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 174",
+            "curve_ids": [
+              897
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 175",
+            "curve_ids": [
+              502
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 176",
+            "curve_ids": [
+              499
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 177",
+            "curve_ids": [
+              184
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 178",
+            "curve_ids": [
+              187
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 179",
+            "curve_ids": [
+              998
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 180",
+            "curve_ids": [
+              999,
+              509
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 43,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 181",
+            "curve_ids": [
+              508
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 182",
+            "curve_ids": [
+              1446,
+              1441,
+              1467,
+              1508,
+              1530,
+              1554,
+              1555
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 183",
+            "curve_ids": [
+              482,
+              1465
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 184",
+            "curve_ids": [
+              1465
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 185",
+            "curve_ids": [
+              1463,
+              1469
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 90,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 186",
+            "curve_ids": [
+              1451,
+              227
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 187",
+            "curve_ids": [
+              227
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 188",
+            "curve_ids": [
+              1477,
+              1513,
+              1536
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 189",
+            "curve_ids": [
+              1477,
+              1536
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 190",
+            "curve_ids": [
+              179,
+              1590,
+              1567
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 191",
+            "curve_ids": [
+              1567
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 192",
+            "curve_ids": [
+              681,
+              1567
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 193",
+            "curve_ids": [
+              179,
+              1590
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 194",
+            "curve_ids": [
+              1477,
+              1536
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 195",
+            "curve_ids": [
+              1513
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 196",
+            "curve_ids": [
+              1535,
+              1595,
+              1589,
+              1541
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 197",
+            "curve_ids": [
+              1595,
+              1589,
+              1531,
+              1541,
+              1535,
+              1583
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 198",
+            "curve_ids": [
+              1594,
+              1588,
+              1587,
+              1579,
+              1527,
+              1533,
+              1540,
+              1534
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 31,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 199",
+            "curve_ids": [
+              1611
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 200",
+            "curve_ids": [
+              1612
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 201",
+            "curve_ids": [
+              1612
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 202",
+            "curve_ids": [
+              1557
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 203",
+            "curve_ids": [
+              1556
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 204",
+            "curve_ids": [
+              1544
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 205",
+            "curve_ids": [
+              1545
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 206",
+            "curve_ids": [
+              1545
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 207",
+            "curve_ids": [
+              1555,
+              1537
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 208",
+            "curve_ids": [
+              1591,
+              1582,
+              1609,
+              1610
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 6,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 209",
+            "curve_ids": [
+              1123,
+              1578
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 57,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 210",
+            "curve_ids": [
+              561
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 0.967496
+          },
+          {
+            "name": "geo transfinite curves 211",
+            "curve_ids": [
+              561
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 1.033596
+          },
+          {
+            "name": "geo transfinite curves 212",
+            "curve_ids": [
+              1445
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 50,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 213",
+            "curve_ids": [
+              1471,
+              1471
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 214",
+            "curve_ids": [
+              1468
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 18,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 215",
+            "curve_ids": [
+              1471
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 5,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 216",
+            "curve_ids": [
+              1468
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 17,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 217",
+            "curve_ids": [
+              1457
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 90,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 218",
+            "curve_ids": [
+              1474
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 219",
+            "curve_ids": [
+              1473
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 220",
+            "curve_ids": [
+              1458
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 221",
+            "curve_ids": [
+              1474
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 222",
+            "curve_ids": [
+              1473
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 223",
+            "curve_ids": [
+              1464
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 90,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 224",
+            "curve_ids": [
+              1447,
+              1565,
+              1512
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 25,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 225",
+            "curve_ids": [
+              1592,
+              1594
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 226",
+            "curve_ids": [
+              1601
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 60,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 227",
+            "curve_ids": [
+              1562
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 49,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 228",
+            "curve_ids": [
+              1592
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 229",
+            "curve_ids": [
+              1562
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 53,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 230",
+            "curve_ids": [
+              1509
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 53,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 231",
+            "curve_ids": [
+              573,
+              1540
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 232",
+            "curve_ids": [
+              1538
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 233",
+            "curve_ids": [
+              1600
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 7,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 234",
+            "curve_ids": [
+              1599
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 235",
+            "curve_ids": [
+              1599
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 236",
+            "curve_ids": [
+              1600
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 237",
+            "curve_ids": [
+              1580
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 238",
+            "curve_ids": [
+              1545
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 239",
+            "curve_ids": [
+              1544
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 12,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 240",
+            "curve_ids": [
+              1528
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 241",
+            "curve_ids": [
+              1509
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 53,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 242",
+            "curve_ids": [
+              1562
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 53,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 243",
+            "curve_ids": [
+              530
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 64,
+            "Parameter": 0.975
+          },
+          {
+            "name": "geo transfinite curves 244",
+            "curve_ids": [
+              1158
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 64,
+            "Parameter": 0.99
+          },
+          {
+            "name": "geo transfinite curves 245",
+            "curve_ids": [
+              1158
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 64,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 246",
+            "curve_ids": [
+              530
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 64,
+            "Parameter": 1.030927
+          },
+          {
+            "name": "geo transfinite curves 247",
+            "curve_ids": [
+              482,
+              446
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 28,
+            "Parameter": 1.033595
+          },
+          {
+            "name": "geo transfinite curves 248",
+            "curve_ids": [
+              445
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 3,
+            "Parameter": 1.033595
+          },
+          {
+            "name": "geo transfinite curves 249",
+            "curve_ids": [
+              446
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 28,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 250",
+            "curve_ids": [
+              447
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 4,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 251",
+            "curve_ids": [
+              449
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 52,
+            "Parameter": 1.03
+          },
+          {
+            "name": "geo transfinite curves 252",
+            "curve_ids": [
+              449
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 52,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 253",
+            "curve_ids": [
+              514
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 254",
+            "curve_ids": [
+              449
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 54,
+            "Parameter": 1.025
+          },
+          {
+            "name": "geo transfinite curves 255",
+            "curve_ids": [
+              449
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 54,
+            "Parameter": 1.0175
+          },
+          {
+            "name": "geo transfinite curves 256",
+            "curve_ids": [
+              449
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 54,
+            "Parameter": 1.015
+          },
+          {
+            "name": "geo transfinite curves 257",
+            "curve_ids": [
+              89
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 66,
+            "Parameter": 0.2404955
+          },
+          {
+            "name": "geo transfinite curves 258",
+            "curve_ids": [
+              100
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 259",
+            "curve_ids": [
+              100
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 15,
+            "Parameter": 0.9
+          },
+          {
+            "name": "geo transfinite curves 260",
+            "curve_ids": [
+              1614
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 68,
+            "Parameter": 0.4
+          },
+          {
+            "name": "geo transfinite curves 261",
+            "curve_ids": [
+              1614
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 68,
+            "Parameter": 0.6
+          },
+          {
+            "name": "geo transfinite curves 262",
+            "curve_ids": [
+              1614
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 68,
+            "Parameter": 0.8
+          },
+          {
+            "name": "geo transfinite curves 263",
+            "curve_ids": [
+              108,
+              31
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 14,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 264",
+            "curve_ids": [
+              1614
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 68,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 265",
+            "curve_ids": [
+              100
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 266",
+            "curve_ids": [
+              101
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 59,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 267",
+            "curve_ids": [
+              104
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 59,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 268",
+            "curve_ids": [
+              105
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 269",
+            "curve_ids": [
+              62,
+              67,
+              144,
+              139,
+              28,
+              23
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 270",
+            "curve_ids": [
+              27,
+              24,
+              140,
+              143,
+              63,
+              66
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 59,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 271",
+            "curve_ids": [
+              1615,
+              1616,
+              1613,
+              1614
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 68,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 272",
+            "curve_ids": [
+              400,
+              573
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 273",
+            "curve_ids": [
+              464
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 274",
+            "curve_ids": [
+              476
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 275",
+            "curve_ids": [
+              573,
+              573,
+              573,
+              573,
+              476,
+              464
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 276",
+            "curve_ids": [
+              1168,
+              1267,
+              1310
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 0.1738
+          },
+          {
+            "name": "geo transfinite curves 277",
+            "curve_ids": [
+              1194,
+              1042,
+              519,
+              594,
+              875,
+              1111,
+              589,
+              481,
+              405,
+              399,
+              574,
+              681,
+              799,
+              1006
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 0.1738
+          },
+          {
+            "name": "geo transfinite curves 278",
+            "curve_ids": [
+              1123
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 86,
+            "Parameter": 0.2919
+          },
+          {
+            "name": "geo transfinite curves 279",
+            "curve_ids": [
+              907,
+              745
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 4.0
+          },
+          {
+            "name": "geo transfinite curves 280",
+            "curve_ids": [
+              907,
+              745
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 0.25
+          },
+          {
+            "name": "geo transfinite curves 281",
+            "curve_ids": [
+              745,
+              907
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 1.1
+          },
+          {
+            "name": "geo transfinite curves 282",
+            "curve_ids": [
+              745,
+              907
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 30,
+            "Parameter": 0.97
+          },
+          {
+            "name": "geo transfinite curves 283",
+            "curve_ids": [
+              745,
+              907
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 45,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 284",
+            "curve_ids": [
+              603,
+              518,
+              421,
+              473,
+              745,
+              907,
+              686
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 45,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 285",
+            "curve_ids": [
+              840
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 286",
+            "curve_ids": [
+              686
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 9,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 287",
+            "curve_ids": [
+              835
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 288",
+            "curve_ids": [
+              575
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 289",
+            "curve_ids": [
+              398,
+              407,
+              442
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 10,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 290",
+            "curve_ids": [
+              834,
+              685,
+              576,
+              397,
+              412,
+              451
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 36,
+            "Parameter": 0.98
+          },
+          {
+            "name": "geo transfinite curves 291",
+            "curve_ids": [
+              828,
+              316,
+              320,
+              330,
+              334,
+              336
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 36,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 292",
+            "curve_ids": [
+              1065,
+              1064,
+              1063,
+              1062,
+              1061,
+              1060,
+              1059,
+              1058,
+              1068,
+              1069,
+              1070,
+              1071,
+              1072,
+              1073,
+              1074,
+              1075
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 293",
+            "curve_ids": [
+              928,
+              929,
+              927,
+              926,
+              925,
+              924,
+              923,
+              922,
+              912,
+              913,
+              914,
+              915,
+              916,
+              917,
+              918,
+              919,
+              1338,
+              1339,
+              1340,
+              1341,
+              1342,
+              1343,
+              1344,
+              1345,
+              1348,
+              1349,
+              1350,
+              1351,
+              1352,
+              1353,
+              1354,
+              1355,
+              361,
+              360,
+              359,
+              358,
+              357,
+              356,
+              355,
+              354,
+              344,
+              345,
+              346,
+              347,
+              348,
+              349,
+              350,
+              351,
+              1075,
+              1074,
+              1073,
+              1072,
+              1071,
+              1070,
+              1069,
+              1068,
+              1065,
+              1064,
+              1063,
+              1062,
+              1061,
+              1060,
+              1059,
+              1058
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 2,
+            "Parameter": 1.0
+          },
+          {
+            "name": "geo transfinite curves 294",
+            "curve_ids": [
+              1445,
+              873,
+              482
+            ],
+            "invert_direction": [
+              false,
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 0.967496
+          },
+          {
+            "name": "geo transfinite curves 295",
+            "curve_ids": [
+              1106
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 42,
+            "Parameter": 1.033596
+          },
+          {
+            "name": "geo transfinite curves 296",
+            "curve_ids": [
+              724
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 13,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 297",
+            "curve_ids": [
+              722
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Bump",
+            "mesh size mode": "npts",
+            "n_pts": 8,
+            "Parameter": 0.3
+          },
+          {
+            "name": "geo transfinite curves 298",
+            "curve_ids": [
+              1105,
+              1249
+            ],
+            "invert_direction": [
+              false,
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 23,
+            "Parameter": 0.9863
+          },
+          {
+            "name": "geo transfinite curves 299",
+            "curve_ids": [
+              1105
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 23,
+            "Parameter": 1.01389
+          },
+          {
+            "name": "geo transfinite curves 300",
+            "curve_ids": [
+              1445
+            ],
+            "invert_direction": [
+              false
+            ],
+            "type": "Progression",
+            "mesh size mode": "npts",
+            "n_pts": 50,
+            "Parameter": 0.967496
+          }
+        ],
+        "transfinite_surfaces": [
+          {
+            "id": 26,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 26,
+            "Arrangement": "Left",
+            "boundary points": [
+              36,
+              26,
+              28,
+              37
+            ]
+          },
+          {
+            "id": 25,
+            "Arrangement": "Left",
+            "boundary points": [
+              26,
+              36,
+              35,
+              27
+            ]
+          },
+          {
+            "id": 80,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 80,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 279,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              557,
+              528,
+              594
+            ]
+          },
+          {
+            "id": 358,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              528,
+              744,
+              594
+            ]
+          },
+          {
+            "id": 358,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 358,
+            "Arrangement": "Left",
+            "boundary points": [
+              594,
+              528,
+              744
+            ]
+          },
+          {
+            "id": 441,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 247,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 461,
+            "Arrangement": "Left",
+            "boundary points": [
+              850,
+              804,
+              817,
+              818
+            ]
+          },
+          {
+            "id": 461,
+            "Arrangement": "Left",
+            "boundary points": [
+              850,
+              804,
+              817,
+              818
+            ]
+          },
+          {
+            "id": 516,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 516,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 517,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 461,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 461,
+            "Arrangement": "Left",
+            "boundary points": [
+              804,
+              850,
+              818,
+              817
+            ]
+          },
+          {
+            "id": 517,
+            "Arrangement": "Left",
+            "boundary points": [
+              927,
+              926,
+              914,
+              916
+            ]
+          },
+          {
+            "id": 518,
+            "Arrangement": "Left",
+            "boundary points": [
+              917,
+              927,
+              916,
+              192
+            ]
+          },
+          {
+            "id": 518,
+            "Arrangement": "Left",
+            "boundary points": [
+              917,
+              927,
+              916,
+              192
+            ]
+          },
+          {
+            "id": 516,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 359,
+            "Arrangement": "Left",
+            "boundary points": [
+              750,
+              749,
+              620,
+              494
+            ]
+          },
+          {
+            "id": 428,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 280,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 295,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 240,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 280,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 413,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 464,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 438,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 283,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 428,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 198,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 247,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 199,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 428,
+            "Arrangement": "Left",
+            "boundary points": [
+              814,
+              816,
+              749,
+              750
+            ]
+          },
+          {
+            "id": 214,
+            "Arrangement": "Left",
+            "boundary points": [
+              462,
+              460,
+              392,
+              393
+            ]
+          },
+          {
+            "id": 176,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 359,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 176,
+            "Arrangement": "Left",
+            "boundary points": [
+              393,
+              392,
+              293,
+              333
+            ]
+          },
+          {
+            "id": 389,
+            "Arrangement": "Left",
+            "boundary points": [
+              771,
+              678,
+              570,
+              700
+            ]
+          },
+          {
+            "id": 439,
+            "Arrangement": "Left",
+            "boundary points": [
+              700,
+              712,
+              823,
+              771
+            ]
+          },
+          {
+            "id": 359,
+            "Arrangement": "Left",
+            "boundary points": [
+              749,
+              750,
+              494,
+              620
+            ]
+          },
+          {
+            "id": 148,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 152,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 152,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 405,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 220,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 340,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 404,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 344,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 271,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 547,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 141,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 167,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 220,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 266,
+            "Arrangement": "Left",
+            "boundary points": [
+              570,
+              469,
+              400,
+              476
+            ]
+          },
+          {
+            "id": 344,
+            "Arrangement": "Left",
+            "boundary points": [
+              713,
+              578,
+              577,
+              575
+            ]
+          },
+          {
+            "id": 271,
+            "Arrangement": "Left",
+            "boundary points": [
+              578,
+              571,
+              476,
+              577
+            ]
+          },
+          {
+            "id": 404,
+            "Arrangement": "Left",
+            "boundary points": [
+              713,
+              578,
+              700,
+              712
+            ]
+          },
+          {
+            "id": 340,
+            "Arrangement": "Left",
+            "boundary points": [
+              570,
+              700,
+              578,
+              571
+            ]
+          },
+          {
+            "id": 343,
+            "Arrangement": "Left",
+            "boundary points": [
+              712,
+              711,
+              574,
+              575
+            ]
+          },
+          {
+            "id": 530,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 530,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 531,
+            "Arrangement": "Left",
+            "boundary points": [
+              935,
+              937,
+              948,
+              947
+            ]
+          },
+          {
+            "id": 523,
+            "Arrangement": "Left",
+            "boundary points": [
+              933,
+              936,
+              157,
+              158
+            ]
+          },
+          {
+            "id": 567,
+            "Arrangement": "Left",
+            "boundary points": [
+              112,
+              121,
+              1009,
+              1006
+            ]
+          },
+          {
+            "id": 577,
+            "Arrangement": "Left",
+            "boundary points": [
+              121,
+              1011,
+              1026,
+              1009
+            ]
+          },
+          {
+            "id": 585,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 585,
+            "Arrangement": "Left",
+            "boundary points": [
+              1011,
+              1020,
+              1029,
+              1026
+            ]
+          },
+          {
+            "id": 577,
+            "Arrangement": "Left",
+            "boundary points": [
+              121,
+              1009,
+              1026,
+              1011
+            ]
+          },
+          {
+            "id": 577,
+            "Arrangement": "Left",
+            "boundary points": [
+              1011,
+              1026,
+              1009,
+              121
+            ]
+          },
+          {
+            "id": 581,
+            "Arrangement": "Left",
+            "boundary points": [
+              1020,
+              1003,
+              1018,
+              1029
+            ]
+          },
+          {
+            "id": 559,
+            "Arrangement": "Left"
+          },
+          {
+            "id": 559,
+            "Arrangement": "Left",
+            "boundary points": [
+              995,
+              986,
+              970,
+              981
+            ]
+          },
+          {
+            "id": 563,
+            "Arrangement": "Left",
+            "boundary points": [
+              981,
+              978,
+              992,
+              995
+            ]
+          },
+          {
+            "id": 556,
+            "Arrangement": "Left",
+            "boundary points": [
+              992,
+              976,
+              962,
+              978
+            ]
+          },
+          {
+            "id": 546,
+            "Arrangement": "Left",
+            "boundary points": [
+              956,
+              962,
+              976,
+              973
+            ]
+          },
+          {
+            "id": 168,
+            "Arrangement": "Left",
+            "boundary points": [
+              371,
+              372,
+              310,
+              317
+            ]
+          },
+          {
+            "id": 198,
+            "Arrangement": "Left",
+            "boundary points": [
+              317,
+              358,
+              437,
+              371
+            ]
+          },
+          {
+            "id": 167,
+            "Arrangement": "Left",
+            "boundary points": [
+              317,
+              358,
+              311,
+              286
+            ]
+          },
+          {
+            "id": 141,
+            "Arrangement": "Left",
+            "boundary points": [
+              286,
+              287,
+              310,
+              317
+            ]
+          },
+          {
+            "id": 283,
+            "Arrangement": "Left",
+            "boundary points": [
+              506,
+              600,
+              497,
+              417
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
