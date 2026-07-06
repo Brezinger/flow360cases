@@ -64,10 +64,10 @@ def _write_te_points(points: pd.DataFrame, path: Path) -> None:
     points.to_csv(path, sep=" ", index=False, float_format="%.10g")
 
 
-def prepare_trailing_edge_files(working_dir: Path) -> list[str]:
+def prepare_trailing_edge_files(working_dir: Path, wing1_file="TE_XWing2_2_wing1.dat", wing5_file="TE_XWing2_2_wing5.dat") -> list[str]:
     """Create wing 2-4 and 6-8 TE coordinate files from the measured source files."""
-    source_wing1 = _resolve_input_file("TE_XWing2_2_wing1.dat", working_dir)
-    source_wing5 = _resolve_input_file("TE_XWing2_2_wing5.dat", working_dir)
+    source_wing1 = _resolve_input_file(wing1_file, working_dir)
+    source_wing5 = _resolve_input_file(wing5_file, working_dir)
 
     source_by_wing = {
         1: _read_te_points(source_wing1),
@@ -126,6 +126,7 @@ def define_and_run(
     alpha_controller_start_pseudo_step=50,
     alpha_controller_initial_alpha_deg=None,
     aircraft_mass=13.6,
+    wing_area=0.277649964016683,
     wake_refinement_files=None,
     flow360folder=None,
     results_path=None,
@@ -145,7 +146,6 @@ def define_and_run(
     mac = 0.108
     wingspan = 1.31708
     moment_center_x = 0.743
-    wing_area = 0.277649964016683
     standard_atmosphere_density = calculate_standard_atmosphere_density(altitude)
 
     if target_lift_coefficient is None:
@@ -404,10 +404,26 @@ def main():
     working_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(working_dir)
 
-    project_cgns_file_name = (
-        r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
-        r"\01_Projekte\20_AMDC_XWing2\05_CAD\2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V1.cgns"
-    )
+    wing_version = "rectangular"
+    #wing_version = "trapezoidal"
+
+    if wing_version == "rectangular":
+        project_cgns_file_name = (
+            r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
+            r"\01_Projekte\20_AMDC_XWing2\05_CAD\2026-06-29_AMDC-simplified-XWingV22+rectangularwings_getrennt.cgns"
+        )
+        sim_name = "XWing2_2 rect fully_turbulent_SA"
+        wing_area = 0.2831
+        wing1_TE_file = "TE_XWing2_2_rect_wing1.dat"
+    elif wing_version == "trapezoidal":
+        project_cgns_file_name = (
+            r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
+            r"\01_Projekte\20_AMDC_XWing2\05_CAD\2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V1.cgns"
+        )
+        sim_name = "XWing2_2 manual_V1 fully_turbulent_SA"
+        wing_area = 0.277649964016683
+        wing1_TE_file = "TE_XWing2_2_wing1.dat"
+
 
     generate_vol_mesh = True
     run = False
@@ -415,20 +431,23 @@ def main():
     enable_alpha_controller = True
     boundary_layer_growth_rate = 1.2
     target_yplus = 0.67
-    n_timesteps = 1000
+    n_timesteps = 600
 
     study_name = "AMDC XWing2_2"
-    sim_name = "XWing2_2 manual_V1 fully_turbulent_SA"
+
     half_model = False
     aircraft_mass = 13.6
-    U_inf_range = [24.5]
-    alpha_deg_range = [10.0]
+    #U_inf_range = [24.5]
+    #alpha_deg_range = [10.0]
+    U_inf_range = [39.5]
+    alpha_deg_range = [-1.6]
 
-    wake_refinement_files = prepare_trailing_edge_files(working_dir)
+    wake_refinement_files = prepare_trailing_edge_files(working_dir, wing1_file=wing1_TE_file)
 
     operating_points = []
     standard_atmosphere_density = calculate_standard_atmosphere_density(0)
-    wing_area = 0.277649964016683
+
+
     for U_inf, alpha_deg in product(U_inf_range, alpha_deg_range):
         operating_points.append(
             {
@@ -461,6 +480,7 @@ def main():
             enable_alpha_controller=enable_alpha_controller,
             alpha_controller_initial_alpha_deg=row["alpha_deg"],
             aircraft_mass=aircraft_mass,
+            wing_area=wing_area,
             wake_refinement_files=wake_refinement_files,
             flow360folder=curr_folder,
             results_path=str(working_dir),

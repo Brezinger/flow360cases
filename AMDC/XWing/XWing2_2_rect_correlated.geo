@@ -293,8 +293,12 @@ Transfinite Curve {584} = 23 Using Progression 1.01389;
 //+
 Transfinite Curve {282} = 45 Using Progression 0.98;
 //+
-Transfinite Curve {1125, 1128, 1174, 1344, 1338, 1295, 1336, 1339, 1298, 1341, 1290, 1237, 1278, 1280, 1171, 1281, 1240, 1287, 1182, 1223, 1229, 1220, 1179, 1222, 1232} = 35 Using Progression 1.05;
+Transfinite Curve {1125, 1128, 1174, 1344, 1338, 1295, 1336, 1339, 1298, 1341, 1290, 1237, 1278, 1280, 1171, 1169, 1166, 1168, 1281, 1240, 1287, 1182, 1223, 1229, 1220, 1179, 1222, 1232} = 35 Using Progression 1.05;
 //+
+Transfinite Curve {1286} = 30 Using Progression 1;
+Transfinite Curve {1285, 1283} = 9 Using Progression 1;
+Transfinite Curve {1284} = 32 Using Progression 1;
+Transfinite Curve {1282} = 14 Using Progression 1;
 Transfinite Curve {1224} = 15 Using Progression 1;
 //+
 Transfinite Curve {1225} = 9 Using Progression 1;
@@ -303,7 +307,7 @@ Transfinite Curve {1227} = 9 Using Progression 1;
 //+
 Transfinite Curve {1228} = 31 Using Progression 1;
 //+
-Transfinite Curve {1226} = 31 Using Progression 1;
+Transfinite Curve {1226} = 32 Using Progression 1;
 //+
 Transfinite Curve {1231} = 21 Using Progression 0.9;
 //+
@@ -314,8 +318,6 @@ Transfinite Curve {1233} = 13 Using Progression 1.1;
 Transfinite Curve {1221} = 13 Using Progression 0.9;
 //+
 Transfinite Curve {1234} = 5 Using Progression 1;
-//+
-Transfinite Curve {1220} = 5 Using Progression 1;
 //+
 Transfinite Curve {1181} = 12 Using Progression 1;
 //+
@@ -371,15 +373,19 @@ Transfinite Curve {1292, 1346, 1176} = 5 Using Progression 1;
 //+
 Transfinite Curve {653} = 5 Using Progression 1;
 //+
-Transfinite Curve {988, 431, 179} = 5 Using Progression 1;
+Transfinite Curve {179} = 5 Using Progression 1;
 //+
+Transfinite Curve {182} = 11 Using Progression 1;
+Transfinite Curve {261} = 2 Using Progression 1;
+Transfinite Curve {267} = 9 Using Progression 1;
 Transfinite Curve {653} = 4 Using Progression 1;
 //+
-Transfinite Curve {179, 431, 988} = 4 Using Progression 1;
+Transfinite Curve {431, 988} = 4 Using Progression 1;
 //+
+Transfinite Curve {656} = 12 Using Progression 1;
 Transfinite Curve {986} = 2 Using Progression 1;
 //+
-Transfinite Curve {984} = 5 Using Progression 1;
+Transfinite Curve {984} = 6 Using Progression 1;
 //+
 Transfinite Curve {581, 580} = 5 Using Progression 1;
 //+
@@ -440,3 +446,5 @@ Transfinite Surface {221} = {317, 433, 432, 318};
 Transfinite Surface {82} = {185, 184, 123, 124};
 //+
 Transfinite Surface {197} = {381, 311, 239, 292};
+Transfinite Surface {359} = {585, 621, 610, 586};
+Transfinite Surface {82} = {185, 184, 123, 124};
