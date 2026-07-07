@@ -5,41 +5,21 @@ Transfinite Surface {26} = {36, 26, 28, 37};
 //+
 Transfinite Surface {25} = {26, 36, 35, 27};
 //+
-Transfinite Curve {144, 144, 143, 145} = 2 Using Progression 1;
-//+
-Transfinite Curve {143} = 2 Using Progression 1;
+Transfinite Curve {143, 145} = 2 Using Progression 1;
 //+
 Transfinite Curve {144} = 14 Using Progression 1;
 //+
-Transfinite Curve {139, 139} = 35 Using Progression 1;
-//+
-Transfinite Curve {141} = 35 Using Progression 1;
-//+
-Transfinite Curve {141} = 36 Using Progression 1;
-//+
-Transfinite Curve {137} = 75 Using Progression 1;
-//+
-Transfinite Curve {135} = 39 Using Progression 1;
+Transfinite Curve {139} = 35 Using Progression 1;
 //+
 Transfinite Curve {133} = 19 Using Progression 1;
 //+
-Transfinite Curve {98, 98, 155} = 12 Using Progression 0.95238;
-//+
-Transfinite Curve {201} = 132 Using Progression 1;
-//+
-Transfinite Curve {208, 208} = 17 Using Progression 1;
+Transfinite Curve {155} = 12 Using Progression 0.95238;
 //+
 Transfinite Curve {197} = 26 Using Progression 1;
 //+
 Transfinite Curve {207} = 14 Using Progression 1;
 //+
-Transfinite Curve {205} = 70 Using Progression 1;
-//+
 Transfinite Surface {80};
-//+
-Transfinite Curve {207, 207} = 16 Using Progression 1;
-//+
-Transfinite Curve {222, 222} = 5 Using Progression 1;
 //+
 Transfinite Surface {80};
 //+
@@ -55,9 +35,7 @@ Transfinite Surface {441};
 //+
 Transfinite Surface {247};
 //+
-Transfinite Curve {147} = 61 Using Progression 1.005;
-//+
-Transfinite Curve {147, 147} = 61 Using Progression 1.02;
+Transfinite Curve {147} = 61 Using Progression 1.02;
 //+
 Transfinite Surface {461} = {850, 804, 817, 818};
 //+
@@ -75,11 +53,9 @@ Transfinite Curve {1434} = 17 Using Progression 1.1;
 //+
 Transfinite Curve {1437} = 5 Using Progression 0.9090909;
 //+
-Transfinite Curve {1439} = 2 Using Progression 1.1;
+Transfinite Curve {1439} = 3 Using Progression 1.1;
 //+
-Transfinite Curve {1440, 1439, 1440} = 3 Using Progression 1.1;
-//+
-Transfinite Curve {1440, 1440} = 4 Using Progression 1.1;
+Transfinite Curve {1440} = 4 Using Progression 1.1;
 //+
 Transfinite Curve {1423, 1424, 1423} = 16 Using Progression 1.1;
 //+
@@ -145,7 +121,7 @@ Transfinite Curve {1414} = 8 Using Progression 1;
 //+
 Transfinite Curve {724, 1329, 1330} = 15 Using Bump 0.3;
 //+
-Transfinite Curve {1325, 1324, 1321, 157, 1320, 1318, 1317, 1315} = 15 Using Bump 0.3;
+Transfinite Curve {1325, 1324, 1321, 1320, 1318, 1317, 1315} = 15 Using Bump 0.3;
 //+
 Transfinite Curve {1273, 89} = 12 Using Progression 1;
 //+
@@ -401,7 +377,7 @@ Transfinite Curve {1038} = 53 Using Progression 1.02;
 //+
 Transfinite Surface {343} = {712, 711, 574, 575};
 //+
-Transfinite Curve {1470, 1472, 1452, 1456} = 60 Using Progression 1.025;
+Transfinite Curve {1470, 1472, 1452, 1456, 1475, 189} = 60 Using Progression 1.025;
 //+
 Transfinite Curve {230} = 35 Using Progression 1.025;
 //+

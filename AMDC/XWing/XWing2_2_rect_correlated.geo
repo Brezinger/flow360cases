@@ -1,15 +1,6 @@
 //+
 Transfinite Surface {526};
-//+
-Transfinite Curve {1600} = 35 Using Progression 1;
-//+
-Transfinite Curve {1600} = 36 Using Progression 1;
-//+
-Transfinite Curve {1553} = 75 Using Progression 1;
-//+
-Transfinite Curve {1567} = 39 Using Progression 1;
-//+
-Transfinite Curve {1557} = 19 Using Progression 1;
+
 //+
 Transfinite Surface {334} = {442, 515, 532, 442};
 //+
