@@ -35,8 +35,10 @@
     }
   },
   "mesh definition": {
-    "generate_1d_mesh": true,
-    "generate_2d_mesh": true,
+    "generate_1d_mesh": false,
+    "generate_2d_mesh": false,
+    "min element size": 0.0,
+    "max element size": 2.5,
     "surface_meshing_algorithms": [
       {
         "name": "wing fuselage connection 1",
@@ -98,8 +100,8 @@
           "Arrangement": "Left",
           "boundary points": [
             594,
-            557,
-            528
+            528,
+            557
           ]
         }
       ]

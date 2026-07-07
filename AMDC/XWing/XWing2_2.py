@@ -127,6 +127,7 @@ def define_and_run(
     alpha_controller_initial_alpha_deg=None,
     aircraft_mass=13.6,
     wing_area=0.277649964016683,
+    wing_span=1.31708,
     wake_refinement_files=None,
     flow360folder=None,
     results_path=None,
@@ -144,7 +145,6 @@ def define_and_run(
     surf_mesh_refine_factor = 2 ** (surf_mesh_lvl / 2)
 
     mac = 0.108
-    wingspan = 1.31708
     moment_center_x = 0.743
     standard_atmosphere_density = calculate_standard_atmosphere_density(altitude)
 
@@ -295,7 +295,7 @@ def define_and_run(
         refinements=refinements if refinements else None,
     )
 
-    moment_ref_lengths = (wingspan / 2, mac, wingspan / 2)
+    moment_ref_lengths = (wing_span, mac, wing_span)
     ref_geometry = fl.ReferenceGeometry(
         moment_center=(moment_center_x, 1.0e-6, 0) * u.m,
         moment_length=moment_ref_lengths * u.m,
@@ -409,19 +409,19 @@ def main():
 
     if wing_version == "rectangular":
         project_cgns_file_name = (
-            r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
-            r"\01_Projekte\20_AMDC_XWing2\05_CAD\2026-06-29_AMDC-simplified-XWingV22+rectangularwings_getrennt.cgns"
+            r"C:/git/flow360cases/AMDC/XWing/2026-06-29_AMDC-simplified-XWingV22+rectangularwings_getrennt.cgns"
         )
         sim_name = "XWing2_2 rect fully_turbulent_SA"
         wing_area = 0.2831
+        wing_span = 1.312
         wing1_TE_file = "TE_XWing2_2_rect_wing1.dat"
     elif wing_version == "trapezoidal":
         project_cgns_file_name = (
-            r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
-            r"\01_Projekte\20_AMDC_XWing2\05_CAD\2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V1.cgns"
+            r"C:/git/flow360cases/AMDC/XWing/2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V2.cgns"
         )
-        sim_name = "XWing2_2 manual_V1 fully_turbulent_SA"
+        sim_name = "XWing2_2 trap fully_turbulent_SA"
         wing_area = 0.277649964016683
+        wing_span = 1.346
         wing1_TE_file = "TE_XWing2_2_wing1.dat"
 
 
@@ -437,10 +437,10 @@ def main():
 
     half_model = False
     aircraft_mass = 13.6
-    #U_inf_range = [24.5]
-    #alpha_deg_range = [10.0]
-    U_inf_range = [39.5]
-    alpha_deg_range = [-1.6]
+    U_inf_range = [24.5]
+    alpha_deg_range = [10.0]
+    #U_inf_range = [39.5]
+    #alpha_deg_range = [-1.6]
 
     wake_refinement_files = prepare_trailing_edge_files(working_dir, wing1_file=wing1_TE_file)
 
@@ -465,8 +465,7 @@ def main():
     cols = ["U_inf", "target_lift_coefficient", "alpha_deg", "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
     df_results = pd.DataFrame(operating_points).reindex(columns=cols)
 
-    folder_toplvl = fl.Folder.create(study_name).submit()
-    curr_folder = fl.Folder.create("manual_V1", parent_folder=folder_toplvl).submit()
+    curr_folder = fl.Folder.create(study_name).submit()
 
     for i, row in df_results.iterrows():
         res = define_and_run(
@@ -481,6 +480,7 @@ def main():
             alpha_controller_initial_alpha_deg=row["alpha_deg"],
             aircraft_mass=aircraft_mass,
             wing_area=wing_area,
+            wing_span=wing_span,
             wake_refinement_files=wake_refinement_files,
             flow360folder=curr_folder,
             results_path=str(working_dir),

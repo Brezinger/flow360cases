@@ -3850,6 +3850,16 @@ def apply_geometry_preprocessing(
         gmsh.model.occ.translate(dim_tags, *translation)
 
 
+def apply_mesh_size_bounds(mesh_def: dict[str, Any]) -> None:
+    min_size = mesh_def.get("min element size", mesh_def.get("min_element_size"))
+    max_size = mesh_def.get("max element size", mesh_def.get("max_element_size"))
+
+    if min_size is not None:
+        gmsh.option.setNumber("Mesh.MeshSizeMin", float(min_size))
+    if max_size is not None:
+        gmsh.option.setNumber("Mesh.MeshSizeMax", float(max_size))
+
+
 def _surface_meshing_algorithm_code(algorithm: Any) -> int:
     if isinstance(algorithm, int):
         return algorithm
@@ -4197,13 +4207,9 @@ def generate_surface_mesh(
         apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
 
-        if not mesh:
-            if show:
-                show_gmsh()
-            return
-
         generate_1d_mesh = bool(mesh_def.get("generate_1d_mesh", True))
         generate_2d_mesh = bool(mesh_def.get("generate_2d_mesh", True))
+        apply_mesh_size_bounds(mesh_def)
         if generate_2d_mesh and not generate_1d_mesh:
             raise ValueError(
                 "generate_2d_mesh requires generate_1d_mesh, because Gmsh "
@@ -4223,6 +4229,11 @@ def generate_surface_mesh(
             apply_surface_meshing_algorithms(mesh_def)
             if recombine:
                 apply_structured_surface_recombination(mesh_def)
+
+        if not mesh:
+            if show:
+                show_gmsh()
+            return
 
         gmsh.model.mesh.generate(2 if generate_2d_mesh else 1)
 
