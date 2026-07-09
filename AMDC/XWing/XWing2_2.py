@@ -297,7 +297,7 @@ def define_and_run(
 
     moment_ref_lengths = (wing_span, mac, wing_span)
     ref_geometry = fl.ReferenceGeometry(
-        moment_center=(moment_center_x, 1.0e-6, 0) * u.m,
+        moment_center=(moment_center_x, 0, 0) * u.m,
         moment_length=moment_ref_lengths * u.m,
         area=wing_area * u.m ** 2,
     )
