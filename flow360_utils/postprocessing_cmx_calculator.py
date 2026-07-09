@@ -6,6 +6,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyvista as pv
+from scipy.spatial import cKDTree
 
 
 # -----------------------------
@@ -54,6 +56,13 @@ data_files = [
     *(data_dir / f"stab{index}_data.csv" for index in range(1, 5)),
 ]
 total_aircraft_data_file = data_dir / "aircraft_data.csv"
+surface_vtu_file = data_dir / "surfaces.vtu"
+use_vtu_surface_integration = True
+surface_patch_id_files = {
+    surface_file.stem: _patch_id_file
+    for surface_file in data_files
+    if (_patch_id_file := data_dir / f"{surface_file.stem.removesuffix('_data')}_test.csv").is_file()
+}
 surface_lift_force_direction_deg = {
     "wing1_data": 125.0,
     "wing2_data": 55.0,
@@ -78,7 +87,13 @@ def process_surface(
     lift_force_direction_deg: float,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     df = pd.read_csv(filepath)
+    return process_surface_dataframe(df, lift_force_direction_deg)
 
+
+def process_surface_dataframe(
+    df: pd.DataFrame,
+    lift_force_direction_deg: float,
+) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     area = df["Area"].to_numpy()
     cp = df["Cp"].to_numpy()
 
@@ -143,13 +158,117 @@ def process_surface(
     return df, strip, cmx_total
 
 
+def load_vtu_cell_center_dataframe(filepath: Path) -> pd.DataFrame:
+    mesh = pv.read(str(filepath)).extract_surface()
+    mesh = mesh.compute_normals(
+        cell_normals=True,
+        point_normals=False,
+        inplace=False,
+    )
+    mesh = mesh.point_data_to_cell_data(pass_point_data=False)
+    mesh = mesh.compute_cell_sizes(length=False, volume=False)
+    centers = mesh.cell_centers().points
+
+    data = {
+        "PatchID": mesh.cell_data["PatchID"],
+        "Cp": mesh.cell_data["Cp"],
+        "Area": mesh.cell_data["Area"],
+        "Points:0": centers[:, 0],
+        "Points:1": centers[:, 1],
+        "Points:2": centers[:, 2],
+    }
+
+    normals = mesh.cell_data["Normals"]
+    for index in range(3):
+        data[f"Normals:{index}"] = normals[:, index]
+
+    if "CfVec" in mesh.cell_data:
+        cf_vec = mesh.cell_data["CfVec"]
+        for index in range(3):
+            data[f"CfVec:{index}"] = cf_vec[:, index]
+
+    return pd.DataFrame(data)
+
+
+def patch_ids_from_selection_file(filepath: Path) -> np.ndarray:
+    df = pd.read_csv(filepath, usecols=["PatchID"])
+    return np.sort(df["PatchID"].dropna().astype(int).unique())
+
+
+def process_vtu_surface(
+    vtu_cell_df: pd.DataFrame,
+    patch_id_file: Path,
+    lift_force_direction_deg: float,
+) -> tuple[pd.DataFrame, pd.DataFrame, float]:
+    surface_df = select_vtu_cells_from_selection_file(vtu_cell_df, patch_id_file)
+    if surface_df.empty:
+        raise ValueError(f"No VTU cells matched PatchID values from {patch_id_file}.")
+    return process_surface_dataframe(surface_df, lift_force_direction_deg)
+
+
+def select_vtu_cells_from_selection_file(
+    vtu_cell_df: pd.DataFrame,
+    selection_file: Path,
+    coordinate_tolerance: float = 1.0e-2,
+) -> pd.DataFrame:
+    selection_df = pd.read_csv(selection_file)
+    if {"Points:0", "Points:1", "Points:2"}.issubset(selection_df.columns):
+        matched_indices = []
+        point_columns = ["Points:0", "Points:1", "Points:2"]
+        for patch_id, patch_selection_df in selection_df.groupby("PatchID"):
+            patch_vtu_df = vtu_cell_df[vtu_cell_df["PatchID"] == int(patch_id)]
+            if patch_vtu_df.empty:
+                continue
+
+            tree = cKDTree(patch_vtu_df[point_columns].to_numpy())
+            distances, local_indices = tree.query(
+                patch_selection_df[point_columns].to_numpy(),
+                k=1,
+            )
+            if np.any(distances > coordinate_tolerance):
+                max_distance = float(distances.max())
+                raise ValueError(
+                    f"Selection file {selection_file} has cell centers that do not "
+                    f"match PatchID {patch_id} within tolerance "
+                    f"{coordinate_tolerance}. Maximum distance: {max_distance}."
+                )
+            matched_indices.extend(patch_vtu_df.index.to_numpy()[local_indices])
+
+        return vtu_cell_df.loc[np.unique(matched_indices)].copy()
+
+    patch_ids = np.sort(selection_df["PatchID"].dropna().astype(int).unique())
+    return vtu_cell_df[vtu_cell_df["PatchID"].isin(patch_ids)].copy()
+
+
 def main() -> None:
     surface_results: list[tuple[str, pd.DataFrame, float]] = []
     plot_title = _plot_title_from_data_dir(data_dir)
+    vtu_cell_df = None
+
+    if use_vtu_surface_integration:
+        missing_patch_files = [
+            data_file.stem
+            for data_file in data_files
+            if data_file.stem not in surface_patch_id_files
+        ]
+        if missing_patch_files:
+            print(
+                "VTU integration disabled because patch-id selection files are missing for: "
+                + ", ".join(missing_patch_files)
+            )
+        else:
+            vtu_cell_df = load_vtu_cell_center_dataframe(surface_vtu_file)
 
     for data_file in data_files:
         lift_direction = surface_lift_force_direction_deg[data_file.stem]
-        _, strip, cmx_total = process_surface(data_file, lift_direction)
+        if vtu_cell_df is not None:
+            _, strip, cmx_total = process_vtu_surface(
+                vtu_cell_df,
+                surface_patch_id_files[data_file.stem],
+                lift_direction,
+            )
+        else:
+            _, strip, cmx_total = process_surface(data_file, lift_direction)
         surface_results.append((data_file.stem, strip, cmx_total))
         print(
             f"{data_file.stem}: lift direction = {lift_direction:.1f} deg, "
@@ -168,7 +287,10 @@ def main() -> None:
         component_sums[prefix] = prefix_sum
         print(f"{prefix} Cmx sum = {prefix_sum:.6f}")
 
-    aircraft_df, _, aircraft_cmx_total = process_surface(total_aircraft_data_file, 0.0)
+    if vtu_cell_df is not None:
+        aircraft_df, _, aircraft_cmx_total = process_surface_dataframe(vtu_cell_df.copy(), 0.0)
+    else:
+        aircraft_df, _, aircraft_cmx_total = process_surface(total_aircraft_data_file, 0.0)
     aircraft_cl = float(aircraft_df["dFz_q"].sum() / S_ref)
     fuselage_cmx = aircraft_cmx_total - component_sums["wing"] - component_sums["stab"]
     component_sums["fuselage"] = fuselage_cmx

@@ -24,7 +24,6 @@ print(output_dir)
 # -----------------------------
 
 objects_to_save = [
-    "CellCenters1",
     "Extract wing1",
     "Extract wing2",
     "Extract wing3",
@@ -36,10 +35,7 @@ objects_to_save = [
 ]
 
 arrays_to_save = [
-    "Area",
-    "CfVec",
-    "Cp",
-    "Normals",
+    "PatchID"
 ]
 
 os.makedirs(output_dir, exist_ok=True)
@@ -60,12 +56,8 @@ for obj_name in objects_to_save:
     UpdatePipeline(proxy=source)
 
     # Optional: safe filename
-    if "Extract" in obj_name:
-        filename = obj_name.replace("Extract ", "") + "_data.csv"
-    elif obj_name == "CellCenters1":
-        filename = "aircraft_data.csv"
-    else:
-        raise RuntimeError(f"Could not find pipeline object '{obj_name}'.")
+
+    filename = obj_name.replace("Extract ", "") + "_data.csv"
 
     filepath = os.path.join(output_dir, filename)
 
