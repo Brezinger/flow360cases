@@ -1640,7 +1640,7 @@
               "_invert_direction": false,
               "mesh size mode": "ele size",
               "target ele size 1": 2.0,
-              "target ele size 2": 0.5
+              "target ele size 2": 0.85
             }
           ]
         }

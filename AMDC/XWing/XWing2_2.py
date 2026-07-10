@@ -431,7 +431,7 @@ def main():
     enable_alpha_controller = True
     boundary_layer_growth_rate = 1.2
     target_yplus = 0.67
-    n_timesteps = 600
+    n_timesteps = 2000
 
     study_name = "AMDC XWing2_2"
 

@@ -52,8 +52,15 @@ for obj_name in objects_to_save:
 
     print(f"Saving {obj_name}...")
 
+    patch_id_only = PassArrays(
+        registrationName=f"{obj_name} PatchID only",
+        Input=source,
+    )
+    patch_id_only.PointDataArrays = arrays_to_save
+    patch_id_only.CellDataArrays = arrays_to_save
+
     # Make sure data is updated
-    UpdatePipeline(proxy=source)
+    UpdatePipeline(proxy=patch_id_only)
 
     # Optional: safe filename
 
@@ -63,11 +70,12 @@ for obj_name in objects_to_save:
 
     SaveData(
         filepath,
-        proxy=source,
+        proxy=patch_id_only,
         Precision=6,
         UseScientificNotation=1,
-        AddMetaData=1,
+        AddMetaData=0,
         ChooseArraysToWrite=1,
+        PointDataArrays=arrays_to_save,
         CellDataArrays=arrays_to_save,
     )
 
