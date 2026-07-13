@@ -1,0 +1,166 @@
+{
+  "geometry definition": {
+    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\04_Flaplets\\03_CAD\\Aerodynamikmodelle\\Ventus3 FlapletV2\\WKS\\Ventus3_FlapletV2_WKS_B.stp",
+    "geometry_preprocessing": {
+      "enabled": false,
+      "origin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "rotation_deg": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "geometry_healing": {
+      "enabled": true,
+      "tolerance": 0.05,
+      "fix_degenerated": true,
+      "fix_small_edges": true,
+      "fix_small_faces": true,
+      "sew_faces": true,
+      "make_solids": false
+    }
+  },
+  "mesh definition": {
+    "generate_1d_mesh": true,
+    "generate_2d_mesh": true,
+    "mesh_zones": [
+      {
+        "name": "main",
+        "curve_definition": "automatic",
+        "start_pt": 60,
+        "circumferential_direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "longitudinal_direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "has_blunt_te": true,
+        "n_subcurvs_per_compound_curve": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "circumferential_transfinite_def": {
+          "type": [
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression",
+            "Progression"
+          ],
+          "Parameter": [
+            1.05,
+            1.0,
+            1.05,
+            1.05,
+            1.0,
+            1.05,
+            1.05
+          ],
+          "invert_direction": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "n_pts": [
+            26,
+            232,
+            42,
+            42,
+            232,
+            26,
+            13
+          ]
+        },
+        "longitudinal_transfinite_def": {
+          "default type": "Progression",
+          "Parameter": 1.0,
+          "sections": [
+            {
+              "name": "Trapezoid 1",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 60,
+              "target ele size 2": 60
+            },
+            {
+              "name": "Trapezoid 2",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 60,
+              "target ele size 2": 60
+            },
+            {
+              "name": "Trapezoid 3",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 60,
+              "target ele size 2": 12.5
+            },
+            {
+              "name": "Intermediate section",
+              "_invert_direction": false,
+              "mesh size mode": "npts",
+              "n_pts": 2
+            },
+            {
+              "name": "Trapezoid 4a",
+              "type": "Bump",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 12.5,
+              "target ele size 2": 30
+            },
+            {
+              "name": "Trapezoid 4b",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 12.5,
+              "target ele size 2": 2.5
+            },
+            {
+              "name": "Flaplet",
+              "type": "Progression",
+              "_invert_direction": false,
+              "mesh size mode": "ele size",
+              "target ele size 1": 2.5,
+              "target ele size 2": 0.36
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import os
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -21,34 +22,63 @@ from flow360_utils.flow360_tools import (
 )
 
 
-def define_and_run(project_cgns_file_name=None, project_step_file_name=None, project_id=None, name=None,
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+DEFAULT_ALTITUDE = 0
+DEFAULT_AIRCRAFT_MASS = 600.0
+DEFAULT_WING_AREA = 10.84
+DEFAULT_WINGSPAN = 18.0
+DEFAULT_MAC = 0.6356086024985311
+DEFAULT_MOMENT_CENTER_X = 0.386666666666667
+DEFAULT_TARGET_YPLUS = 0.67
+DEFAULT_TURBULENCE_INTENSITY_PERC = 0.05
+
+
+def _resolve_input_file(filename: str, working_dir=None) -> Path:
+    candidates = [Path(filename)]
+    if working_dir is not None:
+        candidates.append(working_dir / filename)
+    candidates.append(SCRIPT_DIR / filename)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    checked_paths = ", ".join(str(candidate) for candidate in candidates)
+    raise FileNotFoundError(f"Could not find {filename!r}. Checked: {checked_paths}.")
+
+
+def _resolve_input_files(filenames, working_dir=None):
+    if filenames is None:
+        return None
+    return [str(_resolve_input_file(filename, working_dir)) for filename in filenames]
+
+
+def define_and_run(project_cgns_file_name=None, name=None,
                    symm_face="body00001_face00003", U_inf=None, alpha_deg=0., half_model=True,
                    y1_fac=1., surf_mesh_lvl=0, enable_volume_refinements=True,
                    enable_alpha_controller=False, target_lift_coefficient=None,
                    alpha_controller_kp=0.2, alpha_controller_ki=0.002,
                    alpha_controller_start_pseudo_step=50,
                    alpha_controller_initial_alpha_deg=None,
-                   aircraft_mass=600.0,
-                   LE_edge_list=None, TE_edge_list=None,
+                   aircraft_mass=DEFAULT_AIRCRAFT_MASS,
+                   wing_area=DEFAULT_WING_AREA,
+                   wingspan=DEFAULT_WINGSPAN,
+                   mac=DEFAULT_MAC,
+                   moment_center_x=DEFAULT_MOMENT_CENTER_X,
+                   altitude=DEFAULT_ALTITUDE,
+                   target_yplus=DEFAULT_TARGET_YPLUS,
+                   turbulence_intensity_perc=DEFAULT_TURBULENCE_INTENSITY_PERC,
                    turbulator_location_files=None, wake_refinement_files=None,
                    flow360folder=None, results_path=None,
-                   generate_surf_mesh=True, generate_vol_mesh=True,
+                   generate_vol_mesh=True,
                    boundary_layer_growth_rate=1.1,
                    n_timesteps=2000,
                    run_flag=False):
     """
     Define a V3 Flow360 setup and either prepare the next mesh step or run the case.
 
-    The project source is selected in this order:
-    - project_cgns_file_name: create a project from an existing CGNS surface mesh
-      and build surface models from the mesh boundaries.
-    - project_step_file_name: create a project from CAD geometry and generate the
-      surface mesh from geometry.
-    - project_id: load an existing cloud project and use its geometry workflow.
-
     :param project_cgns_file_name: CGNS surface mesh file used to create the project
-    :param project_step_file_name: CAD geometry file used to create the project
-    :param project_id:             Existing Flow360 cloud project ID
     :param name:                   Simulation name prefix
     :param symm_face:              Symmetry face name
     :param U_inf:               Free stream velocity. Mutually exclusive with target_lift_coefficient
@@ -64,13 +94,17 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     :param alpha_controller_start_pseudo_step: Pseudo-step after which alpha control starts
     :param alpha_controller_initial_alpha_deg: Initial alpha angle in degrees for the controller state
     :param aircraft_mass:       Aircraft mass in kg used to calculate target CL when not specified
-    :param LE_edge_list:        Geometry-specific leading-edge IDs for CAD-based meshing
-    :param TE_edge_list:        Geometry-specific trailing-edge IDs for CAD-based meshing
+    :param wing_area:           Full aircraft wing area in square meters
+    :param wingspan:            aircraft wingspan in meters
+    :param mac:                 Mean aerodynamic chord in meters
+    :param moment_center_x:     Moment reference x-coordinate in meters
+    :param altitude:            Standard atmosphere altitude in meters
+    :param target_yplus:        Target y-plus value for wall-resolved meshing
+    :param turbulence_intensity_perc: Freestream turbulence intensity in percent
     :param turbulator_location_files: Geometry-specific turbulator coordinate files
     :param wake_refinement_files: Geometry-specific wake refinement coordinate files
     :param flow360folder:       Flow360 folder to put the case in
     :param results_path:        Path to store results
-    :param generate_surf_mesh:  Generate the surface mesh when geometry-based meshing is used
     :param generate_vol_mesh:   Generate the volume mesh before returning or running the case
     :param boundary_layer_growth_rate: Boundary layer growth rate for volume meshing
     :param n_timesteps:         Maximum steady solver pseudo-steps
@@ -80,21 +114,8 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     if alpha_controller_initial_alpha_deg is None:
         alpha_controller_initial_alpha_deg = alpha_deg
 
-    #  #  #
-    # global flags
     async_flag = False
-    # global parameters
-    altitude = 0
-    # mesh parameters
     surf_mesh_refine_factor = 2 ** (surf_mesh_lvl / 2)  # Surface mesh size multiplier
-    target_yplus_wall_modeled = 0.67  # Target y-plus value for wall-resolved meshing
-
-    turbulence_intensity_perc = 0.05
-
-    mac = 0.6356086024985311  # mean aerodynamic chord
-    wingspan = 18  # half-span
-    moment_center_x = 0.386666666666667  # x reference location for moments
-    wing_area = 10.84
     standard_atmosphere_density = calculate_standard_atmosphere_density(altitude)
     has_airspeed = U_inf is not None
     has_target_lift_coefficient = target_lift_coefficient is not None
@@ -167,7 +188,7 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # First layer volumetric mesh thicknesses
     _, flat_plate_y1 = calculate_flat_plate_turbulent_y1(
         freestream_velocity=U_inf,
-        desired_yplus=target_yplus_wall_modeled,
+        desired_yplus=target_yplus,
     )
     global_y1 = y1_fac * flat_plate_y1 * u.m  # First layer thickness for boundary layer meshing (wall-resolved)
 
@@ -192,51 +213,28 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     ###############################
 
     # Initialize project
-    project_from_surface_mesh = project_cgns_file_name is not None
-    if project_from_surface_mesh:
-        project = fl.Project.from_surface_mesh(project_cgns_file_name, name=sim_name,
-                                               folder=flow360folder, length_unit="mm", run_async=async_flag)
-        surface_mesh = project.surface_mesh
-    elif project_step_file_name is not None:
-        project = fl.Project.from_geometry(project_step_file_name, name=sim_name,
+    if project_cgns_file_name is None:
+        raise ValueError("project_cgns_file_name must be specified.")
+
+    working_dir = Path.cwd()
+    project_cgns_file_name = str(_resolve_input_file(project_cgns_file_name, working_dir))
+    project = fl.Project.from_surface_mesh(project_cgns_file_name, name=sim_name,
                                            folder=flow360folder, length_unit="mm", run_async=async_flag)
-        surface_mesh = None
-    elif project_id is not None:
-        project = fl.Project.from_cloud(project_id)
-        surface_mesh = None
-    else:
-        raise ValueError("Either project_cgns_file_name, project_step_file_name, or project_id must be specified")
+    surface_mesh = project.surface_mesh
 
     if turbulator_location_files is None:
         raise ValueError("turbulator_location_files must be provided.")
     if wake_refinement_files is None:
         raise ValueError("wake_refinement_files must be provided.")
 
-    if project_from_surface_mesh:
-        wall_surfaces = [
-            surface_mesh[boundary_name]
-            for boundary_name in surface_mesh.boundary_names
-            if boundary_name != symm_face
-        ]
-    else:
-        if LE_edge_list is None or TE_edge_list is None:
-            raise ValueError(
-                "LE_edge_list and TE_edge_list must be provided for geometry-based projects."
-            )
+    turbulator_location_files = _resolve_input_files(turbulator_location_files, working_dir)
+    wake_refinement_files = _resolve_input_files(wake_refinement_files, working_dir)
 
-        geo = project.geometry  # Access the geometry of the project
-
-        # Display available groupings in the geometry (helpful for identifying group names)
-        # geo.show_available_groupings(verbose_mode=True)
-        #####################################################################################
-        # Group edges and faces
-        geo.group_faces_by_tag("faceId")
-        geo.group_edges_by_tag("edgeId")
-
-        LE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in LE_edge_list]
-        TE_edges = [geo["body00001_edge{0:05d}".format(i)] for i in TE_edge_list]
-
-        wall_surfaces = [geo[face] for face in geo.entity_info.all_face_ids if face != symm_face]
+    wall_surfaces = [
+        surface_mesh[boundary_name]
+        for boundary_name in surface_mesh.boundary_names
+        if not half_model or boundary_name != symm_face
+    ]
 
     ################################
     # 1) Define operating conditions
@@ -262,20 +260,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
     # 3d) Mesh refinements
     refinements = []
-    if not project_from_surface_mesh:
-        surf_msh_data = {'refinement name': ["LE", "TE"],
-                         "geo_item": [LE_edges, TE_edges],
-                         "mesh size": [surf_mesh_refine_factor * 0.5 * u.mm,  # Leading edge refinement
-                                       surf_mesh_refine_factor * 0.2 * u.mm,  # Trailing edge refinement
-                                       ]}
-        df_mesh_refinement = pd.DataFrame(surf_msh_data)
-        # Height-based edge refinement
-        for idx, data in df_mesh_refinement.iterrows():
-            edge_refinement = fl.SurfaceEdgeRefinement(name=data.iloc[0],
-                                                       edges=[data.iloc[1]],
-                                                       method=fl.HeightBasedRefinement(value=data.iloc[2]),
-                                                       )
-            refinements.append(edge_refinement)
 
     turbulator_boxes = list()
     for file in turbulator_location_files:
@@ -385,10 +369,10 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     # 4) Flow solver parameters
     ###########################
 
-    moment_ref_lengths = (wingspan / 2, mac, wingspan / 2)
+    moment_ref_lengths = (wingspan, mac, wingspan)
 
-    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 1.e-6, 0) * u.m,
-                                        moment_length=moment_ref_lengths * u.mm,
+    ref_geometry = fl.ReferenceGeometry(moment_center=(moment_center_x, 0, 0) * u.m,
+                                        moment_length=moment_ref_lengths * u.m,
                                         area=wing_area / 2 * u.m ** 2)
 
     ncrit = calc_ncrit_from_fsti(turbulence_intensity_perc)
@@ -455,32 +439,6 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
     if run_flag and not generate_vol_mesh:
         raise ValueError("generate_vol_mesh must be True when run_flag is True.")
 
-    if not run_flag:
-        if not project_from_surface_mesh and generate_surf_mesh:
-            project.generate_surface_mesh(
-                params=params,
-                name="SurfaceMesh",
-                run_async=False,
-                draft_only=False,
-            )
-        if generate_vol_mesh:
-            project.generate_volume_mesh(
-                params,
-                use_beta_mesher=True,
-                name="VolumeMesh",
-                run_async=False,
-                use_geometry_AI=False,
-                raise_on_error=True,
-            )
-        return project.id
-
-    if not project_from_surface_mesh and generate_surf_mesh:
-        project.generate_surface_mesh(
-            params=params,
-            name="SurfaceMesh",
-            run_async=False,
-            draft_only=False,
-        )
     if generate_vol_mesh:
         project.generate_volume_mesh(
             params,
@@ -490,6 +448,10 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
             use_geometry_AI=False,
             raise_on_error=True,
         )
+
+    if not run_flag:
+        return project.id
+
     project.run_case(params=params, name="V3_case_" + sim_name)
 
     case = project.case
@@ -506,22 +468,21 @@ def define_and_run(project_cgns_file_name=None, project_step_file_name=None, pro
 
 def main():
     mshlvl = 0
-    generate_surf_mesh = False
     generate_vol_mesh = True
     run = False
     n_test_cases = None
     enable_volume_refinements = True
     boundary_layer_growth_rate = 1.097
     enable_alpha_controller = True
-    aircraft_mass = 600.0
+    aircraft_mass = DEFAULT_AIRCRAFT_MASS
     alpha_controller_kp = 0.2
     alpha_controller_ki = 0.002
     alpha_controller_start_pseudo_step = 50
 
     results_dir = "C:/WDIR/flow360"
 
-    # variant = "FlapletV2 WKS"
-    variant = "Original WKS"
+    variant = "FlapletV2 WK-1"
+    # variant = "Original WK-1"
     # variant = "FlapletV2 WK+2"
     # variant = "Original WK+2"
 
@@ -533,67 +494,58 @@ def main():
 
     study_name = "V3 Flaplets"
     half_model = True
-    altitude = 0
-    wing_area = 10.84
+    altitude = DEFAULT_ALTITUDE
+    wing_area = DEFAULT_WING_AREA
+    wingspan = DEFAULT_WINGSPAN
+    mac = DEFAULT_MAC
+    moment_center_x = DEFAULT_MOMENT_CENTER_X
     U_inf_range = None
 
     variant_configs = {
-        "Original WKS": {
-            "project_step_file_name": None,
-            "project_cgns_file_name": "Ventus_Original_WKS_G.cgns",
-            "project_id": None,
+        "Original WK-1": {
+            "project_cgns_file_name": "Ventus_Original_WK-1_G.cgns",
             "symm_face": "symm face",
-            "LE_edge_list": [],
-            "TE_edge_list": [],
-            "turbulator_location_files": ["Turbulator_wing_lower_original_WKS.dat"],
-            "wake_refinement_files": ["TE_upper_VentusOrig_WKS.dat"],
-            "target_lift_coefficient_range": [0.5],
-            "alpha_deg_range": [3.0],
-            "n_timesteps": 4000,
+            "turbulator_location_files": ["Turbulator_wing_lower_original_WK-1.dat"],
+            "wake_refinement_files": ["TE_upper_VentusOrig_WK-1.dat"],
+            #"target_lift_coefficient_range": [0.3, 0.5],
+            # "alpha_deg_range": [3.0],
+            "target_lift_coefficient_range": [0.336899319, 0.381049961, 0.434484293],
+            "alpha_deg_range": [1.1, 1.5, 2.0],
+            "n_timesteps": 2000,
         },
         "Original WK+2": {
-            "project_step_file_name": None,
             "project_cgns_file_name": "Ventus_Original_WK+2.cgns",
-            "project_id": None,
             "symm_face": "symm face",
-            "LE_edge_list": [],
-            "TE_edge_list": [],
             "turbulator_location_files": [],
             "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 4000,
+            "n_timesteps": 2000,
         },
-        "FlapletV2 WKS": {
-            "project_step_file_name": None,
-            "project_cgns_file_name": "Ventus3_FlapletV2_WKS_B.cgns",
-            "project_id": None,
+        "FlapletV2 WK-1": {
+            "project_cgns_file_name": "Ventus3_FlapletV2_WK-1_B.cgns",
             "symm_face": "symm face",
-            "LE_edge_list": [],
-            "TE_edge_list": [],
             "turbulator_location_files": [
-                "Turbulator_wing_lower_FlapletV2_WKS.dat",
-                "Turbulator_Flaplet_upper_WKS.dat",
+                "Turbulator_wing_lower_FlapletV2_WK-1.dat",
+                "Turbulator_Flaplet_upper_WK-1.dat",
             ],
-            "wake_refinement_files": ["TE_upper_Flaplet_WKS.dat"],
-            "target_lift_coefficient_range": [0.5],
-            "alpha_deg_range": [3.0],
-            "n_timesteps": 4000,
+            "wake_refinement_files": ["TE_upper_Flaplet_WK-1.dat"],
+            #"target_lift_coefficient_range": [0.5],
+            #"alpha_deg_range": [3.0],
+            "target_lift_coefficient_range": [0.336899319, 0.381049961, 0.434484293],
+            "alpha_deg_range": [1.1, 1.5, 2.0],
+            "n_timesteps": 2000,
         },
         "FlapletV2 WK+2": {
-            "project_step_file_name": None,
             "project_cgns_file_name": "Ventus3_FlapletV2_WK+2_B.cgns",
-            "project_id": None,
             "symm_face": "symm face",
-            "LE_edge_list": [],
-            "TE_edge_list": [],
             "turbulator_location_files": [
-                "Turbulator_Flaplet_upper_WKS.dat",
+                "Turbulator_Flaplet_upper_WK-1.dat",
             ],
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 4000,
+            "n_timesteps": 2000,
         },
     }
 
@@ -603,12 +555,8 @@ def main():
         )
 
     variant_config = variant_configs[variant]
-    proj_step_file = variant_config["project_step_file_name"]
     proj_cgns_file = variant_config["project_cgns_file_name"]
-    proj_id = variant_config["project_id"]
     symm_face = variant_config["symm_face"]
-    LE_edge_list = variant_config["LE_edge_list"]
-    TE_edge_list = variant_config["TE_edge_list"]
     turbulator_location_files = variant_config["turbulator_location_files"]
     wake_refinement_files = variant_config["wake_refinement_files"]
     target_lift_coefficient_range = variant_config["target_lift_coefficient_range"]
@@ -667,8 +615,6 @@ def main():
 
         res = define_and_run(
             project_cgns_file_name=proj_cgns_file,
-            project_step_file_name=proj_step_file,
-            project_id=proj_id,
             name=sim_name,
             symm_face=symm_face,
             U_inf=U_inf if input_mode == "airspeed" else None,
@@ -683,13 +629,15 @@ def main():
             alpha_controller_start_pseudo_step=alpha_controller_start_pseudo_step,
             alpha_controller_initial_alpha_deg=alpha_deg,
             aircraft_mass=aircraft_mass,
-            LE_edge_list=LE_edge_list,
-            TE_edge_list=TE_edge_list,
+            wing_area=wing_area,
+            wingspan=wingspan,
+            mac=mac,
+            moment_center_x=moment_center_x,
+            altitude=altitude,
             turbulator_location_files=turbulator_location_files,
             wake_refinement_files=wake_refinement_files,
             flow360folder=curr_folder,
             results_path=results_dir,
-            generate_surf_mesh=generate_surf_mesh,
             generate_vol_mesh=generate_vol_mesh,
             boundary_layer_growth_rate=boundary_layer_growth_rate,
             n_timesteps=n_timesteps,
