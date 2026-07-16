@@ -193,7 +193,7 @@ def define_and_run(project_cgns_file_name=None, name=None,
     global_y1 = y1_fac * flat_plate_y1 * u.m  # First layer thickness for boundary layer meshing (wall-resolved)
 
     # solver parameters
-    surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec", "mutRatio", "solutionTransition"]
+    surf_output_requests = ["Cp", "Cf", "yPlus", "CfVec", "solutionTransition"]
     vol_output_requests = ["primitiveVars", "Cp", "qcriterion", "mut", "solutionTransition", "T", "vorticity"]
 
     if name is not None:
@@ -509,9 +509,11 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WK-1.dat"],
             #"target_lift_coefficient_range": [0.3, 0.5],
             # "alpha_deg_range": [3.0],
-            "target_lift_coefficient_range": [0.336899319, 0.381049961, 0.434484293],
-            "alpha_deg_range": [1.1, 1.5, 2.0],
-            "n_timesteps": 2000,
+            #"target_lift_coefficient_range": [0.336899319, 0.381049961, 0.434484293],
+            #"alpha_deg_range": [1.1, 1.5, 2.0],
+            "target_lift_coefficient_range": [0.381049961, 0.434484293],
+            "alpha_deg_range": [1.5, 2.0],
+            "n_timesteps": 700,
         },
         "Original WK+2": {
             "project_cgns_file_name": "Ventus_Original_WK+2.cgns",
@@ -520,7 +522,7 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 2000,
+            "n_timesteps": 1350,
         },
         "FlapletV2 WK-1": {
             "project_cgns_file_name": "Ventus3_FlapletV2_WK-1_B.cgns",
@@ -532,9 +534,11 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WK-1.dat"],
             #"target_lift_coefficient_range": [0.5],
             #"alpha_deg_range": [3.0],
-            "target_lift_coefficient_range": [0.336899319, 0.381049961, 0.434484293],
-            "alpha_deg_range": [1.1, 1.5, 2.0],
-            "n_timesteps": 2000,
+            #"target_lift_coefficient_range": [0.381049961, 0.434484293],
+            #"alpha_deg_range": [1.5, 2.0],
+            "target_lift_coefficient_range": [0.434484293],
+            "alpha_deg_range": [2.0],
+            "n_timesteps": 700,
         },
         "FlapletV2 WK+2": {
             "project_cgns_file_name": "Ventus3_FlapletV2_WK+2_B.cgns",
@@ -545,7 +549,7 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 2000,
+            "n_timesteps": 1350,
         },
     }
 
@@ -584,7 +588,7 @@ def main():
                 "input_mode": "airspeed",
             })
     else:
-        for target_cl, alpha_deg in product(target_lift_coefficient_range, alpha_deg_range):
+        for target_cl, alpha_deg in zip(target_lift_coefficient_range, alpha_deg_range):
             operating_points.append({
                 "U_inf": calculate_freestream_velocity_for_target_lift_coefficient(
                     aircraft_mass=aircraft_mass,
