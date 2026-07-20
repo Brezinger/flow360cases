@@ -481,10 +481,12 @@ def main():
 
     results_dir = "C:/WDIR/flow360"
 
-    variant = "FlapletV2 WK-1"
+    # variant = "FlapletV2 WK-1"
     # variant = "Original WK-1"
     # variant = "FlapletV2 WK+2"
     # variant = "Original WK+2"
+    # variant = "Original WK+2_15"
+    variant = "FlapletV2 WK+2_15"
 
     sim_name = "V3 " + variant
 
@@ -522,7 +524,16 @@ def main():
             "wake_refinement_files": ["TE_upper_VentusOrig_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 1350,
+            "n_timesteps": 1000,
+        },
+        "Original WK+2_15": {
+            "project_cgns_file_name": "Ventus_Original_WK+2_15.cgns",
+            "symm_face": "symm face",
+            "turbulator_location_files": [],
+            "wake_refinement_files": ["TE_upper_VentusOrig_WK+2_15.dat"],
+            "target_lift_coefficient_range": 1 / np.linspace((1/0.8)**0.5, (1/1.3)**0.5, 3)**2,
+            "alpha_deg_range": [-0.87, 0, 1, 2.45, 4.4],
+            "n_timesteps": 1000,
         },
         "FlapletV2 WK-1": {
             "project_cgns_file_name": "Ventus3_FlapletV2_WK-1_B.cgns",
@@ -541,7 +552,7 @@ def main():
             "n_timesteps": 700,
         },
         "FlapletV2 WK+2": {
-            "project_cgns_file_name": "Ventus3_FlapletV2_WK+2_B.cgns",
+            "project_cgns_file_name": "Ventus3_FlapletV2_WK+2_B_15.cgns",
             "symm_face": "symm face",
             "turbulator_location_files": [
                 "Turbulator_Flaplet_upper_WK-1.dat",
@@ -549,7 +560,18 @@ def main():
             "wake_refinement_files": ["TE_upper_Flaplet_WK+2.dat"],
             "target_lift_coefficient_range": [1.2],
             "alpha_deg_range": [1.85],
-            "n_timesteps": 1350,
+            "n_timesteps": 1000,
+        },
+        "FlapletV2 WK+2_15": {
+            "project_cgns_file_name": "Ventus_FlapletV2_WK+2_15.cgns",
+            "symm_face": "symm face",
+            "turbulator_location_files": [
+                "Turbulator_Flaplet_upper_WK-1.dat",
+            ],
+            "wake_refinement_files": ["TE_upper_Flaplet_WK+2_15.dat"],
+            "target_lift_coefficient_range": 1 / np.linspace((1 / 0.8) ** 0.5, (1 / 1.3) ** 0.5, 3) ** 2,
+            "alpha_deg_range": [-0.87, 1, 4.4],
+            "n_timesteps": 1000,
         },
     }
 
@@ -588,19 +610,32 @@ def main():
                 "input_mode": "airspeed",
             })
     else:
-        for target_cl, alpha_deg in zip(target_lift_coefficient_range, alpha_deg_range):
-            operating_points.append({
-                "U_inf": calculate_freestream_velocity_for_target_lift_coefficient(
-                    aircraft_mass=aircraft_mass,
-                    wing_area=wing_area,
-                    target_lift_coefficient=target_cl,
-                    density=standard_atmosphere_density,
-                ),
-                "target_lift_coefficient": target_cl,
-                "alpha_deg": alpha_deg,
-                "input_mode": "target_lift_coefficient",
-            })
-
+        if enable_alpha_controller:
+            for target_cl, alpha_deg in zip(target_lift_coefficient_range, alpha_deg_range):
+                operating_points.append({
+                    "U_inf": calculate_freestream_velocity_for_target_lift_coefficient(
+                        aircraft_mass=aircraft_mass,
+                        wing_area=wing_area,
+                        target_lift_coefficient=target_cl,
+                        density=standard_atmosphere_density,
+                    ),
+                    "target_lift_coefficient": target_cl,
+                    "alpha_deg": alpha_deg,
+                    "input_mode": "target_lift_coefficient",
+                })
+        else:
+            for target_cl, alpha_deg in product(target_lift_coefficient_range, alpha_deg_range):
+                operating_points.append({
+                    "U_inf": calculate_freestream_velocity_for_target_lift_coefficient(
+                        aircraft_mass=aircraft_mass,
+                        wing_area=wing_area,
+                        target_lift_coefficient=target_cl,
+                        density=standard_atmosphere_density,
+                    ),
+                    "target_lift_coefficient": target_cl,
+                    "alpha_deg": alpha_deg,
+                    "input_mode": "target_lift_coefficient",
+                })
     # initialize results DataFrame
     cols = ["U_inf", "target_lift_coefficient", "alpha_deg", "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
     df_results = pd.DataFrame(operating_points).reindex(columns=cols + ["input_mode"])

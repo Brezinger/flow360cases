@@ -37,6 +37,238 @@
   "mesh definition": {
     "generate_1d_mesh": true,
     "generate_2d_mesh": true,
+    "transfinite_surfaces": [
+      {
+        "id": 104,
+        "Arrangement": "left",
+        "boundary points": [
+          114,
+          127,
+          135,
+          141
+        ]
+      },
+      {
+        "id": 101,
+        "Arrangement": "left",
+        "boundary points": [
+          127,
+          128,
+          136,
+          135
+        ]
+      },
+      {
+        "id": 103,
+        "Arrangement": "left",
+        "boundary points": [
+          128,
+          129,
+          140,
+          136
+        ]
+      },
+      {
+        "id": 109,
+        "Arrangement": "left",
+        "boundary points": [
+          129,
+          130,
+          157,
+          140
+        ]
+      },
+      {
+        "id": 119,
+        "Arrangement": "left",
+        "boundary points": [
+          130,
+          131,
+          188,
+          157
+        ]
+      },
+      {
+        "id": 130,
+        "Arrangement": "left",
+        "boundary points": [
+          131,
+          132,
+          189,
+          188
+        ]
+      },
+      {
+        "id": 131,
+        "Arrangement": "left",
+        "boundary points": [
+          132,
+          133,
+          190,
+          189
+        ]
+      },
+      {
+        "id": 132,
+        "Arrangement": "left",
+        "boundary points": [
+          123,
+          133,
+          190,
+          191
+        ]
+      },
+      {
+        "id": 145,
+        "Arrangement": "left",
+        "boundary points": [
+          123,
+          124,
+          224,
+          191
+        ]
+      },
+      {
+        "id": 146,
+        "Arrangement": "left",
+        "boundary points": [
+          124,
+          125,
+          225,
+          224
+        ]
+      },
+      {
+        "id": 147,
+        "Arrangement": "left",
+        "boundary points": [
+          115,
+          125,
+          225,
+          226
+        ]
+      },
+      {
+        "id": 154,
+        "Arrangement": "left",
+        "boundary points": [
+          115,
+          117,
+          234,
+          226
+        ]
+      },
+      {
+        "id": 153,
+        "Arrangement": "left",
+        "boundary points": [
+          117,
+          118,
+          233,
+          234
+        ]
+      },
+      {
+        "id": 152,
+        "Arrangement": "left",
+        "boundary points": [
+          118,
+          119,
+          232,
+          233
+        ]
+      },
+      {
+        "id": 151,
+        "Arrangement": "left",
+        "boundary points": [
+          119,
+          120,
+          231,
+          232
+        ]
+      },
+      {
+        "id": 150,
+        "Arrangement": "left",
+        "boundary points": [
+          120,
+          121,
+          230,
+          231
+        ]
+      },
+      {
+        "id": 149,
+        "Arrangement": "left",
+        "boundary points": [
+          121,
+          122,
+          229,
+          230
+        ]
+      },
+      {
+        "id": 148,
+        "Arrangement": "left",
+        "boundary points": [
+          106,
+          122,
+          229,
+          212
+        ]
+      },
+      {
+        "id": 139,
+        "Arrangement": "left",
+        "boundary points": [
+          106,
+          107,
+          211,
+          212
+        ]
+      },
+      {
+        "id": 138,
+        "Arrangement": "left",
+        "boundary points": [
+          107,
+          108,
+          210,
+          211
+        ]
+      },
+      {
+        "id": 137,
+        "Arrangement": "left",
+        "boundary points": [
+          108,
+          109,
+          170,
+          210
+        ]
+      },
+      {
+        "id": 123,
+        "Arrangement": "left",
+        "boundary points": [
+          109,
+          110,
+          169,
+          170
+        ]
+      },
+      {
+        "id": 120,
+        "Arrangement": "left",
+        "boundary points": [
+          110,
+          113,
+          158,
+          169
+        ]
+      }
+    ],
     "surface_meshing_algorithms": [
       {
         "name": "winglet tip fallback",
@@ -46,35 +278,6 @@
           143,
           127,
           142
-        ]
-      },
-      {
-        "name": "flap gap section",
-        "algorithm": "frontal-delaunay for quads",
-        "surfaces": [
-          104,
-          101,
-          103,
-          109,
-          119,
-          130,
-          131,
-          132,
-          145,
-          146,
-          147,
-          154,
-          153,
-          152,
-          151,
-          150,
-          149,
-          148,
-          139,
-          138,
-          137,
-          123,
-          120
         ]
       }
     ],
@@ -199,22 +402,22 @@
               "_invert_direction": false,
               "mesh size mode": "ele size",
               "target ele size 1": 2.19,
-              "target ele size 2": 45
+              "target ele size 2": 40
             },
             {
               "name": "Trapezoid 3 center",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 45,
-              "target ele size 2": 45
+              "target ele size 1": 40,
+              "target ele size 2": 40
             },
             {
               "name": "Trapezoid 3 outer",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 45,
+              "target ele size 1": 40,
               "target ele size 2": 1.69
             },
             {
@@ -229,30 +432,30 @@
               "_invert_direction": false,
               "mesh size mode": "ele size",
               "target ele size 1": 1.69,
-              "target ele size 2": 30
+              "target ele size 2": 20
             },
             {
               "name": "Trapezoid 4b",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 30,
-              "target ele size 2": 30
+              "target ele size 1": 20,
+              "target ele size 2": 20
             },
             {
               "name": "Trapezoid 4c",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 30,
-              "target ele size 2": 30
+              "target ele size 1": 20,
+              "target ele size 2": 20
             },
             {
               "name": "Trapezoid 4d",
               "type": "Progression",
               "_invert_direction": false,
               "mesh size mode": "ele size",
-              "target ele size 1": 30,
+              "target ele size 1": 20,
               "target ele size 2": 0.82
             },
             {
