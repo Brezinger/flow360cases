@@ -10,11 +10,11 @@ from flow360 import u
 from flow360.component.simulation.folder import ROOT_FOLDER
 
 
-GEOMETRY_FILE = Path(
-    r"C:\OneDrive\OneDrive - Achleitner Aerospace GmbH\Achleitner Aerospace GmbH Allgemein - General"
-    r"\01_Projekte\27_DUC_Noise\Data_2026_07\CAD"
-    r"\EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.SLDPRT"
+GEOMETRY_STEP_FILE = Path(__file__).resolve().with_name(
+    "EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.STEP"
 )
+GEOMETRY_CSM_FILE = GEOMETRY_STEP_FILE.with_suffix(".csm")
+GEOMETRY_FILE = GEOMETRY_STEP_FILE.with_suffix(".egads")
 
 
 @dataclass(frozen=True)
@@ -83,15 +83,37 @@ FACE_GROUP_ALIASES = {
     "blade2": ["zone_r1/blade2", "blade2"],
     "blade3": ["zone_r1/blade3", "blade3"],
     "blade4": ["zone_r1/blade4", "blade4"],
-    "hub": ["zone_r1/hub", "hub", "spacer"],
+    "hub": ["hub"],
 }
 
-HUB_FACE_GROUP = [
-    "body00001_face00021",
-    "body00001_face00033",
-    "body00001_face00066",
-    "body00001_face00047",
-]
+
+def _write_geometry_csm_file(csm_file: Path, step_file: Path) -> None:
+    if not step_file.exists():
+        raise FileNotFoundError(f"Could not find STEP file for CSM import: {step_file}")
+
+    csm_text = f"""import $/{step_file.name} -1
+group -1
+store $body00001
+mark
+   restore $body00001
+      select face 21
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 33
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 66
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 47
+         attribute faceName $hub
+         attribute groupName $hub
+dump $/{step_file.with_suffix(".egads").name} 0 1 0
+"""
+    csm_file.write_text(csm_text, encoding="utf-8")
 
 
 def _entities_by_possible_names(geometry, possible_names: list[str]):
@@ -104,32 +126,23 @@ def _entities_by_possible_names(geometry, possible_names: list[str]):
     return entities
 
 
-def _dedupe_entities(entities: list) -> list:
-    deduped = []
-    seen = set()
-    for entity in entities:
-        key = getattr(entity, "name", None) or repr(entity)
-        if key not in seen:
-            seen.add(key)
-            deduped.append(entity)
-    return deduped
-
-
-def _hub_entities(geometry) -> list:
-    return _dedupe_entities(
-        _entities_by_possible_names(geometry, FACE_GROUP_ALIASES["hub"])
-        + _entities_by_possible_names(geometry, HUB_FACE_GROUP)
-    )
+def _available_surface_group_names(geometry) -> list[str]:
+    registry = getattr(geometry, "internal_registry", None)
+    if registry is None:
+        return []
+    names = []
+    for entity_list in registry.internal_registry.values():
+        for entity in entity_list:
+            if getattr(entity, "private_attribute_entity_type_name", None) == "Surface":
+                names.append(getattr(entity, "name", repr(entity)))
+    return sorted(set(names))
 
 
 def _wall_entities(geometry) -> dict[str, list]:
-    wall_entities = {
+    return {
         wall_name: _entities_by_possible_names(geometry, possible_names)
         for wall_name, possible_names in FACE_GROUP_ALIASES.items()
-        if wall_name != "hub"
     }
-    wall_entities["hub"] = _hub_entities(geometry)
-    return wall_entities
 
 
 def _all_walls(wall_entities: dict[str, list]):
@@ -150,6 +163,13 @@ def _rotation_volume(cfg: OldCaseSetup):
 
 
 def _make_project(geometry_file: Path, cfg: OldCaseSetup, flow360_folder):
+    _write_geometry_csm_file(GEOMETRY_CSM_FILE, GEOMETRY_STEP_FILE)
+    if geometry_file.suffix.lower() == ".egads" and not geometry_file.exists():
+        raise FileNotFoundError(
+            f"Could not find generated EGADS geometry: {geometry_file}. "
+            f"Open or run the CSM file first to create it: {GEOMETRY_CSM_FILE}"
+        )
+
     project = fl.Project.from_geometry(
         str(geometry_file),
         name=cfg.name,
@@ -289,10 +309,10 @@ def _make_models(geometry, farfield, rotation_volume, cfg: OldCaseSetup):
     wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
     if missing:
-        available = getattr(geometry, "face_group_names", [])
         raise ValueError(
             f"Could not resolve wall face groups {missing}. "
-            f"Available face groups: {list(available)}. Update FACE_GROUP_ALIASES/HUB_FACE_GROUP."
+            f"Available face groups: {_available_surface_group_names(geometry)}. "
+            "Update FACE_GROUP_ALIASES."
         )
 
     models = [

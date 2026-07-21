@@ -1,0 +1,21 @@
+import $/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.STEP -1
+group -1
+store $body00001
+mark
+   restore $body00001
+      select face 21
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 33
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 66
+         attribute faceName $hub
+         attribute groupName $hub
+   restore $body00001
+      select face 47
+         attribute faceName $hub
+         attribute groupName $hub
+dump $/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.egads 0 1 0
