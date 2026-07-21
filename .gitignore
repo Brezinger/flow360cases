@@ -3,3 +3,4 @@ __pycache__/
 *.stp
 *.jrnl
 jsc_config1.csm
+/DUC/duc_case1_mg13w2.cgns
