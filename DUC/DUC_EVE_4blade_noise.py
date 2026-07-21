@@ -26,6 +26,8 @@ class OldCaseSetup:
     flow360_folder_path: tuple[str, ...] = ("DUC", "EVE Lifter 4 blade prop")
 
     propeller_radius: float = 1.4
+    rpm: float = 1075.0
+    time_steps_per_revolution: int = 120
     moment_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
     moment_length: tuple[float, float, float] = (1.4, 1.4, 1.4)
 
@@ -35,12 +37,10 @@ class OldCaseSetup:
     altitude_ft: float = 2460.0
     temperature_offset_deg_c: float = 20.0
 
-    omega_rad_s: float = -104.92919462989909
     rotation_axis: tuple[float, float, float] = (0.0, 0.0, 1.0)
     rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     physical_steps: int = 600
-    time_step_size_s: float = 0.000499001996008
     max_pseudo_steps: int = 35
 
     wall_roughness_height: float = 1.0e-5
@@ -61,12 +61,24 @@ class OldCaseSetup:
     def ref_area(self) -> float:
         return math.pi * self.propeller_radius**2
 
+    @property
+    def omega_rad_s(self) -> float:
+        return -2.0 * math.pi * self.rpm / 60.0
+
+    @property
+    def tip_speed_m_s(self) -> float:
+        return abs(self.omega_rad_s) * self.propeller_radius
+
+    @property
+    def time_step_size_s(self) -> float:
+        return 60.0 / (self.rpm * self.time_steps_per_revolution)
+
 
 CONFIG = OldCaseSetup()
 
 
 # Update these after the first geometry upload if Flow360 exposes different names.
-FACE_GROUPS = {
+FACE_GROUP_ALIASES = {
     "blade1": ["zone_r1/blade1", "blade1"],
     "blade2": ["zone_r1/blade2", "blade2"],
     "blade3": ["zone_r1/blade3", "blade3"],
@@ -74,21 +86,50 @@ FACE_GROUPS = {
     "hub": ["zone_r1/hub", "hub", "spacer"],
 }
 
+HUB_FACE_GROUP = [
+    "body00001_face00021",
+    "body00001_face00033",
+    "body00001_face00066",
+    "body00001_face00047",
+]
+
 
 def _entities_by_possible_names(geometry, possible_names: list[str]):
+    entities = []
     for name in possible_names:
         try:
-            return [geometry[name]]
+            entities.append(geometry[name])
         except Exception:
             continue
-    return []
+    return entities
+
+
+def _dedupe_entities(entities: list) -> list:
+    deduped = []
+    seen = set()
+    for entity in entities:
+        key = getattr(entity, "name", None) or repr(entity)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(entity)
+    return deduped
+
+
+def _hub_entities(geometry) -> list:
+    return _dedupe_entities(
+        _entities_by_possible_names(geometry, FACE_GROUP_ALIASES["hub"])
+        + _entities_by_possible_names(geometry, HUB_FACE_GROUP)
+    )
 
 
 def _wall_entities(geometry) -> dict[str, list]:
-    return {
+    wall_entities = {
         wall_name: _entities_by_possible_names(geometry, possible_names)
-        for wall_name, possible_names in FACE_GROUPS.items()
+        for wall_name, possible_names in FACE_GROUP_ALIASES.items()
+        if wall_name != "hub"
     }
+    wall_entities["hub"] = _hub_entities(geometry)
+    return wall_entities
 
 
 def _all_walls(wall_entities: dict[str, list]):
@@ -119,7 +160,7 @@ def _make_project(geometry_file: Path, cfg: OldCaseSetup, flow360_folder):
     geometry = project.geometry
 
     # Same convention as GBT.py. These calls are harmless if the imported CAD
-    # does not have these tags; in that case FACE_GROUPS must be updated from
+    # does not have these tags; in that case FACE_GROUP_ALIASES must be updated from
     # geometry.show_available_groupings(verbose_mode=True).
     try:
         geometry.group_faces_by_tag("faceName")
@@ -169,7 +210,7 @@ def _make_meshing_params(rotation_volume, cfg: OldCaseSetup):
         ),
         volume_zones=[
             farfield,
-            fl.RotationCylinder(
+            fl.RotationVolume(
                 name="zone_r1",
                 entities=[rotation_volume],
                 spacing_axial=cfg.rotation_volume_spacing * u.m,
@@ -182,17 +223,25 @@ def _make_meshing_params(rotation_volume, cfg: OldCaseSetup):
 
 
 def _make_operating_condition(cfg: OldCaseSetup):
-    thermal_state = fl.ThermalState.from_standard_atmosphere(
-        altitude=cfg.altitude_ft * u.ft,
-        temperature_offset=cfg.temperature_offset_deg_c * u.delta_degC,
-    )
+    thermal_state = _make_thermal_state(cfg)
     return fl.AerospaceCondition.from_mach(
         mach=cfg.mach,
-        reference_mach=cfg.mach,
+        reference_mach=_tip_mach(cfg, thermal_state),
         alpha=cfg.alpha_deg * u.deg,
         beta=cfg.beta_deg * u.deg,
         thermal_state=thermal_state,
     )
+
+
+def _make_thermal_state(cfg: OldCaseSetup):
+    return fl.ThermalState.from_standard_atmosphere(
+        altitude=cfg.altitude_ft * u.ft,
+        temperature_offset=cfg.temperature_offset_deg_c * u.delta_degC,
+    )
+
+
+def _tip_mach(cfg: OldCaseSetup, thermal_state) -> float:
+    return cfg.tip_speed_m_s / thermal_state.speed_of_sound.to("m/s").value
 
 
 def _make_fluid_model(cfg: OldCaseSetup):
@@ -243,7 +292,7 @@ def _make_models(geometry, farfield, rotation_volume, cfg: OldCaseSetup):
         available = getattr(geometry, "face_group_names", [])
         raise ValueError(
             f"Could not resolve wall face groups {missing}. "
-            f"Available face groups: {list(available)}. Update FACE_GROUPS."
+            f"Available face groups: {list(available)}. Update FACE_GROUP_ALIASES/HUB_FACE_GROUP."
         )
 
     models = [
@@ -307,7 +356,7 @@ def build_params(project, cfg: OldCaseSetup = CONFIG):
 
     with fl.SI_unit_system:
         return fl.SimulationParams(
-            version="25.7.7",
+            version="25.10",
             unit_system=fl.SI_unit_system,
             meshing=mesh_params,
             reference_geometry=fl.ReferenceGeometry(
