@@ -22,7 +22,7 @@ class OldCaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
     name: str = "DUC_EVE_4blade_noise_from_geometry"
-    geometry_length_unit: str = "m"
+    geometry_length_unit: str = "mm"
     flow360_folder_path: tuple[str, ...] = ("DUC", "EVE Lifter 4 blade prop")
 
     propeller_radius: float = 1.4
@@ -86,33 +86,38 @@ FACE_GROUP_ALIASES = {
     "hub": ["hub"],
 }
 
+CSM_FACE_GROUPS = {
+    "hub": [20, 37, 1, 56, 50, 26],
+    "blade1": [18, 13, 12, 8, 9, 19, 14, 22, 6],
+}
+
 
 def _write_geometry_csm_file(csm_file: Path, step_file: Path) -> None:
     if not step_file.exists():
         raise FileNotFoundError(f"Could not find STEP file for CSM import: {step_file}")
 
-    csm_text = f"""import $/{step_file.name} -1
-group -1
-store $body00001
-mark
-   restore $body00001
-      select face 21
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 33
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 66
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 47
-         attribute faceName $hub
-         attribute groupName $hub
-dump $/{step_file.with_suffix(".egads").name} 0 1 0
-"""
+    lines = [
+        f"import $/{step_file.name} -1",
+        "",
+    ]
+    for group_name, face_ids in CSM_FACE_GROUPS.items():
+        variable_name = f"{group_name}Faces"
+        face_id_values = "; ".join(str(face_id) for face_id in face_ids)
+        lines.extend(
+            [
+                f"# {group_name}",
+                f"dimension {variable_name} {len(face_ids)} 1",
+                f"set {variable_name} \"{face_id_values}\"",
+                f"patbeg i {variable_name}.size",
+                f"   select face {variable_name}[i]",
+                f"   attribute faceName ${group_name}",
+                f"   attribute groupName ${group_name}",
+                "patend",
+                "",
+            ]
+        )
+    lines.append(f"dump $/{step_file.with_suffix('.egads').name} 0 1 0")
+    csm_text = "\n".join(lines) + "\n"
     csm_file.write_text(csm_text, encoding="utf-8")
 
 
@@ -163,7 +168,8 @@ def _rotation_volume(cfg: OldCaseSetup):
 
 
 def _make_project(geometry_file: Path, cfg: OldCaseSetup, flow360_folder):
-    _write_geometry_csm_file(GEOMETRY_CSM_FILE, GEOMETRY_STEP_FILE)
+    if not GEOMETRY_CSM_FILE.exists():
+        _write_geometry_csm_file(GEOMETRY_CSM_FILE, GEOMETRY_STEP_FILE)
     if geometry_file.suffix.lower() == ".egads" and not geometry_file.exists():
         raise FileNotFoundError(
             f"Could not find generated EGADS geometry: {geometry_file}. "
@@ -299,7 +305,7 @@ def _make_wall_model(name: str, surfaces: list, cfg: OldCaseSetup):
     return fl.Wall(
         name=name,
         surfaces=surfaces,
-        use_wall_function=True,
+        use_wall_function=fl.WallFunction(),
         heat_spec=fl.HeatFlux(0.0 * u.W / u.m**2),
         roughness_height=cfg.wall_roughness_height * u.m,
     )
@@ -334,7 +340,7 @@ def _make_outputs(wall_surfaces: list):
     return [
         fl.VolumeOutput(
             name="VolumeOutput",
-            output_format="paraview",
+            output_format=["paraview"],
             frequency=-1,
             output_fields=[
                 "primitiveVars",
@@ -352,7 +358,7 @@ def _make_outputs(wall_surfaces: list):
         fl.SurfaceOutput(
             name="SurfaceOutput",
             surfaces=wall_surfaces,
-            output_format="paraview",
+            output_format=["paraview"],
             frequency=-1,
             output_fields=[
                 "primitiveVars",
@@ -376,7 +382,7 @@ def build_params(project, cfg: OldCaseSetup = CONFIG):
 
     with fl.SI_unit_system:
         return fl.SimulationParams(
-            version="25.10",
+            version="25.10.0",
             unit_system=fl.SI_unit_system,
             meshing=mesh_params,
             reference_geometry=fl.ReferenceGeometry(
@@ -407,6 +413,7 @@ def define_and_run(
     geometry_file: Path = GEOMETRY_FILE,
     cfg: OldCaseSetup = CONFIG,
     flow360_folder=None,
+    submit_draft_only: bool = True,
     generate_surface_mesh: bool = True,
     generate_volume_mesh: bool = False,
     run_case: bool = False,
@@ -414,6 +421,18 @@ def define_and_run(
 ):
     project = _make_project(geometry_file, cfg, flow360_folder)
     params = build_params(project, cfg)
+
+    if submit_draft_only and not generate_surface_mesh and not generate_volume_mesh and not run_case:
+        draft = project.run_case(
+            params=params,
+            name="DUC_EVE_4blade_noise_setup",
+            use_beta_mesher=False,
+            use_geometry_AI=False,
+            run_async=False,
+            raise_on_error=True,
+            draft_only=True,
+        )
+        return draft.id
 
     if generate_surface_mesh:
         project.generate_surface_mesh(
@@ -435,6 +454,7 @@ def define_and_run(
             raise_on_error=True,
         )
 
+
     if not run_case:
         return project.id
 
@@ -446,6 +466,9 @@ def define_and_run(
         run_async=False,
         raise_on_error=True,
     )
+
+
+
     case = project.case
     case.wait()
 
@@ -470,11 +493,12 @@ def main():
 
     project_id = define_and_run(
         flow360_folder=folder,
+        submit_draft_only=True,
         generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
     )
-    print(f"Project id: {project_id}")
+    print(f"Project or draft id: {project_id}")
 
 
 if __name__ == "__main__":

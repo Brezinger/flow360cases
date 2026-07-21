@@ -1,21 +1,69 @@
 import $/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.STEP -1
-group -1
-store $body00001
-mark
-   restore $body00001
-      select face 21
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 33
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 66
-         attribute faceName $hub
-         attribute groupName $hub
-   restore $body00001
-      select face 47
-         attribute faceName $hub
-         attribute groupName $hub
+
+# hub
+dimension hubFaces 6 1
+set hubFaces "20; 37; 1; 56; 50; 26"
+patbeg i hubFaces.size
+   select face hubFaces[i]
+   attribute faceName $hub
+   attribute groupName $hub
+patend
+
+# blade1
+dimension blade1Faces 15 1
+set blade1Faces "18; 13; 12; 8; 9; 19; 14; 22; 6; 10; 11; 17; 21; 16; 15"
+patbeg i blade1Faces.size
+   select face blade1Faces[i]
+   attribute faceName $blade1
+   attribute groupName $blade1
+patend
+
+# blade2
+dimension blade2Faces 15 1
+set blade2Faces "54; 55; 3; 60; 58; 53; 57; 59; 2; 62; 63; 65; 66; 61; 64"
+patbeg i blade2Faces.size
+   select face blade2Faces[i]
+   attribute faceName $blade2
+   attribute groupName $blade2
+patend
+
+# blade3
+dimension blade3Faces 15 1
+set blade3Faces "24; 25; 5; 30; 28; 23; 27; 29; 4; 33; 32; 35;  34; 36; 31"
+patbeg i blade3Faces.size
+   select face blade3Faces[i]
+   attribute faceName $blade3
+   attribute groupName $blade3
+patend 
+
+# blade4
+dimension blade4Faces 15 1
+set blade4Faces "43; 48; 39; 38; 42; 47; 41; 40; 51; 46; 7; 44; 45; 52; 49"
+patbeg i blade4Faces.size
+   select face blade4Faces[i]
+   attribute faceName $blade4
+   attribute groupName $blade4
+patend
+
+
+
+# LE:
+dimension leadingEdges 8 1
+set leadingEdges "58; 41; 142; 10; 92; 26; 109; 49"
+patbeg i leadingEdges.size
+   select edge leadingEdges[i]
+   attribute edgeName $leadingEdges
+   attribute groupName $leadingEdges
+patend
+
+# TE:
+dimension trailingEdges 20 1
+set trailingEdges "37; 54; 63; 74; 62; 16; 6; 143; 144; 18; 22; 31; 99; 100; 98; 45; 105; 114; 125; 113"
+patbeg i trailingEdges.size
+   select edge trailingEdges[i]
+   attribute edgeName $trailingEdges
+   attribute groupName $trailingEdges
+patend
+
+
 dump $/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.egads 0 1 0
