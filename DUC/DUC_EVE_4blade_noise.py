@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import math
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +17,9 @@ GEOMETRY_STEP_FILE = Path(__file__).resolve().with_name(
 )
 GEOMETRY_CSM_FILE = GEOMETRY_STEP_FILE.with_suffix(".csm")
 GEOMETRY_FILE = GEOMETRY_STEP_FILE.with_suffix(".egads")
+AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
+    "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +54,7 @@ class OldCaseSetup:
     # supplied volume mesh, so it does not define these. Keep these conservative
     # until the CAD import tags and generated mesh are checked.
     rotation_volume_radius: float = 1.55
-    rotation_volume_height: float = 0.20
+    rotation_volume_height: float = 0.4115
     rotation_volume_spacing: float = 0.002
     surface_max_edge_length: float = 0.0049
     curvature_resolution_angle_deg: float = 5.0
@@ -224,7 +229,7 @@ def _get_or_create_flow360_folder(folder_path: tuple[str, ...]):
 
 
 def _make_meshing_params(rotation_volume, cfg: OldCaseSetup):
-    farfield = fl.AutomatedFarfield(domain_type="full_body", relative_size=50.0)
+    farfield = fl.AutomatedFarfield(relative_size=50.0)
 
     return farfield, fl.MeshingParams(
         defaults=fl.MeshingDefaults(
@@ -336,6 +341,26 @@ def _make_models(geometry, farfield, rotation_volume, cfg: OldCaseSetup):
     return models, _all_walls(wall_entities)
 
 
+def _make_aeroacoustic_output(source_file: Path = AEROACOUSTIC_SOURCE_FILE):
+    with source_file.open(encoding="utf-8") as file:
+        aeroacoustic_output = json.load(file)["aeroacousticOutput"]
+
+    observers = [
+        fl.Observer(
+            position=observer_position * u.m,
+            group_name=f"observer_{index:03d}",
+        )
+        for index, observer_position in enumerate(aeroacoustic_output["observers"], start=1)
+    ]
+
+    return fl.AeroAcousticOutput(
+        name="AeroAcousticOutput",
+        observers=observers,
+        write_per_surface_output=aeroacoustic_output["writePerSurfaceOutput"],
+        patch_type=aeroacoustic_output["patchType"],
+    )
+
+
 def _make_outputs(wall_surfaces: list):
     return [
         fl.VolumeOutput(
@@ -371,6 +396,7 @@ def _make_outputs(wall_surfaces: list):
             ],
             write_single_file=False,
         ),
+        _make_aeroacoustic_output(),
     ]
 
 
@@ -417,55 +443,61 @@ def define_and_run(
     generate_surface_mesh: bool = True,
     generate_volume_mesh: bool = False,
     run_case: bool = False,
+    bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
     project = _make_project(geometry_file, cfg, flow360_folder)
     params = build_params(project, cfg)
 
-    if submit_draft_only and not generate_surface_mesh and not generate_volume_mesh and not run_case:
-        draft = project.run_case(
-            params=params,
-            name="DUC_EVE_4blade_noise_setup",
-            use_beta_mesher=False,
-            use_geometry_AI=False,
-            run_async=False,
-            raise_on_error=True,
-            draft_only=True,
-        )
-        return draft.id
-
-    if generate_surface_mesh:
-        project.generate_surface_mesh(
-            params=params,
-            name="SurfaceMesh",
-            use_beta_mesher=False,
-            use_geometry_AI=False,
-            run_async=False,
-            raise_on_error=True,
-        )
-
-    if generate_volume_mesh:
-        project.generate_volume_mesh(
-            params=params,
-            name="VolumeMesh",
-            use_beta_mesher=False,
-            use_geometry_AI=False,
-            run_async=False,
-            raise_on_error=True,
-        )
-
-
-    if not run_case:
-        return project.id
-
-    project.run_case(
-        params=params,
-        name="DUC_EVE_4blade_noise_case",
-        use_beta_mesher=False,
-        use_geometry_AI=False,
-        run_async=False,
-        raise_on_error=True,
+    warning_context = (
+        fl.warning_bypass("potential_length_scale_mismatch")
+        if bypass_length_scale_warning
+        else nullcontext()
     )
+    with warning_context:
+        if submit_draft_only and not generate_surface_mesh and not generate_volume_mesh and not run_case:
+            draft = project.run_case(
+                params=params,
+                name="DUC_EVE_4blade_noise_setup",
+                use_beta_mesher=False,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+                draft_only=True,
+            )
+            return draft.id
+
+        if generate_surface_mesh:
+            project.generate_surface_mesh(
+                params=params,
+                name="SurfaceMesh",
+                use_beta_mesher=False,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+            )
+
+        if generate_volume_mesh:
+            project.generate_volume_mesh(
+                params=params,
+                name="VolumeMesh",
+                use_beta_mesher=False,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+            )
+
+        if not run_case:
+            return project.id
+        with warning_context:
+            project.run_case(
+                params=params,
+                name="DUC_EVE_4blade_noise_case",
+                use_beta_mesher=False,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+            )
 
 
 
@@ -497,6 +529,7 @@ def main():
         generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
+        bypass_length_scale_warning=True,
     )
     print(f"Project or draft id: {project_id}")
 

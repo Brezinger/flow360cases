@@ -3,4 +3,6 @@ __pycache__/
 *.stp
 *.jrnl
 jsc_config1.csm
-/DUC/duc_case1_mg13w2.cgns
+/DUC/POC2x2/duc_case1_mg13w2.cgns
+/DUC/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.STEP
+/DUC/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.egads
