@@ -23,7 +23,7 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
 
 
 @dataclass(frozen=True)
-class OldCaseSetup:
+class CaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
     name: str = "DUC_EVE_4blade_noise_from_geometry"
@@ -56,6 +56,7 @@ class OldCaseSetup:
     rotation_volume_radius: float = 1.55
     rotation_volume_height: float = 0.4115
     rotation_volume_spacing: float = 0.002
+    farfield_relative_size: float = 107.15
     surface_max_edge_length: float = 0.00866
     curvature_resolution_angle_deg: float = 5.0
     boundary_layer_first_layer_thickness: float = 5.0e-7
@@ -86,7 +87,7 @@ class OldCaseSetup:
         return 60.0 / (self.rpm * self.time_steps_per_revolution)
 
 
-CONFIG = OldCaseSetup()
+CONFIG = CaseSetup()
 
 
 # Update these after the first geometry upload if Flow360 exposes different names.
@@ -197,7 +198,7 @@ def _all_walls(wall_entities: dict[str, list]):
     return walls
 
 
-def _rotation_volume(cfg: OldCaseSetup):
+def _rotation_volume(cfg: CaseSetup):
     return fl.Cylinder(
         name="zone_r1",
         center=cfg.rotation_center * u.m,
@@ -207,7 +208,7 @@ def _rotation_volume(cfg: OldCaseSetup):
     )
 
 
-def _make_project(geometry_file: Path, cfg: OldCaseSetup, flow360_folder):
+def _make_project(geometry_file: Path, cfg: CaseSetup, flow360_folder):
     if not GEOMETRY_CSM_FILE.exists():
         raise FileNotFoundError(
             f"Could not find CSM file with faceName/edgeName tags: {GEOMETRY_CSM_FILE}"
@@ -265,7 +266,7 @@ def _get_or_create_flow360_folder(folder_path: tuple[str, ...]):
     return folder
 
 
-def _make_surface_edge_refinements(geometry, cfg: OldCaseSetup):
+def _make_surface_edge_refinements(geometry, cfg: CaseSetup):
     geometry.group_edges_by_tag("edgeName")
     edge_entities = _edge_entities(geometry)
     missing = [name for name, entities in edge_entities.items() if not entities]
@@ -290,7 +291,7 @@ def _make_surface_edge_refinements(geometry, cfg: OldCaseSetup):
     ]
 
 
-def _make_surface_refinements(geometry, cfg: OldCaseSetup):
+def _make_surface_refinements(geometry, cfg: CaseSetup):
     geometry.group_faces_by_tag("faceName")
     face_entities = _wall_entities(geometry)
     missing = [name for name, entities in face_entities.items() if not entities]
@@ -317,12 +318,16 @@ def _make_surface_refinements(geometry, cfg: OldCaseSetup):
     ]
 
 
-def _make_meshing_params(rotation_volume, geometry, cfg: OldCaseSetup):
-    farfield = fl.AutomatedFarfield(relative_size=50.0)
+def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_mesher: bool):
+    farfield = fl.AutomatedFarfield(
+        name="farfield",
+        relative_size=cfg.farfield_relative_size,
+    )
     refinements = [
         *_make_surface_refinements(geometry, cfg),
-        *_make_surface_edge_refinements(geometry, cfg),
     ]
+    if not use_beta_mesher:
+        refinements.extend(_make_surface_edge_refinements(geometry, cfg))
 
     return farfield, fl.MeshingParams(
         defaults=fl.MeshingDefaults(
@@ -346,7 +351,7 @@ def _make_meshing_params(rotation_volume, geometry, cfg: OldCaseSetup):
     )
 
 
-def _make_operating_condition(cfg: OldCaseSetup):
+def _make_operating_condition(cfg: CaseSetup):
     thermal_state = _make_thermal_state(cfg)
     return fl.AerospaceCondition.from_mach(
         mach=cfg.mach,
@@ -357,18 +362,18 @@ def _make_operating_condition(cfg: OldCaseSetup):
     )
 
 
-def _make_thermal_state(cfg: OldCaseSetup):
+def _make_thermal_state(cfg: CaseSetup):
     return fl.ThermalState.from_standard_atmosphere(
         altitude=cfg.altitude_ft * u.ft,
         temperature_offset=cfg.temperature_offset_deg_c * u.delta_degC,
     )
 
 
-def _tip_mach(cfg: OldCaseSetup, thermal_state) -> float:
+def _tip_mach(cfg: CaseSetup, thermal_state) -> float:
     return cfg.tip_speed_m_s / thermal_state.speed_of_sound.to("m/s").value
 
 
-def _make_fluid_model(cfg: OldCaseSetup):
+def _make_fluid_model(cfg: CaseSetup):
     return fl.Fluid(
         initial_condition=fl.NavierStokesInitialCondition(
             rho="rho",
@@ -399,7 +404,7 @@ def _make_fluid_model(cfg: OldCaseSetup):
     )
 
 
-def _make_wall_model(name: str, surfaces: list, cfg: OldCaseSetup):
+def _make_wall_model(name: str, surfaces: list, cfg: CaseSetup):
     return fl.Wall(
         name=name,
         surfaces=surfaces,
@@ -409,7 +414,7 @@ def _make_wall_model(name: str, surfaces: list, cfg: OldCaseSetup):
     )
 
 
-def _make_models(geometry, farfield, rotation_volume, cfg: OldCaseSetup):
+def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup):
     geometry.group_faces_by_tag("faceName")
     wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
@@ -494,10 +499,15 @@ def _make_outputs(wall_surfaces: list):
     ]
 
 
-def build_params(project, cfg: OldCaseSetup = CONFIG):
+def build_params(project, cfg: CaseSetup = CONFIG, *, use_beta_mesher: bool = False):
     geometry = project.geometry
     rotation_volume = _rotation_volume(cfg)
-    farfield, mesh_params = _make_meshing_params(rotation_volume, geometry, cfg)
+    farfield, mesh_params = _make_meshing_params(
+        rotation_volume,
+        geometry,
+        cfg,
+        use_beta_mesher=use_beta_mesher,
+    )
     models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg)
 
     with fl.SI_unit_system:
@@ -531,17 +541,18 @@ def build_params(project, cfg: OldCaseSetup = CONFIG):
 def define_and_run(
     *,
     geometry_file: Path = GEOMETRY_FILE,
-    cfg: OldCaseSetup = CONFIG,
+    cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
     generate_surface_mesh: bool = True,
     generate_volume_mesh: bool = False,
     run_case: bool = False,
+    use_beta_mesher: bool = True,
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
     project = _make_project(geometry_file, cfg, flow360_folder)
-    params = build_params(project, cfg)
+    params = build_params(project, cfg, use_beta_mesher=use_beta_mesher)
 
     warning_context = (
         fl.warning_bypass("potential_length_scale_mismatch")
@@ -553,7 +564,7 @@ def define_and_run(
             draft = project.run_case(
                 params=params,
                 name="DUC_EVE_4blade_noise_setup",
-                use_beta_mesher=False,
+                use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
                 run_async=False,
                 raise_on_error=True,
@@ -565,7 +576,7 @@ def define_and_run(
             project.generate_surface_mesh(
                 params=params,
                 name="SurfaceMesh",
-                use_beta_mesher=False,
+                use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
                 run_async=False,
                 raise_on_error=True,
@@ -575,7 +586,7 @@ def define_and_run(
             project.generate_volume_mesh(
                 params=params,
                 name="VolumeMesh",
-                use_beta_mesher=False,
+                use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
                 run_async=False,
                 raise_on_error=True,
@@ -583,15 +594,14 @@ def define_and_run(
 
         if not run_case:
             return project.id
-        with warning_context:
-            project.run_case(
-                params=params,
-                name="DUC_EVE_4blade_noise_case",
-                use_beta_mesher=False,
-                use_geometry_AI=False,
-                run_async=False,
-                raise_on_error=True,
-            )
+        project.run_case(
+            params=params,
+            name="DUC_EVE_4blade_noise_case",
+            use_beta_mesher=use_beta_mesher,
+            use_geometry_AI=False,
+            run_async=False,
+            raise_on_error=True,
+        )
 
 
 
@@ -614,6 +624,7 @@ def main():
     generate_surface_mesh = True
     generate_volume_mesh = False
     run_case = False
+    use_beta_mesher = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
 
@@ -623,6 +634,7 @@ def main():
         generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
+        use_beta_mesher=use_beta_mesher,
         bypass_length_scale_warning=True,
     )
     print(f"Project or draft id: {project_id}")
