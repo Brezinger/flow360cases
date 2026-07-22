@@ -56,11 +56,18 @@ class OldCaseSetup:
     rotation_volume_radius: float = 1.55
     rotation_volume_height: float = 0.4115
     rotation_volume_spacing: float = 0.002
-    surface_max_edge_length: float = 0.0049
+    surface_max_edge_length: float = 0.00866
     curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 1.0e-5
-    boundary_layer_growth_rate: float = 1.2
-    surface_edge_growth_rate: float = 1.2
+    boundary_layer_first_layer_thickness: float = 5.0e-7
+    boundary_layer_growth_rate: float = 1.16
+    surface_edge_growth_rate: float = 1.12
+    blade_inner_max_edge_length: float = 8.66e-3
+    hub_max_edge_length: float = 4.4e-3
+    blade_main_max_edge_length: float = 2.65e-3
+    blade_te_max_edge_length: float = 1.25e-3
+    trailing_edge_length: float = 8.93e-4
+    trailing_edge_normal_spacing: float = 8.9e-5
+    hub_edge_spacing: float = 0.87e-3
 
     @property
     def ref_area(self) -> float:
@@ -84,11 +91,15 @@ CONFIG = OldCaseSetup()
 
 # Update these after the first geometry upload if Flow360 exposes different names.
 FACE_GROUP_ALIASES = {
-    "blade1": ["zone_r1/blade1", "blade1"],
-    "blade2": ["zone_r1/blade2", "blade2"],
-    "blade3": ["zone_r1/blade3", "blade3"],
-    "blade4": ["zone_r1/blade4", "blade4"],
+    "bladeInner": ["bladeInner"],
     "hub": ["hub"],
+    "bladeMain": ["bladeMain"],
+    "bladeTE": ["bladeTE"],
+}
+
+EDGE_GROUP_ALIASES = {
+    "trailing_edge": ["trailingEdges", "trailingEdge", "trailing_edge", "bladeTrailingEdge"],
+    "hub_edges": ["hubEdges", "hub_edges"],
 }
 
 CSM_FACE_GROUPS = {
@@ -130,20 +141,37 @@ def _entities_by_possible_names(geometry, possible_names: list[str]):
     entities = []
     for name in possible_names:
         try:
-            entities.append(geometry[name])
+            matched = geometry[name]
         except Exception:
-            continue
+            registry = getattr(geometry, "internal_registry", None)
+            if registry is None:
+                continue
+            matched = registry.find_by_naming_pattern(name)
+            if not matched:
+                continue
+        if isinstance(matched, list):
+            entities.extend(matched)
+        else:
+            entities.append(matched)
     return entities
 
 
 def _available_surface_group_names(geometry) -> list[str]:
+    return _available_entity_group_names(geometry, "Surface")
+
+
+def _available_edge_group_names(geometry) -> list[str]:
+    return _available_entity_group_names(geometry, "Edge")
+
+
+def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
     registry = getattr(geometry, "internal_registry", None)
     if registry is None:
         return []
     names = []
     for entity_list in registry.internal_registry.values():
         for entity in entity_list:
-            if getattr(entity, "private_attribute_entity_type_name", None) == "Surface":
+            if getattr(entity, "private_attribute_entity_type_name", None) == entity_type_name:
                 names.append(getattr(entity, "name", repr(entity)))
     return sorted(set(names))
 
@@ -152,6 +180,13 @@ def _wall_entities(geometry) -> dict[str, list]:
     return {
         wall_name: _entities_by_possible_names(geometry, possible_names)
         for wall_name, possible_names in FACE_GROUP_ALIASES.items()
+    }
+
+
+def _edge_entities(geometry) -> dict[str, list]:
+    return {
+        edge_name: _entities_by_possible_names(geometry, possible_names)
+        for edge_name, possible_names in EDGE_GROUP_ALIASES.items()
     }
 
 
@@ -174,7 +209,9 @@ def _rotation_volume(cfg: OldCaseSetup):
 
 def _make_project(geometry_file: Path, cfg: OldCaseSetup, flow360_folder):
     if not GEOMETRY_CSM_FILE.exists():
-        _write_geometry_csm_file(GEOMETRY_CSM_FILE, GEOMETRY_STEP_FILE)
+        raise FileNotFoundError(
+            f"Could not find CSM file with faceName/edgeName tags: {GEOMETRY_CSM_FILE}"
+        )
     if geometry_file.suffix.lower() == ".egads" and not geometry_file.exists():
         raise FileNotFoundError(
             f"Could not find generated EGADS geometry: {geometry_file}. "
@@ -228,8 +265,64 @@ def _get_or_create_flow360_folder(folder_path: tuple[str, ...]):
     return folder
 
 
-def _make_meshing_params(rotation_volume, cfg: OldCaseSetup):
+def _make_surface_edge_refinements(geometry, cfg: OldCaseSetup):
+    geometry.group_edges_by_tag("edgeName")
+    edge_entities = _edge_entities(geometry)
+    missing = [name for name, entities in edge_entities.items() if not entities]
+    if missing:
+        raise ValueError(
+            f"Could not resolve edge groups {missing}. "
+            f"Available edge groups: {_available_edge_group_names(geometry)}. "
+            "Tag the trailing-edge CAD edges with edgeName/groupName='trailingEdges' in the CSM."
+        )
+
+    return [
+        fl.SurfaceEdgeRefinement(
+            name="TrailingEdgeSurfaceEdgeRefinement",
+            edges=edge_entities["trailing_edge"],
+            method=fl.HeightBasedRefinement(value=cfg.trailing_edge_normal_spacing * u.m),
+        ),
+        fl.SurfaceEdgeRefinement(
+            name="HubEdgesSurfaceEdgeRefinement",
+            edges=edge_entities["hub_edges"],
+            method=fl.HeightBasedRefinement(value=cfg.hub_edge_spacing * u.m),
+        ),
+    ]
+
+
+def _make_surface_refinements(geometry, cfg: OldCaseSetup):
+    geometry.group_faces_by_tag("faceName")
+    face_entities = _wall_entities(geometry)
+    missing = [name for name, entities in face_entities.items() if not entities]
+    if missing:
+        raise ValueError(
+            f"Could not resolve faceName groups {missing}. "
+            f"Available faceName groups: {_available_surface_group_names(geometry)}. "
+            "Check the CSM faceName attributes."
+        )
+
+    zone_sizes = {
+        "bladeInner": cfg.blade_inner_max_edge_length,
+        "hub": cfg.hub_max_edge_length,
+        "bladeMain": cfg.blade_main_max_edge_length,
+        "bladeTE": cfg.blade_te_max_edge_length,
+    }
+    return [
+        fl.SurfaceRefinement(
+            name=f"{zone_name}SurfaceRefinement",
+            faces=face_entities[zone_name],
+            max_edge_length=max_edge_length * u.m,
+        )
+        for zone_name, max_edge_length in zone_sizes.items()
+    ]
+
+
+def _make_meshing_params(rotation_volume, geometry, cfg: OldCaseSetup):
     farfield = fl.AutomatedFarfield(relative_size=50.0)
+    refinements = [
+        *_make_surface_refinements(geometry, cfg),
+        *_make_surface_edge_refinements(geometry, cfg),
+    ]
 
     return farfield, fl.MeshingParams(
         defaults=fl.MeshingDefaults(
@@ -249,7 +342,7 @@ def _make_meshing_params(rotation_volume, cfg: OldCaseSetup):
                 spacing_circumferential=cfg.rotation_volume_spacing * u.m,
             ),
         ],
-        refinements=[],
+        refinements=refinements,
     )
 
 
@@ -317,6 +410,7 @@ def _make_wall_model(name: str, surfaces: list, cfg: OldCaseSetup):
 
 
 def _make_models(geometry, farfield, rotation_volume, cfg: OldCaseSetup):
+    geometry.group_faces_by_tag("faceName")
     wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
     if missing:
@@ -403,7 +497,7 @@ def _make_outputs(wall_surfaces: list):
 def build_params(project, cfg: OldCaseSetup = CONFIG):
     geometry = project.geometry
     rotation_volume = _rotation_volume(cfg)
-    farfield, mesh_params = _make_meshing_params(rotation_volume, cfg)
+    farfield, mesh_params = _make_meshing_params(rotation_volume, geometry, cfg)
     models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg)
 
     with fl.SI_unit_system:
@@ -517,7 +611,7 @@ def define_and_run(
 
 
 def main():
-    generate_surface_mesh = False
+    generate_surface_mesh = True
     generate_volume_mesh = False
     run_case = False
 

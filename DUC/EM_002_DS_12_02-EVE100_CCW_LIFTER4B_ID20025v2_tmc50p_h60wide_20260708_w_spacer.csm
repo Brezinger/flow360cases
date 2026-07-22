@@ -10,44 +10,103 @@ patbeg i hubFaces.size
 patend
 
 # blade1
-dimension blade1Faces 15 1
-set blade1Faces "18; 13; 12; 8; 9; 19; 14; 22; 6; 10; 11; 17; 21; 16; 15"
-patbeg i blade1Faces.size
-   select face blade1Faces[i]
-   attribute faceName $blade1
+dimension blade1mainFaces 2 1
+set blade1mainFaces "9; 14"
+patbeg i blade1mainFaces.size
+   select face blade1mainFaces[i]
+   attribute faceName $bladeMain
+   attribute groupName $blade1
+patend
+dimension blade1TEFaces 9 1
+set blade1TEFaces "12; 8; 6; 10; 11; 17; 21; 16; 15"
+patbeg i blade1TEFaces.size
+   select face blade1TEFaces[i]
+   attribute faceName $bladeTE
+   attribute groupName $blade1
+patend
+dimension blade1innerFaces 4 1
+set blade1innerFaces "18; 13; 19; 22"
+patbeg i blade1innerFaces.size
+   select face blade1innerFaces[i]
+   attribute faceName $bladeInner
    attribute groupName $blade1
 patend
 
+
 # blade2
-dimension blade2Faces 15 1
-set blade2Faces "54; 55; 3; 60; 58; 53; 57; 59; 2; 62; 63; 65; 66; 61; 64"
-patbeg i blade2Faces.size
-   select face blade2Faces[i]
-   attribute faceName $blade2
+dimension blade2mainFaces 2 1
+set blade2mainFaces "60; 59"
+patbeg i blade2mainFaces.size
+   select face blade2mainFaces[i]
+   attribute faceName $bladeMain
+   attribute groupName $blade2
+patend
+dimension blade2TEFaces 9 1
+set blade2TEFaces "3; 58; 2; 62; 63; 65; 66; 61; 64"
+patbeg i blade2TEFaces.size
+   select face blade2TEFaces[i]
+   attribute faceName $bladeTE
+   attribute groupName $blade2
+patend
+dimension blade2innerFaces 4 1
+set blade2innerFaces "53; 57; 54; 55"
+patbeg i blade2innerFaces.size
+   select face blade2innerFaces[i]
+   attribute faceName $bladeInner
    attribute groupName $blade2
 patend
 
+
 # blade3
-dimension blade3Faces 15 1
-set blade3Faces "24; 25; 5; 30; 28; 23; 27; 29; 4; 33; 32; 35;  34; 36; 31"
-patbeg i blade3Faces.size
-   select face blade3Faces[i]
-   attribute faceName $blade3
+dimension blade3mainFaces 2 1
+set blade3mainFaces "30; 29"
+patbeg i blade3mainFaces.size
+   select face blade3mainFaces[i]
+   attribute faceName $bladeMain
    attribute groupName $blade3
-patend 
+patend
+dimension blade3TEFaces 9 1
+set blade3TEFaces "5; 28; 4; 33; 32; 35;  34; 36; 31"
+patbeg i blade3TEFaces.size
+   select face blade3TEFaces[i]
+   attribute faceName $bladeTE
+   attribute groupName $blade3
+patend
+dimension blade3innerFaces 4 1
+set blade3innerFaces "23; 24; 25; 27"
+patbeg i blade3innerFaces.size
+   select face blade3innerFaces[i]
+   attribute faceName $bladeInner
+   attribute groupName $blade3
+patend
+
 
 # blade4
-dimension blade4Faces 15 1
-set blade4Faces "43; 48; 39; 38; 42; 47; 41; 40; 51; 46; 7; 44; 45; 52; 49"
-patbeg i blade4Faces.size
-   select face blade4Faces[i]
-   attribute faceName $blade4
+dimension blade4mainFaces 2 1
+set blade4mainFaces "39; 44"
+patbeg i blade4mainFaces.size
+   select face blade4mainFaces[i]
+   attribute faceName $bladeMain
+   attribute groupName $blade4
+patend
+dimension blade4TEFaces 9 1
+set blade4TEFaces "38; 42; 47; 41; 40; 51; 46; 7; 45"
+patbeg i blade4TEFaces.size
+   select face blade4TEFaces[i]
+   attribute faceName $bladeTE
+   attribute groupName $blade4
+patend
+dimension blade4innerFaces 4 1
+set blade4innerFaces "43; 48; 49; 52"
+patbeg i blade4innerFaces.size
+   select face blade4innerFaces[i]
+   attribute faceName $bladeInner
    attribute groupName $blade4
 patend
 
 
 
-# LE:
+# Blade LE:
 dimension leadingEdges 8 1
 set leadingEdges "58; 41; 142; 10; 92; 26; 109; 49"
 patbeg i leadingEdges.size
@@ -56,7 +115,7 @@ patbeg i leadingEdges.size
    attribute groupName $leadingEdges
 patend
 
-# TE:
+# Blade TE:
 dimension trailingEdges 20 1
 set trailingEdges "37; 54; 63; 74; 62; 16; 6; 143; 144; 18; 22; 31; 99; 100; 98; 45; 105; 114; 125; 113"
 patbeg i trailingEdges.size
@@ -65,5 +124,15 @@ patbeg i trailingEdges.size
    attribute groupName $trailingEdges
 patend
 
+# Hub edges
+dimension hubEdges 21 1
+set hubEdges "81; 82; 69; 76; 67; 83; 85; 3; 88; 1; 101; 77; 81; 132; 133; 120; 127; 134; 136; 128; 118"
+patbeg i hubEdges.size
+   select edge hubEdges[i]
+   attribute edgeName $hubEdges
+   attribute groupName $hubEdges
+patend
 
 dump $/EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.egads 0 1 0
+
+

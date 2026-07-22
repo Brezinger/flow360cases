@@ -113,6 +113,21 @@ def _mixed_edge_lengths(coords: np.ndarray, face_groups: list[np.ndarray]) -> np
     return np.concatenate(chunks) if chunks else np.empty(0, dtype=np.float64)
 
 
+def _unique_mixed_edge_lengths(coords: np.ndarray, face_groups: list[np.ndarray]) -> np.ndarray:
+    edges = {
+        edge
+        for faces in face_groups
+        for face in faces
+        for edge in _polygon_edges(face)
+    }
+    if not edges:
+        return np.empty(0, dtype=np.float64)
+    return np.asarray(
+        [float(np.linalg.norm(coords[a] - coords[b])) for a, b in edges],
+        dtype=np.float64,
+    )
+
+
 def _stats(values: np.ndarray) -> dict[str, float]:
     if values.size == 0:
         return {}
@@ -290,7 +305,7 @@ def _axis_spread(coords: np.ndarray) -> str:
 
 
 def list_cgns(cgns_file: Path) -> None:
-    with h5py.File(cgns_file, "r") as handle:
+    with _open_cgns_file(cgns_file) as handle:
         base = handle["Base"]
         for zone_name, zone in base.items():
             if not isinstance(zone, h5py.Group) or zone.attrs.get("label") != b"Zone_t":
@@ -312,7 +327,7 @@ def analyze_surfaces(
     sections: Iterable[str],
     min_dihedral_deg: float,
 ) -> None:
-    with h5py.File(cgns_file, "r") as handle:
+    with _open_cgns_file(cgns_file) as handle:
         zone = handle["Base"][zone_name]
         print(f"CGNS file: {cgns_file}")
         print(f"Zone: {zone_name}")
@@ -351,6 +366,118 @@ def _parse_group(value: str) -> tuple[str, list[str]]:
     return name, [item.strip() for item in raw_sections.split(",") if item.strip()]
 
 
+def _group_edge_lengths(
+    zone: h5py.Group,
+    group_spec: str,
+    *,
+    unique_edges: bool,
+) -> tuple[str, list[str], np.ndarray]:
+    group_name, section_names = _parse_group(group_spec)
+    sections = [_read_surface_section(zone, name) for name in section_names if name in zone]
+    if not sections:
+        return group_name, section_names, np.empty(0, dtype=np.float64)
+
+    global_nodes = np.unique(np.concatenate([section.nodes for section in sections]))
+    coords = _read_coordinates(zone, global_nodes)
+    local_index = np.empty(int(global_nodes[-1]) + 1, dtype=np.int64)
+    local_index[global_nodes] = np.arange(global_nodes.size)
+    face_groups = [local_index[section.faces] for section in sections]
+    if unique_edges:
+        return group_name, section_names, _unique_mixed_edge_lengths(coords, face_groups)
+    return group_name, section_names, _mixed_edge_lengths(coords, face_groups)
+
+
+def plot_surface_edge_distributions(
+    cgns_file: Path,
+    *,
+    zone_name: str,
+    groups: Iterable[str],
+    output: Path,
+    bins: int,
+    unique_edges: bool,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    group_lengths: list[tuple[str, np.ndarray]] = []
+    with _open_cgns_file(cgns_file) as handle:
+        zone = handle["Base"][zone_name]
+        for group_spec in groups:
+            group_name, _, edge_lengths = _group_edge_lengths(
+                zone,
+                group_spec,
+                unique_edges=unique_edges,
+            )
+            if edge_lengths.size:
+                group_lengths.append((group_name, edge_lengths))
+
+    if not group_lengths:
+        raise ValueError("No matching surface groups found for plotting.")
+
+    all_lengths = np.concatenate([edge_lengths for _, edge_lengths in group_lengths])
+    positive_lengths = all_lengths[all_lengths > 0.0]
+    if not positive_lengths.size:
+        raise ValueError("No positive surface edge lengths found for plotting.")
+
+    unit_label = "m"
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+
+    log_min = float(np.min(positive_lengths))
+    log_max = float(np.max(positive_lengths))
+    log_bins = np.geomspace(log_min, log_max, bins + 1) if log_min < log_max else bins
+
+    for group_name, edge_lengths in group_lengths:
+        positive_group_lengths = edge_lengths[edge_lengths > 0.0]
+        axes[0].hist(
+            positive_group_lengths,
+            bins=log_bins,
+            histtype="step",
+            linewidth=1.5,
+            label=f"{group_name} (n={positive_group_lengths.size})",
+        )
+
+        sorted_lengths = np.sort(positive_group_lengths)
+        cumulative = np.arange(1, sorted_lengths.size + 1) / sorted_lengths.size
+        axes[1].plot(sorted_lengths, cumulative, linewidth=1.5, label=group_name)
+
+    axes[0].set_xscale("log")
+    axes[0].set_xlabel(f"surface edge length [{unit_label}]")
+    axes[0].set_ylabel("edge count")
+    axes[0].set_title("Surface Mesh Edge-Length Histogram")
+    axes[0].grid(True, which="both", alpha=0.25)
+    axes[0].legend(fontsize="small")
+
+    axes[1].set_xscale("log")
+    axes[1].set_xlabel(f"surface edge length [{unit_label}]")
+    axes[1].set_ylabel("cumulative fraction")
+    axes[1].set_title("Surface Mesh Edge-Length CDF")
+    axes[1].grid(True, which="both", alpha=0.25)
+    axes[1].legend(fontsize="small")
+
+    mode = "unique mesh edges" if unique_edges else "face edge instances"
+    fig.suptitle(f"{cgns_file.name} | {zone_name} | {mode}", fontsize=11)
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+
+    print(f"Wrote surface edge distribution plot: {output}")
+    print(f"Combined distribution: {_format_stats(_stats(all_lengths))}")
+    for group_name, edge_lengths in group_lengths:
+        print(f"{group_name}: {_format_stats(_stats(edge_lengths))}")
+
+
+def _open_cgns_file(cgns_file: Path):
+    try:
+        return h5py.File(cgns_file, "r")
+    except OSError as exc:
+        message = str(exc)
+        if "truncated file" in message:
+            raise OSError(
+                f"Could not open {cgns_file}: the HDF5/CGNS file appears truncated. "
+                f"Actual size is {cgns_file.stat().st_size} bytes. Original error: {message}"
+            ) from exc
+        raise
+
+
 def analyze_groups(
     cgns_file: Path,
     *,
@@ -359,7 +486,7 @@ def analyze_groups(
     min_dihedral_deg: float,
     include_boundary_features: bool,
 ) -> None:
-    with h5py.File(cgns_file, "r") as handle:
+    with _open_cgns_file(cgns_file) as handle:
         zone = handle["Base"][zone_name]
         print(f"CGNS file: {cgns_file}")
         print(f"Zone: {zone_name}")
@@ -442,6 +569,23 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Include one-sided boundary edges in feature statistics.",
     )
+    parser.add_argument(
+        "--plot-surface-size-distribution",
+        type=Path,
+        metavar="PNG",
+        help="Write a histogram and CDF plot of surface mesh edge lengths.",
+    )
+    parser.add_argument(
+        "--plot-bins",
+        type=int,
+        default=80,
+        help="Number of logarithmic histogram bins for --plot-surface-size-distribution.",
+    )
+    parser.add_argument(
+        "--plot-duplicate-face-edges",
+        action="store_true",
+        help="Plot every face edge instance instead of unique mesh edges.",
+    )
     return parser.parse_args()
 
 
@@ -449,6 +593,15 @@ def main() -> int:
     args = _parse_args()
     if args.list:
         list_cgns(args.cgns_file)
+    elif args.plot_surface_size_distribution is not None:
+        plot_surface_edge_distributions(
+            args.cgns_file,
+            zone_name=args.zone,
+            groups=args.groups,
+            output=args.plot_surface_size_distribution,
+            bins=args.plot_bins,
+            unique_edges=not args.plot_duplicate_face_edges,
+        )
     elif args.per_section:
         analyze_surfaces(
             args.cgns_file,
