@@ -437,22 +437,51 @@ def _make_surface_refinements(geometry, cfg: CaseSetup):
 
 def _make_volume_cylinder_refinements(cfg: CaseSetup):
     refinements = []
+    rotation_z_center = cfg.rotation_center[2]
+    rotation_z_min = rotation_z_center - 0.5 * cfg.rotation_volume_height
+    rotation_z_max = rotation_z_center + 0.5 * cfg.rotation_volume_height
+
     for spec in VOLUME_CYLINDER_REFINEMENTS:
-        cylinder = fl.Cylinder(
-            name=f"{spec.name}_volume",
-            center=(0.0, 0.0, spec.center_z) * u.m,
-            axis=cfg.rotation_axis,
-            height=(spec.z_max - spec.z_min) * u.m,
-            inner_radius=spec.inner_radius * u.m,
-            outer_radius=spec.outer_radius * u.m,
-        )
-        refinements.append(
-            fl.UniformRefinement(
-                name=f"{spec.name}_refinement",
-                entities=[cylinder],
-                spacing=spec.spacing * u.m,
+        cylinders = []
+        if spec.z_min < rotation_z_min:
+            z_min = spec.z_min
+            z_max = min(spec.z_max, rotation_z_min)
+            cylinders.append((f"{spec.name}_lower_volume", z_min, z_max, spec.inner_radius))
+
+        if spec.z_max > rotation_z_max:
+            z_min = max(spec.z_min, rotation_z_max)
+            z_max = spec.z_max
+            cylinders.append((f"{spec.name}_upper_volume", z_min, z_max, spec.inner_radius))
+
+        overlap_z_min = max(spec.z_min, rotation_z_min)
+        overlap_z_max = min(spec.z_max, rotation_z_max)
+        annulus_inner_radius = max(spec.inner_radius, cfg.rotation_volume_radius)
+        if overlap_z_min < overlap_z_max and annulus_inner_radius < spec.outer_radius:
+            cylinders.append(
+                (
+                    f"{spec.name}_rotation_boundary_annulus_volume",
+                    overlap_z_min,
+                    overlap_z_max,
+                    annulus_inner_radius,
+                )
             )
-        )
+
+        for cylinder_name, z_min, z_max, inner_radius in cylinders:
+            cylinder = fl.Cylinder(
+                name=cylinder_name,
+                center=(0.0, 0.0, 0.5 * (z_min + z_max)) * u.m,
+                axis=cfg.rotation_axis,
+                height=(z_max - z_min) * u.m,
+                inner_radius=inner_radius * u.m,
+                outer_radius=spec.outer_radius * u.m,
+            )
+            refinements.append(
+                fl.UniformRefinement(
+                    name=f"{cylinder_name.removesuffix('_volume')}_refinement",
+                    entities=[cylinder],
+                    spacing=spec.spacing * u.m,
+                )
+            )
     return refinements
 
 
