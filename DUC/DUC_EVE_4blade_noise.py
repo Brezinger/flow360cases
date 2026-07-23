@@ -34,13 +34,12 @@ class VolumeCylinderRefinementSpec:
 
 
 @dataclass(frozen=True)
-class GeneralCylinderRefinementSpec:
+class BladeVortexBoxRefinementSpec:
     name: str
     center: tuple[float, float, float]
-    axis: tuple[float, float, float]
-    height: float
-    inner_radius: float
-    outer_radius: float
+    axes: tuple[tuple[float, float, float], tuple[float, float, float]]
+    length: float
+    tangential_width: float
     spacing: float
 
 
@@ -81,7 +80,7 @@ class CaseSetup:
     farfield_relative_size: float = 107
     surface_max_edge_length: float = 0.00866
     curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 5.0e-7
+    boundary_layer_first_layer_thickness: float = 3.3e-5 * 2
     boundary_layer_growth_rate: float = 1.16
     surface_edge_growth_rate: float = 1.12
     blade_inner_max_edge_length: float = 8.66e-3
@@ -183,23 +182,21 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
 )
 
 
-BLADE_VORTEX_REFINEMENTS: tuple[GeneralCylinderRefinementSpec, ...] = (
-    GeneralCylinderRefinementSpec(
+BLADE_VORTEX_REFINEMENTS: tuple[BladeVortexBoxRefinementSpec, ...] = (
+    BladeVortexBoxRefinementSpec(
         name="Blade1+3Refinement",
         center=(0.0, 0.0, 0.1),
-        axis=(1.0, 0.0, 0.0),
-        height=2.97,
-        inner_radius=0.0,
-        outer_radius=0.17,
+        axes=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        length=2.97,
+        tangential_width=0.34,
         spacing=CONFIG.blade_vortex_spacing,
     ),
-    GeneralCylinderRefinementSpec(
+    BladeVortexBoxRefinementSpec(
         name="Blade2+4Refinement",
         center=(0.0, 0.0, 0.003),
-        axis=(0.0, 1.0, 0.0),
-        height=2.97,
-        inner_radius=0.0,
-        outer_radius=0.17,
+        axes=((0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),
+        length=2.97,
+        tangential_width=0.34,
         spacing=CONFIG.blade_vortex_spacing,
     ),
 )
@@ -478,21 +475,26 @@ def _make_tip_wake_refinement(cfg: CaseSetup):
     )
 
 
-def _make_general_cylinder_refinements():
+def _make_blade_vortex_box_refinements(cfg: CaseSetup):
     refinements = []
+    upper_z = cfg.rotation_center[2] + 0.5 * cfg.rotation_volume_height
+    blade_vortex_z_size = 2.0 * (upper_z - BLADE_VORTEX_REFINEMENTS[0].center[2])
+    if blade_vortex_z_size <= 0.0:
+        raise ValueError(
+            "Blade-vortex refinement center is above the rotation-volume upper boundary. "
+            f"center_z={BLADE_VORTEX_REFINEMENTS[0].center[2]}, upper_z={upper_z}"
+        )
     for spec in BLADE_VORTEX_REFINEMENTS:
-        cylinder = fl.Cylinder(
+        box = fl.Box.from_principal_axes(
             name=f"{spec.name}_volume",
             center=spec.center * u.m,
-            axis=spec.axis,
-            height=spec.height * u.m,
-            inner_radius=spec.inner_radius * u.m,
-            outer_radius=spec.outer_radius * u.m,
+            axes=spec.axes,
+            size=(spec.length, spec.tangential_width, blade_vortex_z_size) * u.m,
         )
         refinements.append(
             fl.UniformRefinement(
                 name=spec.name,
-                entities=[cylinder],
+                entities=[box],
                 spacing=spec.spacing * u.m,
             )
         )
@@ -508,7 +510,7 @@ def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_
         *_make_surface_refinements(geometry, cfg),
         *_make_volume_cylinder_refinements(cfg),
         _make_tip_wake_refinement(cfg),
-        *_make_general_cylinder_refinements(),
+        *_make_blade_vortex_box_refinements(cfg),
     ]
     if not use_beta_mesher:
         refinements.extend(_make_surface_edge_refinements(geometry, cfg))
