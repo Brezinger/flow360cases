@@ -20,6 +20,8 @@ GEOMETRY_FILE = GEOMETRY_STEP_FILE.with_suffix(".egads")
 AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
     "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
 )
+GENERATED_DIR = Path(__file__).resolve().parent / "generated"
+DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "DUC_EVE_4blade_surface_mesh.cgns"
 
 
 @dataclass(frozen=True)
@@ -270,6 +272,9 @@ def _entities_by_possible_names(geometry, possible_names: list[str]):
 
 
 def _available_surface_group_names(geometry) -> list[str]:
+    boundary_names = getattr(geometry, "boundary_names", None)
+    if boundary_names is not None:
+        return sorted(boundary_names)
     return _available_entity_group_names(geometry, "Surface")
 
 
@@ -435,6 +440,16 @@ def _make_surface_refinements(geometry, cfg: CaseSetup):
     ]
 
 
+def _make_meshing_defaults(cfg: CaseSetup):
+    return fl.MeshingDefaults(
+        surface_edge_growth_rate=cfg.surface_edge_growth_rate,
+        surface_max_edge_length=cfg.surface_max_edge_length * u.m,
+        curvature_resolution_angle=cfg.curvature_resolution_angle_deg * u.deg,
+        boundary_layer_growth_rate=cfg.boundary_layer_growth_rate,
+        boundary_layer_first_layer_thickness=cfg.boundary_layer_first_layer_thickness * u.m,
+    )
+
+
 def _make_volume_cylinder_refinements(cfg: CaseSetup):
     refinements = []
     rotation_z_center = cfg.rotation_center[2]
@@ -530,28 +545,43 @@ def _make_blade_vortex_box_refinements(cfg: CaseSetup):
     return refinements
 
 
-def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_mesher: bool):
+def _make_surface_meshing_params(geometry, cfg: CaseSetup):
+    return fl.MeshingParams(
+        defaults=_make_meshing_defaults(cfg),
+        refinements=[
+            *_make_surface_refinements(geometry, cfg),
+            *_make_surface_edge_refinements(geometry, cfg),
+        ],
+    )
+
+
+def _make_meshing_params(
+    rotation_volume,
+    geometry,
+    cfg: CaseSetup,
+    *,
+    use_beta_mesher: bool,
+    include_surface_refinements: bool = True,
+):
     farfield = fl.AutomatedFarfield(
         name="farfield",
         relative_size=cfg.farfield_relative_size,
     )
-    refinements = [
-        *_make_surface_refinements(geometry, cfg),
-        *_make_volume_cylinder_refinements(cfg),
-        _make_tip_wake_refinement(cfg),
-        *_make_blade_vortex_box_refinements(cfg),
-    ]
-    if not use_beta_mesher:
+    refinements = []
+    if include_surface_refinements:
+        refinements.extend(_make_surface_refinements(geometry, cfg))
+    refinements.extend(
+        [
+            *_make_volume_cylinder_refinements(cfg),
+            _make_tip_wake_refinement(cfg),
+            *_make_blade_vortex_box_refinements(cfg),
+        ]
+    )
+    if include_surface_refinements and not use_beta_mesher:
         refinements.extend(_make_surface_edge_refinements(geometry, cfg))
 
     return farfield, fl.MeshingParams(
-        defaults=fl.MeshingDefaults(
-            surface_edge_growth_rate=cfg.surface_edge_growth_rate,
-            surface_max_edge_length=cfg.surface_max_edge_length * u.m,
-            curvature_resolution_angle=cfg.curvature_resolution_angle_deg * u.deg,
-            boundary_layer_growth_rate=cfg.boundary_layer_growth_rate,
-            boundary_layer_first_layer_thickness=cfg.boundary_layer_first_layer_thickness * u.m,
-        ),
+        defaults=_make_meshing_defaults(cfg),
         volume_zones=[
             farfield,
             fl.RotationVolume(
@@ -630,7 +660,8 @@ def _make_wall_model(name: str, surfaces: list, cfg: CaseSetup):
 
 
 def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup):
-    geometry.group_faces_by_tag("faceName")
+    if hasattr(geometry, "group_faces_by_tag"):
+        geometry.group_faces_by_tag("faceName")
     wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
     if missing:
@@ -714,14 +745,21 @@ def _make_outputs(wall_surfaces: list):
     ]
 
 
-def build_params(project, cfg: CaseSetup = CONFIG, *, use_beta_mesher: bool = False):
-    geometry = project.geometry
+def build_params(
+    project,
+    cfg: CaseSetup = CONFIG,
+    *,
+    use_beta_mesher: bool = False,
+    use_surface_mesh: bool = False,
+):
+    geometry = project.surface_mesh if use_surface_mesh else project.geometry
     rotation_volume = _rotation_volume(cfg)
     farfield, mesh_params = _make_meshing_params(
         rotation_volume,
         geometry,
         cfg,
         use_beta_mesher=use_beta_mesher,
+        include_surface_refinements=not use_surface_mesh,
     )
     models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg)
 
@@ -753,9 +791,170 @@ def build_params(project, cfg: CaseSetup = CONFIG, *, use_beta_mesher: bool = Fa
         )
 
 
+def build_surface_mesh_params(project, cfg: CaseSetup = CONFIG):
+    with fl.SI_unit_system:
+        return fl.SimulationParams(
+            version="25.10.0",
+            unit_system=fl.SI_unit_system,
+            meshing=_make_surface_meshing_params(project.geometry, cfg),
+        )
+
+
+def _download_surface_mesh(surface_mesh, surface_mesh_file: Path) -> Path:
+    surface_mesh_file = Path(surface_mesh_file)
+    surface_mesh_file.parent.mkdir(parents=True, exist_ok=True)
+    download_attempts = (
+        lambda: surface_mesh.download(file_name=str(surface_mesh_file)),
+        lambda: surface_mesh.download(path=str(surface_mesh_file)),
+        lambda: surface_mesh.download(str(surface_mesh_file)),
+        lambda: surface_mesh.download(destination=str(surface_mesh_file.parent)),
+    )
+    errors = []
+    for download in download_attempts:
+        try:
+            download()
+        except (AttributeError, TypeError) as error:
+            errors.append(str(error))
+            continue
+        if surface_mesh_file.exists():
+            return surface_mesh_file
+        matches = sorted(surface_mesh_file.parent.glob("*.cgns"))
+        if matches:
+            if matches[0] != surface_mesh_file:
+                matches[0].replace(surface_mesh_file)
+            return surface_mesh_file
+
+    raise RuntimeError(
+        "The surface mesh was generated, but this Flow360 Python API did not expose "
+        "a compatible surface_mesh.download(...) call. Download the generated surface "
+        f"mesh as CGNS manually to {surface_mesh_file}, or update _download_surface_mesh. "
+        f"Download errors: {errors}"
+    )
+
+
+def generate_legacy_surface_mesh(
+    *,
+    geometry_file: Path = GEOMETRY_FILE,
+    surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
+    cfg: CaseSetup = CONFIG,
+    flow360_folder=None,
+    bypass_length_scale_warning: bool = True,
+) -> str:
+    surface_mesh_file = Path(surface_mesh_file)
+    project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher=False)
+    params = build_surface_mesh_params(project, cfg)
+
+    warning_context = (
+        fl.warning_bypass("potential_length_scale_mismatch")
+        if bypass_length_scale_warning
+        else nullcontext()
+    )
+
+    with warning_context:
+        project.generate_surface_mesh(
+            params=params,
+            name="LegacySurfaceMesh",
+            use_beta_mesher=False,
+            use_geometry_AI=False,
+            run_async=False,
+            raise_on_error=True,
+        )
+
+    _download_surface_mesh(project.surface_mesh, surface_mesh_file)
+    return project.surface_mesh.id
+
+
+def _make_project_from_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flow360_folder):
+    surface_mesh_file = Path(surface_mesh_file)
+    if not surface_mesh_file.exists():
+        raise FileNotFoundError(
+            f"Could not find reusable surface mesh file: {surface_mesh_file}. "
+            "Run generate_legacy_surface_mesh(...) first, or provide an existing CGNS/UGRID surface mesh."
+        )
+
+    return fl.Project.from_surface_mesh(
+        str(surface_mesh_file),
+        name=cfg.name + "_simulation_from_surface_mesh",
+        folder=flow360_folder,
+        length_unit=cfg.geometry_length_unit,
+        run_async=False,
+    )
+
+
+def define_and_run_from_surface_mesh(
+    *,
+    surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
+    cfg: CaseSetup = CONFIG,
+    flow360_folder=None,
+    submit_draft_only: bool = True,
+    generate_volume_mesh: bool = False,
+    run_case: bool = False,
+    bypass_length_scale_warning: bool = True,
+    results_path: str | None = None,
+):
+    surface_mesh_file = Path(surface_mesh_file)
+    project = _make_project_from_surface_mesh(surface_mesh_file, cfg, flow360_folder)
+    params = build_params(project, cfg, use_beta_mesher=True, use_surface_mesh=True)
+
+    warning_context = (
+        fl.warning_bypass("potential_length_scale_mismatch")
+        if bypass_length_scale_warning
+        else nullcontext()
+    )
+
+    with warning_context:
+        if submit_draft_only and not generate_volume_mesh and not run_case:
+            draft = project.run_case(
+                params=params,
+                name="DUC_EVE_4blade_noise_setup",
+                use_beta_mesher=True,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+                draft_only=True,
+            )
+            return draft.id
+
+        if generate_volume_mesh:
+            project.generate_volume_mesh(
+                params=params,
+                name="VolumeMesh",
+                use_beta_mesher=True,
+                use_geometry_AI=False,
+                run_async=False,
+                raise_on_error=True,
+            )
+
+        if not run_case:
+            return project.id
+        project.run_case(
+            params=params,
+            name="DUC_EVE_4blade_noise_case",
+            use_beta_mesher=True,
+            use_geometry_AI=False,
+            run_async=False,
+            raise_on_error=True,
+        )
+
+    case = project.case
+    case.wait()
+
+    if results_path is not None:
+        case.results.download(
+            surface=True,
+            volume=True,
+            total_forces=True,
+            nonlinear_residuals=True,
+            destination=os.path.join(results_path, case.name),
+        )
+
+    return case.results.total_forces.as_dataframe()
+
+
 def define_and_run(
     *,
     geometry_file: Path = GEOMETRY_FILE,
+    surface_mesh_file: Path | None = None,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
@@ -766,6 +965,27 @@ def define_and_run(
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
+    if surface_mesh_file is not None or generate_surface_mesh:
+        reusable_surface_mesh_file = Path(surface_mesh_file or DEFAULT_SURFACE_MESH_FILE)
+        if generate_surface_mesh:
+            generate_legacy_surface_mesh(
+                geometry_file=geometry_file,
+                surface_mesh_file=reusable_surface_mesh_file,
+                cfg=cfg,
+                flow360_folder=flow360_folder,
+                bypass_length_scale_warning=bypass_length_scale_warning,
+            )
+        return define_and_run_from_surface_mesh(
+            surface_mesh_file=reusable_surface_mesh_file,
+            cfg=cfg,
+            flow360_folder=flow360_folder,
+            submit_draft_only=submit_draft_only,
+            generate_volume_mesh=generate_volume_mesh,
+            run_case=run_case,
+            bypass_length_scale_warning=bypass_length_scale_warning,
+            results_path=results_path,
+        )
+
     project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher)
     params = build_params(project, cfg, use_beta_mesher=use_beta_mesher)
 
@@ -837,20 +1057,20 @@ def define_and_run(
 
 
 def main():
-    generate_surface_mesh = False
+    surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
+    generate_surface_mesh = not surface_mesh_file.exists()
     generate_volume_mesh = False
     run_case = False
-    use_beta_mesher = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
 
     project_id = define_and_run(
         flow360_folder=folder,
+        surface_mesh_file=surface_mesh_file,
         submit_draft_only=True,
         generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
-        use_beta_mesher=use_beta_mesher,
         bypass_length_scale_warning=True,
     )
     print(f"Project or draft id: {project_id}")
