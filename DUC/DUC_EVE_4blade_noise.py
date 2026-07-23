@@ -208,7 +208,7 @@ def _rotation_volume(cfg: CaseSetup):
     )
 
 
-def _make_project(geometry_file: Path, cfg: CaseSetup, flow360_folder):
+def _make_project(geometry_file: Path, cfg: CaseSetup, flow360_folder, use_beta_mesher):
     if not GEOMETRY_CSM_FILE.exists():
         raise FileNotFoundError(
             f"Could not find CSM file with faceName/edgeName tags: {GEOMETRY_CSM_FILE}"
@@ -219,9 +219,14 @@ def _make_project(geometry_file: Path, cfg: CaseSetup, flow360_folder):
             f"Open or run the CSM file first to create it: {GEOMETRY_CSM_FILE}"
         )
 
+    if use_beta_mesher:
+        proj_name = cfg.name + "_beta_mesher"
+    else:
+        proj_name = cfg.name
+
     project = fl.Project.from_geometry(
         str(geometry_file),
-        name=cfg.name,
+        name=proj_name,
         folder=flow360_folder,
         length_unit=cfg.geometry_length_unit,
         run_async=False,
@@ -551,7 +556,7 @@ def define_and_run(
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
-    project = _make_project(geometry_file, cfg, flow360_folder)
+    project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher)
     params = build_params(project, cfg, use_beta_mesher=use_beta_mesher)
 
     warning_context = (
@@ -559,6 +564,7 @@ def define_and_run(
         if bypass_length_scale_warning
         else nullcontext()
     )
+
     with warning_context:
         if submit_draft_only and not generate_surface_mesh and not generate_volume_mesh and not run_case:
             draft = project.run_case(
