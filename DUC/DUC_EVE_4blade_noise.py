@@ -23,6 +23,17 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
 
 
 @dataclass(frozen=True)
+class VolumeCylinderRefinementSpec:
+    name: str
+    center_z: float
+    z_min: float
+    z_max: float
+    inner_radius: float
+    outer_radius: float
+    spacing: float
+
+
+@dataclass(frozen=True)
 class CaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
@@ -53,10 +64,10 @@ class CaseSetup:
     # Mesh-generation placeholders. The old case JSON was produced from a
     # supplied volume mesh, so it does not define these. Keep these conservative
     # until the CAD import tags and generated mesh are checked.
-    rotation_volume_radius: float = 1.55
-    rotation_volume_height: float = 0.4115
-    rotation_volume_spacing: float = 0.002
-    farfield_relative_size: float = 107.15
+    rotation_volume_radius: float = 1.5
+    rotation_volume_height: float = 0.38625
+    rotation_volume_spacing: float = 0.006
+    farfield_relative_size: float = 107
     surface_max_edge_length: float = 0.00866
     curvature_resolution_angle_deg: float = 5.0
     boundary_layer_first_layer_thickness: float = 5.0e-7
@@ -69,6 +80,9 @@ class CaseSetup:
     trailing_edge_length: float = 8.93e-4
     trailing_edge_normal_spacing: float = 8.9e-5
     hub_edge_spacing: float = 0.87e-3
+    tip_wake_inner_radius: float = 1.1
+    tip_wake_z_lower: float = -0.1
+    tip_wake_spacing: float = 0.003
 
     @property
     def ref_area(self) -> float:
@@ -88,6 +102,73 @@ class CaseSetup:
 
 
 CONFIG = CaseSetup()
+
+
+VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
+    VolumeCylinderRefinementSpec(
+        name="intermediate_cylinder",
+        center_z=0.0366215,
+        z_min=-0.36621,
+        z_max=0.439453,
+        inner_radius=0.0,
+        outer_radius=1.68457,
+        spacing=0.03171385028658623,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="intermediate_annulus",
+        center_z=-3.0944839,
+        z_min=-6.26221,
+        z_max=0.0732422,
+        inner_radius=1.06201,
+        outer_radius=1.9043,
+        spacing=0.03171385028658623,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="coarse_cylinder",
+        center_z=0.073242,
+        z_min=-0.732422,
+        z_max=0.878906,
+        inner_radius=0.0,
+        outer_radius=1.9043,
+        spacing=0.06342770057317168,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="short_coarse_annulus",
+        center_z=-2.966309,
+        z_min=-6.66504,
+        z_max=0.732422,
+        inner_radius=0.585938,
+        outer_radius=2.05078,
+        spacing=0.06342770057317168,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="coarse_annulus",
+        center_z=-3.9916985,
+        z_min=-8.42285,
+        z_max=0.439453,
+        inner_radius=0.732422,
+        outer_radius=2.27051,
+        spacing=0.06342770057317168,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="outer_short_wide_cylinder",
+        center_z=-4.82941,
+        z_min=-10.83,
+        z_max=1.17118,
+        inner_radius=0.0,
+        outer_radius=2.65,
+        spacing=0.12685540114634414,
+    ),
+    VolumeCylinderRefinementSpec(
+        name="outermost_cylinder",
+        center_z=-3.808595,
+        z_min=-9.22852,
+        z_max=1.61133,
+        inner_radius=0.0,
+        outer_radius=3.06,
+        spacing=0.12685540114634414,
+    ),
+)
 
 
 # Update these after the first geometry upload if Flow360 exposes different names.
@@ -323,6 +404,46 @@ def _make_surface_refinements(geometry, cfg: CaseSetup):
     ]
 
 
+def _make_volume_cylinder_refinements(cfg: CaseSetup):
+    refinements = []
+    for spec in VOLUME_CYLINDER_REFINEMENTS:
+        cylinder = fl.Cylinder(
+            name=f"{spec.name}_volume",
+            center=(0.0, 0.0, spec.center_z) * u.m,
+            axis=cfg.rotation_axis,
+            height=(spec.z_max - spec.z_min) * u.m,
+            inner_radius=spec.inner_radius * u.m,
+            outer_radius=spec.outer_radius * u.m,
+        )
+        refinements.append(
+            fl.UniformRefinement(
+                name=f"{spec.name}_refinement",
+                entities=[cylinder],
+                spacing=spec.spacing * u.m,
+            )
+        )
+    return refinements
+
+
+def _make_tip_wake_refinement(cfg: CaseSetup):
+    rotation_z_center = cfg.rotation_center[2]
+    z_upper = rotation_z_center + 0.5 * cfg.rotation_volume_height
+    z_lower = cfg.tip_wake_z_lower
+    cylinder = fl.Cylinder(
+        name="tip_wake_annulus_volume",
+        center=(cfg.rotation_center[0], cfg.rotation_center[1], 0.5 * (z_lower + z_upper)) * u.m,
+        axis=cfg.rotation_axis,
+        height=(z_upper - z_lower) * u.m,
+        inner_radius=cfg.tip_wake_inner_radius * u.m,
+        outer_radius=cfg.rotation_volume_radius * u.m,
+    )
+    return fl.UniformRefinement(
+        name="tip_wake_annulus_refinement",
+        entities=[cylinder],
+        spacing=cfg.tip_wake_spacing * u.m,
+    )
+
+
 def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_mesher: bool):
     farfield = fl.AutomatedFarfield(
         name="farfield",
@@ -330,6 +451,8 @@ def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_
     )
     refinements = [
         *_make_surface_refinements(geometry, cfg),
+        *_make_volume_cylinder_refinements(cfg),
+        _make_tip_wake_refinement(cfg),
     ]
     if not use_beta_mesher:
         refinements.extend(_make_surface_edge_refinements(geometry, cfg))
@@ -627,7 +750,7 @@ def define_and_run(
 
 
 def main():
-    generate_surface_mesh = True
+    generate_surface_mesh = False
     generate_volume_mesh = False
     run_case = False
     use_beta_mesher = False
