@@ -34,6 +34,17 @@ class VolumeCylinderRefinementSpec:
 
 
 @dataclass(frozen=True)
+class GeneralCylinderRefinementSpec:
+    name: str
+    center: tuple[float, float, float]
+    axis: tuple[float, float, float]
+    height: float
+    inner_radius: float
+    outer_radius: float
+    spacing: float
+
+
+@dataclass(frozen=True)
 class CaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
@@ -83,6 +94,7 @@ class CaseSetup:
     tip_wake_inner_radius: float = 1.1
     tip_wake_z_lower: float = -0.1
     tip_wake_spacing: float = 0.003
+    blade_vortex_spacing: float = 0.003
 
     @property
     def ref_area(self) -> float:
@@ -167,6 +179,28 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         inner_radius=0.0,
         outer_radius=3.06,
         spacing=0.12685540114634414,
+    ),
+)
+
+
+BLADE_VORTEX_REFINEMENTS: tuple[GeneralCylinderRefinementSpec, ...] = (
+    GeneralCylinderRefinementSpec(
+        name="Blade1+3Refinement",
+        center=(0.0, 0.0, 0.1),
+        axis=(1.0, 0.0, 0.0),
+        height=2.97,
+        inner_radius=0.0,
+        outer_radius=0.17,
+        spacing=CONFIG.blade_vortex_spacing,
+    ),
+    GeneralCylinderRefinementSpec(
+        name="Blade2+4Refinement",
+        center=(0.0, 0.0, 0.003),
+        axis=(0.0, 1.0, 0.0),
+        height=2.97,
+        inner_radius=0.0,
+        outer_radius=0.17,
+        spacing=CONFIG.blade_vortex_spacing,
     ),
 )
 
@@ -444,6 +478,27 @@ def _make_tip_wake_refinement(cfg: CaseSetup):
     )
 
 
+def _make_general_cylinder_refinements():
+    refinements = []
+    for spec in BLADE_VORTEX_REFINEMENTS:
+        cylinder = fl.Cylinder(
+            name=f"{spec.name}_volume",
+            center=spec.center * u.m,
+            axis=spec.axis,
+            height=spec.height * u.m,
+            inner_radius=spec.inner_radius * u.m,
+            outer_radius=spec.outer_radius * u.m,
+        )
+        refinements.append(
+            fl.UniformRefinement(
+                name=spec.name,
+                entities=[cylinder],
+                spacing=spec.spacing * u.m,
+            )
+        )
+    return refinements
+
+
 def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_mesher: bool):
     farfield = fl.AutomatedFarfield(
         name="farfield",
@@ -453,6 +508,7 @@ def _make_meshing_params(rotation_volume, geometry, cfg: CaseSetup, *, use_beta_
         *_make_surface_refinements(geometry, cfg),
         *_make_volume_cylinder_refinements(cfg),
         _make_tip_wake_refinement(cfg),
+        *_make_general_cylinder_refinements(),
     ]
     if not use_beta_mesher:
         refinements.extend(_make_surface_edge_refinements(geometry, cfg))
