@@ -21,7 +21,9 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
     "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
 )
 GENERATED_DIR = Path(__file__).resolve().parent / "generated"
-DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "DUC_EVE_4blade_surface_mesh.cgns"
+DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "sm-772abaad-de94-4b56-8f00-2b824aa60c1b_surfaceMesh.lb8.ugrid"
+DEFAULT_SURFACE_MESH_PROJECT_ID: str | None = "prj-5abc9402-fb03-46c9-8ea4-f0e6e8ef853f"
+DEFAULT_SURFACE_MESH_ID: str | None = "sm-772abaad-de94-4b56-8f00-2b824aa60c1b"
 
 
 @dataclass(frozen=True)
@@ -295,10 +297,14 @@ def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
 
 
 def _wall_entities(geometry) -> dict[str, list]:
-    return {
+    wall_entities = {
         wall_name: _entities_by_possible_names(geometry, possible_names)
         for wall_name, possible_names in FACE_GROUP_ALIASES.items()
     }
+    boundary_names = getattr(geometry, "boundary_names", None)
+    if boundary_names is not None and not any(wall_entities.values()):
+        return {"wall": [geometry[boundary_name] for boundary_name in boundary_names]}
+    return wall_entities
 
 
 def _edge_entities(geometry) -> dict[str, list]:
@@ -452,51 +458,22 @@ def _make_meshing_defaults(cfg: CaseSetup):
 
 def _make_volume_cylinder_refinements(cfg: CaseSetup):
     refinements = []
-    rotation_z_center = cfg.rotation_center[2]
-    rotation_z_min = rotation_z_center - 0.5 * cfg.rotation_volume_height
-    rotation_z_max = rotation_z_center + 0.5 * cfg.rotation_volume_height
-
     for spec in VOLUME_CYLINDER_REFINEMENTS:
-        cylinders = []
-        if spec.z_min < rotation_z_min:
-            z_min = spec.z_min
-            z_max = min(spec.z_max, rotation_z_min)
-            cylinders.append((f"{spec.name}_lower_volume", z_min, z_max, spec.inner_radius))
-
-        if spec.z_max > rotation_z_max:
-            z_min = max(spec.z_min, rotation_z_max)
-            z_max = spec.z_max
-            cylinders.append((f"{spec.name}_upper_volume", z_min, z_max, spec.inner_radius))
-
-        overlap_z_min = max(spec.z_min, rotation_z_min)
-        overlap_z_max = min(spec.z_max, rotation_z_max)
-        annulus_inner_radius = max(spec.inner_radius, cfg.rotation_volume_radius)
-        if overlap_z_min < overlap_z_max and annulus_inner_radius < spec.outer_radius:
-            cylinders.append(
-                (
-                    f"{spec.name}_rotation_boundary_annulus_volume",
-                    overlap_z_min,
-                    overlap_z_max,
-                    annulus_inner_radius,
-                )
+        cylinder = fl.Cylinder(
+            name=f"{spec.name}_volume",
+            center=(0.0, 0.0, spec.center_z) * u.m,
+            axis=cfg.rotation_axis,
+            height=(spec.z_max - spec.z_min) * u.m,
+            inner_radius=spec.inner_radius * u.m,
+            outer_radius=spec.outer_radius * u.m,
+        )
+        refinements.append(
+            fl.UniformRefinement(
+                name=f"{spec.name}_refinement",
+                entities=[cylinder],
+                spacing=spec.spacing * u.m,
             )
-
-        for cylinder_name, z_min, z_max, inner_radius in cylinders:
-            cylinder = fl.Cylinder(
-                name=cylinder_name,
-                center=(0.0, 0.0, 0.5 * (z_min + z_max)) * u.m,
-                axis=cfg.rotation_axis,
-                height=(z_max - z_min) * u.m,
-                inner_radius=inner_radius * u.m,
-                outer_radius=spec.outer_radius * u.m,
-            )
-            refinements.append(
-                fl.UniformRefinement(
-                    name=f"{cylinder_name.removesuffix('_volume')}_refinement",
-                    entities=[cylinder],
-                    spacing=spec.spacing * u.m,
-                )
-            )
+        )
     return refinements
 
 
@@ -800,47 +777,13 @@ def build_surface_mesh_params(project, cfg: CaseSetup = CONFIG):
         )
 
 
-def _download_surface_mesh(surface_mesh, surface_mesh_file: Path) -> Path:
-    surface_mesh_file = Path(surface_mesh_file)
-    surface_mesh_file.parent.mkdir(parents=True, exist_ok=True)
-    download_attempts = (
-        lambda: surface_mesh.download(file_name=str(surface_mesh_file)),
-        lambda: surface_mesh.download(path=str(surface_mesh_file)),
-        lambda: surface_mesh.download(str(surface_mesh_file)),
-        lambda: surface_mesh.download(destination=str(surface_mesh_file.parent)),
-    )
-    errors = []
-    for download in download_attempts:
-        try:
-            download()
-        except (AttributeError, TypeError) as error:
-            errors.append(str(error))
-            continue
-        if surface_mesh_file.exists():
-            return surface_mesh_file
-        matches = sorted(surface_mesh_file.parent.glob("*.cgns"))
-        if matches:
-            if matches[0] != surface_mesh_file:
-                matches[0].replace(surface_mesh_file)
-            return surface_mesh_file
-
-    raise RuntimeError(
-        "The surface mesh was generated, but this Flow360 Python API did not expose "
-        "a compatible surface_mesh.download(...) call. Download the generated surface "
-        f"mesh as CGNS manually to {surface_mesh_file}, or update _download_surface_mesh. "
-        f"Download errors: {errors}"
-    )
-
-
-def generate_legacy_surface_mesh(
+def _generate_legacy_surface_mesh_project(
     *,
     geometry_file: Path = GEOMETRY_FILE,
-    surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     bypass_length_scale_warning: bool = True,
-) -> str:
-    surface_mesh_file = Path(surface_mesh_file)
+):
     project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher=False)
     params = build_surface_mesh_params(project, cfg)
 
@@ -860,16 +803,64 @@ def generate_legacy_surface_mesh(
             raise_on_error=True,
         )
 
-    _download_surface_mesh(project.surface_mesh, surface_mesh_file)
-    return project.surface_mesh.id
+    return project, project.surface_mesh
 
 
-def _make_project_from_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flow360_folder):
+def generate_legacy_surface_mesh(
+    *,
+    geometry_file: Path = GEOMETRY_FILE,
+    cfg: CaseSetup = CONFIG,
+    flow360_folder=None,
+    bypass_length_scale_warning: bool = True,
+) -> str:
+    _, surface_mesh = _generate_legacy_surface_mesh_project(
+        geometry_file=geometry_file,
+        cfg=cfg,
+        flow360_folder=flow360_folder,
+        bypass_length_scale_warning=bypass_length_scale_warning,
+    )
+    return surface_mesh.id
+
+
+def generate_legacy_surface_mesh_source(
+    *,
+    geometry_file: Path = GEOMETRY_FILE,
+    cfg: CaseSetup = CONFIG,
+    flow360_folder=None,
+    bypass_length_scale_warning: bool = True,
+) -> tuple[str, str]:
+    project, surface_mesh = _generate_legacy_surface_mesh_project(
+        geometry_file=geometry_file,
+        cfg=cfg,
+        flow360_folder=flow360_folder,
+        bypass_length_scale_warning=bypass_length_scale_warning,
+    )
+    return project.id, surface_mesh.id
+
+
+def _mapbc_file_for_ugrid(surface_mesh_file: Path) -> Path | None:
+    file_name = surface_mesh_file.name
+    if file_name.endswith(".lb8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + ".mapbc")
+    if file_name.endswith(".ugrid"):
+        return surface_mesh_file.with_suffix(".mapbc")
+    return None
+
+
+def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flow360_folder):
     surface_mesh_file = Path(surface_mesh_file)
     if not surface_mesh_file.exists():
         raise FileNotFoundError(
             f"Could not find reusable surface mesh file: {surface_mesh_file}. "
-            "Run generate_legacy_surface_mesh(...) first, or provide an existing CGNS/UGRID surface mesh."
+            "Provide an existing CGNS/UGRID surface mesh at this path."
+        )
+
+    mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
+    if mapbc_file is not None and not mapbc_file.exists():
+        raise FileNotFoundError(
+            f"Could not find matching MAPBC file for UGRID surface mesh: {mapbc_file}. "
+            "Flow360 requires the MAPBC file in the same directory with the same prefix "
+            "to preserve boundary names."
         )
 
     return fl.Project.from_surface_mesh(
@@ -881,9 +872,20 @@ def _make_project_from_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flo
     )
 
 
+def _make_project_from_cloud_surface_mesh(
+    surface_mesh_project_id: str,
+    surface_mesh_id: str,
+):
+    source_project = fl.Project.from_cloud(surface_mesh_project_id)
+    surface_mesh = source_project.get_surface_mesh(asset_id=surface_mesh_id)
+    return fl.Project.from_cloud(source_project.id, new_run_from=surface_mesh)
+
+
 def define_and_run_from_surface_mesh(
     *,
     surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
+    surface_mesh_project_id: str | None = DEFAULT_SURFACE_MESH_PROJECT_ID,
+    surface_mesh_id: str | None = DEFAULT_SURFACE_MESH_ID,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
@@ -892,8 +894,13 @@ def define_and_run_from_surface_mesh(
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
-    surface_mesh_file = Path(surface_mesh_file)
-    project = _make_project_from_surface_mesh(surface_mesh_file, cfg, flow360_folder)
+    if surface_mesh_project_id is not None:
+        if surface_mesh_id is None:
+            raise ValueError("surface_mesh_id must be provided with surface_mesh_project_id.")
+        project = _make_project_from_cloud_surface_mesh(surface_mesh_project_id, surface_mesh_id)
+    else:
+        surface_mesh_file = Path(surface_mesh_file)
+        project = _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
     params = build_params(project, cfg, use_beta_mesher=True, use_surface_mesh=True)
 
     warning_context = (
@@ -955,28 +962,31 @@ def define_and_run(
     *,
     geometry_file: Path = GEOMETRY_FILE,
     surface_mesh_file: Path | None = None,
+    surface_mesh_project_id: str | None = DEFAULT_SURFACE_MESH_PROJECT_ID,
+    surface_mesh_id: str | None = DEFAULT_SURFACE_MESH_ID,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
-    generate_surface_mesh: bool = True,
-    generate_volume_mesh: bool = False,
+    generate_surface_mesh: bool = False,
+    generate_volume_mesh: bool = True,
     run_case: bool = False,
     use_beta_mesher: bool = True,
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
-    if surface_mesh_file is not None or generate_surface_mesh:
+    if surface_mesh_project_id is not None or surface_mesh_file is not None or generate_surface_mesh:
         reusable_surface_mesh_file = Path(surface_mesh_file or DEFAULT_SURFACE_MESH_FILE)
         if generate_surface_mesh:
-            generate_legacy_surface_mesh(
+            surface_mesh_project_id, surface_mesh_id = generate_legacy_surface_mesh_source(
                 geometry_file=geometry_file,
-                surface_mesh_file=reusable_surface_mesh_file,
                 cfg=cfg,
                 flow360_folder=flow360_folder,
                 bypass_length_scale_warning=bypass_length_scale_warning,
             )
         return define_and_run_from_surface_mesh(
             surface_mesh_file=reusable_surface_mesh_file,
+            surface_mesh_project_id=surface_mesh_project_id,
+            surface_mesh_id=surface_mesh_id,
             cfg=cfg,
             flow360_folder=flow360_folder,
             submit_draft_only=submit_draft_only,
@@ -1058,8 +1068,10 @@ def define_and_run(
 
 def main():
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
-    generate_surface_mesh = not surface_mesh_file.exists()
-    generate_volume_mesh = False
+    surface_mesh_project_id = DEFAULT_SURFACE_MESH_PROJECT_ID
+    surface_mesh_id = DEFAULT_SURFACE_MESH_ID
+    generate_surface_mesh = surface_mesh_project_id is None and not surface_mesh_file.exists()
+    generate_volume_mesh = True
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
@@ -1067,6 +1079,8 @@ def main():
     project_id = define_and_run(
         flow360_folder=folder,
         surface_mesh_file=surface_mesh_file,
+        surface_mesh_project_id=surface_mesh_project_id,
+        surface_mesh_id=surface_mesh_id,
         submit_draft_only=True,
         generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
