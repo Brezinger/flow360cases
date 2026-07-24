@@ -22,8 +22,8 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
 )
 GENERATED_DIR = Path(__file__).resolve().parent / "generated"
 DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "sm-772abaad-de94-4b56-8f00-2b824aa60c1b_surfaceMesh.lb8.ugrid"
-DEFAULT_SURFACE_MESH_PROJECT_ID: str | None = "prj-5abc9402-fb03-46c9-8ea4-f0e6e8ef853f"
-DEFAULT_SURFACE_MESH_ID: str | None = "sm-772abaad-de94-4b56-8f00-2b824aa60c1b"
+DEFAULT_SURFACE_MESH_PROJECT_ID: str | None = "prj-d5491e5f-4ab7-4ce9-bc1f-4cedbe7340a3"
+DEFAULT_SURFACE_MESH_ID: str | None = "sm-9fed737d-adc9-4872-b80b-5204436b99a0"
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class CaseSetup:
     farfield_relative_size: float = 107
     surface_max_edge_length: float = 0.00866
     curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 3.3e-5 * 2
+    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5
     boundary_layer_growth_rate: float = 1.16
     surface_edge_growth_rate: float = 1.12
     blade_inner_max_edge_length: float = 8.66e-3
