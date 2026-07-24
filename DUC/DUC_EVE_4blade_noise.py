@@ -10,6 +10,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import flow360 as fl
 from flow360 import u
 from flow360.component.simulation.folder import ROOT_FOLDER
@@ -24,17 +25,16 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
     "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
 )
 LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_assets"
-DEFAULT_SURFACE_MESH_FILE = None
-#(
-#    LEGACY_SURFACE_MESH_ASSETS_DIR
-#    / "sm-022a0bc0-e2c6-4716-b50b-efa32dc37f09_surfaceMesh.lb8.ugrid"
-#)
-DEFAULT_SURFACE_MESH_LOG_FILE = None
-#(
-#    LEGACY_SURFACE_MESH_ASSETS_DIR
-#    / "sm-022a0bc0-e2c6-4716-b50b-efa32dc37f09_logs_flow360_surface_mesh.user.log"
-#)
+DEFAULT_SURFACE_MESH_FILE = (
+    LEGACY_SURFACE_MESH_ASSETS_DIR
+    / "sm-ab0c68d1-f434-4ab4-839d-84573ec6df80_surfaceMesh.lb8.ugrid"
+)
+DEFAULT_SURFACE_MESH_LOG_FILE = (
+    LEGACY_SURFACE_MESH_ASSETS_DIR
+    / "sm-ab0c68d1-f434-4ab4-839d-84573ec6df80_logs_flow360_surface_mesh.user.log"
+)
 MAPBC_WALL_BC_CODE = 4000
+UGRID_WELD_TOLERANCE = 1.0e-7
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,6 @@ class CaseSetup:
     hub_max_edge_length: float = 4.4e-3
     blade_main_max_edge_length: float = 2.65e-3
     blade_te_max_edge_length: float = 1.25e-3
-    trailing_edge_length: float = 8.93e-4
     trailing_edge_normal_spacing: float = 8.9e-5
     hub_edge_spacing: float = 0.87e-3
     tip_wake_inner_radius: float = 1.1
@@ -232,6 +231,23 @@ FACE_GROUP_ALIASES = {
     "bladeTE": _blade_group_names("TE"),
 }
 
+CAD_WALL_GROUP_ALIASES = {
+    "hub": ["hub"],
+    **{
+        f"blade{blade_id}": [
+            f"blade{blade_id}Inner",
+            f"blade{blade_id}main",
+            f"blade{blade_id}TE",
+        ]
+        for blade_id in BLADE_IDS
+    },
+}
+
+SURFACE_MESH_WALL_PREFIXES = {
+    "hub": ["hub_"],
+    **{f"blade{blade_id}": [f"blade{blade_id}"] for blade_id in BLADE_IDS},
+}
+
 EDGE_GROUP_ALIASES = {
     "leading_edge": [
         "leadingEdges",
@@ -342,18 +358,36 @@ def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
 
 
 def _wall_entities(geometry) -> dict[str, list]:
-    wall_entities = {
+    boundary_names = getattr(geometry, "boundary_names", None)
+    if boundary_names is not None:
+        return {
+            wall_name: [
+                geometry[boundary_name]
+                for boundary_name in boundary_names
+                if any(boundary_name.startswith(prefix) for prefix in prefixes)
+            ]
+            for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
+        }
+
+    return {
         wall_name: _entities_by_possible_names(
             geometry,
             possible_names,
             entity_type_name="Surface",
         )
-        for wall_name, possible_names in FACE_GROUP_ALIASES.items()
+        for wall_name, possible_names in CAD_WALL_GROUP_ALIASES.items()
     }
-    boundary_names = getattr(geometry, "boundary_names", None)
-    if boundary_names is not None and not any(wall_entities.values()):
-        return {"wall": [geometry[boundary_name] for boundary_name in boundary_names]}
-    return wall_entities
+
+
+def _surface_refinement_entities(geometry) -> dict[str, list]:
+    return {
+        zone_name: _entities_by_possible_names(
+            geometry,
+            possible_names,
+            entity_type_name="Surface",
+        )
+        for zone_name, possible_names in FACE_GROUP_ALIASES.items()
+    }
 
 
 def _edge_entities(geometry) -> dict[str, list]:
@@ -475,7 +509,7 @@ def _make_surface_edge_refinements(geometry, cfg: CaseSetup):
 
 def _make_surface_refinements(geometry, cfg: CaseSetup):
     geometry.group_faces_by_tag("faceName")
-    face_entities = _wall_entities(geometry)
+    face_entities = _surface_refinement_entities(geometry)
     missing = [name for name, entities in face_entities.items() if not entities]
     if missing:
         raise ValueError(
@@ -873,6 +907,262 @@ def _ugrid_endianness(surface_mesh_file: Path) -> str:
     )
 
 
+def _is_binary_ugrid(surface_mesh_file: Path) -> bool:
+    file_name = surface_mesh_file.name
+    return file_name.endswith(".lb8.ugrid") or file_name.endswith(".b8.ugrid")
+
+
+def _welded_ugrid_file_for(surface_mesh_file: Path) -> Path:
+    file_name = surface_mesh_file.name
+    if file_name.endswith(".lb8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + "_welded.lb8.ugrid")
+    if file_name.endswith(".b8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".b8.ugrid") + "_welded.b8.ugrid")
+    raise ValueError(f"Cannot create welded file name for non-binary UGRID: {surface_mesh_file}")
+
+
+def _read_surface_ugrid(surface_mesh_file: Path):
+    endian = _ugrid_endianness(surface_mesh_file)
+    int_dtype = np.dtype(endian + "i4")
+    float_dtype = np.dtype(endian + "f8")
+    with surface_mesh_file.open("rb") as file:
+        header = np.fromfile(file, dtype=int_dtype, count=7)
+        if header.size != 7:
+            raise ValueError(f"Could not read UGRID header from {surface_mesh_file}")
+        n_nodes, n_tris, n_quads, n_tets, n_pyrs, n_prisms, n_hexes = header.tolist()
+        if any(count < 0 for count in header):
+            raise ValueError(f"Invalid UGRID header in {surface_mesh_file}: {tuple(header.tolist())}")
+        if n_tets or n_pyrs or n_prisms or n_hexes:
+            raise ValueError(
+                f"Expected a surface-only UGRID, but {surface_mesh_file} contains volume cells: "
+                f"tets={n_tets}, pyramids={n_pyrs}, prisms={n_prisms}, hexes={n_hexes}"
+            )
+
+        coords = np.fromfile(file, dtype=float_dtype, count=n_nodes * 3).reshape((n_nodes, 3))
+        tris = np.fromfile(file, dtype=int_dtype, count=n_tris * 3).reshape((n_tris, 3))
+        quads = np.fromfile(file, dtype=int_dtype, count=n_quads * 4).reshape((n_quads, 4))
+        tri_ids = np.fromfile(file, dtype=int_dtype, count=n_tris)
+        quad_ids = np.fromfile(file, dtype=int_dtype, count=n_quads)
+
+    return endian, coords, tris, quads, tri_ids, quad_ids
+
+
+def _write_surface_ugrid(
+    surface_mesh_file: Path,
+    endian: str,
+    coords: np.ndarray,
+    tris: np.ndarray,
+    quads: np.ndarray,
+    tri_ids: np.ndarray,
+    quad_ids: np.ndarray,
+) -> None:
+    int_dtype = np.dtype(endian + "i4")
+    float_dtype = np.dtype(endian + "f8")
+    header = np.array([len(coords), len(tris), len(quads), 0, 0, 0, 0], dtype=int_dtype)
+    with surface_mesh_file.open("wb") as file:
+        header.tofile(file)
+        coords.astype(float_dtype, copy=False).tofile(file)
+        tris.astype(int_dtype, copy=False).tofile(file)
+        quads.astype(int_dtype, copy=False).tofile(file)
+        tri_ids.astype(int_dtype, copy=False).tofile(file)
+        quad_ids.astype(int_dtype, copy=False).tofile(file)
+
+
+def _surface_edge_multiplicity_counts(tris: np.ndarray, quads: np.ndarray) -> Counter[int]:
+    edge_blocks = []
+    if len(tris):
+        edge_blocks.extend(
+            [
+                tris[:, [0, 1]],
+                tris[:, [1, 2]],
+                tris[:, [2, 0]],
+            ]
+        )
+    if len(quads):
+        edge_blocks.extend(
+            [
+                quads[:, [0, 1]],
+                quads[:, [1, 2]],
+                quads[:, [2, 3]],
+                quads[:, [3, 0]],
+            ]
+        )
+    if not edge_blocks:
+        return Counter()
+
+    edges = np.sort(np.vstack(edge_blocks), axis=1)
+    _, edge_counts = np.unique(edges, axis=0, return_counts=True)
+    return Counter(int(count) for count in edge_counts)
+
+
+def _parse_csm_face_name_tags(csm_file: Path = GEOMETRY_CSM_FILE) -> dict[int, str]:
+    set_pattern = re.compile(r'^\s*set\s+(\w+)\s+"([^"]+)"')
+    patbeg_pattern = re.compile(r"^\s*patbeg\s+\w+\s+(\w+)\.size")
+    face_name_pattern = re.compile(r"^\s*attribute\s+faceName\s+\$(\w+)")
+    face_sets: dict[str, list[int]] = {}
+    face_name_by_face_id: dict[int, str] = {}
+    active_set_name: str | None = None
+
+    for line in csm_file.read_text(encoding="utf-8").splitlines():
+        set_match = set_pattern.match(line)
+        if set_match:
+            face_sets[set_match.group(1)] = [
+                int(value.strip())
+                for value in set_match.group(2).split(";")
+                if value.strip()
+            ]
+            continue
+
+        patbeg_match = patbeg_pattern.match(line)
+        if patbeg_match:
+            active_set_name = patbeg_match.group(1)
+            continue
+
+        face_name_match = face_name_pattern.match(line)
+        if face_name_match and active_set_name is not None:
+            for face_id in face_sets.get(active_set_name, []):
+                existing_name = face_name_by_face_id.get(face_id)
+                face_name = face_name_match.group(1)
+                if existing_name is not None and existing_name != face_name:
+                    raise ValueError(
+                        f"Face {face_id} has multiple CSM faceName tags: "
+                        f"{existing_name!r} and {face_name!r}"
+                    )
+                face_name_by_face_id[face_id] = face_name
+            continue
+
+        if line.strip() == "patend":
+            active_set_name = None
+
+    if not face_name_by_face_id:
+        raise ValueError(f"Could not find faceName groups in CSM file: {csm_file}")
+    return face_name_by_face_id
+
+
+def _mapbc_group_name(original_name: str, face_name_by_face_id: dict[int, str]) -> str:
+    face_match = re.fullmatch(r"body\d+_face0*(\d+)", original_name)
+    if face_match is None:
+        return original_name
+    face_id = int(face_match.group(1))
+    group_name = face_name_by_face_id.get(face_id)
+    if group_name is None:
+        return original_name
+    return f"{group_name}_face{face_id:05d}"
+
+
+def write_grouped_mapbc(
+    source_mapbc_file: Path,
+    target_mapbc_file: Path,
+    *,
+    csm_file: Path = GEOMETRY_CSM_FILE,
+) -> Path:
+    face_name_by_face_id = _parse_csm_face_name_tags(csm_file)
+    lines = source_mapbc_file.read_text(encoding="ascii").splitlines()
+    if not lines:
+        raise ValueError(f"MAPBC file is empty: {source_mapbc_file}")
+
+    grouped_lines = [lines[0]]
+    unmapped_body_faces = []
+    for line in lines[1:]:
+        parts = line.split()
+        if len(parts) < 3:
+            raise ValueError(f"Invalid MAPBC row in {source_mapbc_file}: {line!r}")
+        patch_id, bc_code, original_name = parts[:3]
+        grouped_name = _mapbc_group_name(original_name, face_name_by_face_id)
+        if grouped_name == original_name and re.fullmatch(r"body\d+_face0*(\d+)", original_name):
+            unmapped_body_faces.append(original_name)
+        grouped_lines.append(f"{patch_id} {bc_code} {grouped_name}")
+
+    if unmapped_body_faces:
+        raise ValueError(
+            f"Could not map {len(unmapped_body_faces)} MAPBC body faces through {csm_file}: "
+            f"{unmapped_body_faces[:10]}"
+        )
+
+    target_mapbc_file.write_text("\n".join(grouped_lines) + "\n", encoding="ascii", newline="\n")
+    return target_mapbc_file
+
+
+def _copy_mapbc_for_welded_ugrid(source_ugrid_file: Path, welded_ugrid_file: Path) -> None:
+    source_mapbc = _mapbc_file_for_ugrid(source_ugrid_file)
+    welded_mapbc = _mapbc_file_for_ugrid(welded_ugrid_file)
+    if source_mapbc is None or welded_mapbc is None:
+        return
+    if not source_mapbc.exists():
+        _ensure_mapbc_for_ugrid(source_ugrid_file)
+    write_grouped_mapbc(source_mapbc, welded_mapbc)
+
+
+def _drop_degenerate_faces(connectivity: np.ndarray, boundary_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
+    if not len(connectivity):
+        return connectivity, boundary_ids, 0
+    unique_vertex_count = np.apply_along_axis(lambda row: len(set(row.tolist())), 1, connectivity)
+    keep = unique_vertex_count == connectivity.shape[1]
+    return connectivity[keep], boundary_ids[keep], int((~keep).sum())
+
+
+def weld_ugrid_surface_mesh(
+    surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
+    *,
+    tolerance: float = UGRID_WELD_TOLERANCE,
+    force: bool = False,
+) -> Path:
+    surface_mesh_file = Path(surface_mesh_file)
+    if not _is_binary_ugrid(surface_mesh_file):
+        return surface_mesh_file
+
+    welded_file = _welded_ugrid_file_for(surface_mesh_file)
+    if (
+        welded_file.exists()
+        and not force
+        and welded_file.stat().st_mtime >= surface_mesh_file.stat().st_mtime
+    ):
+        _copy_mapbc_for_welded_ugrid(surface_mesh_file, welded_file)
+        return welded_file
+
+    _ensure_mapbc_for_ugrid(surface_mesh_file)
+    endian, coords, tris, quads, tri_ids, quad_ids = _read_surface_ugrid(surface_mesh_file)
+    original_edge_counts = _surface_edge_multiplicity_counts(tris, quads)
+
+    coordinate_keys = np.round(coords / tolerance).astype(np.int64)
+    _, unique_indices, inverse = np.unique(
+        coordinate_keys,
+        axis=0,
+        return_index=True,
+        return_inverse=True,
+    )
+    welded_coords = coords[unique_indices]
+    welded_tris = (inverse[tris - 1] + 1).astype(np.int32, copy=False)
+    welded_quads = (inverse[quads - 1] + 1).astype(np.int32, copy=False)
+    welded_tris, welded_tri_ids, dropped_tris = _drop_degenerate_faces(welded_tris, tri_ids)
+    welded_quads, welded_quad_ids, dropped_quads = _drop_degenerate_faces(welded_quads, quad_ids)
+    welded_edge_counts = _surface_edge_multiplicity_counts(welded_tris, welded_quads)
+
+    _write_surface_ugrid(
+        welded_file,
+        endian,
+        welded_coords,
+        welded_tris,
+        welded_quads,
+        welded_tri_ids,
+        welded_quad_ids,
+    )
+
+    _copy_mapbc_for_welded_ugrid(surface_mesh_file, welded_file)
+
+    print(
+        f"Wrote welded UGRID {welded_file}: "
+        f"nodes {len(coords)} -> {len(welded_coords)}, "
+        f"triangles {len(tris)} -> {len(welded_tris)}, "
+        f"quads {len(quads)} -> {len(welded_quads)}, "
+        f"dropped degenerate faces={dropped_tris + dropped_quads}, "
+        f"open edges {original_edge_counts.get(1, 0)} -> {welded_edge_counts.get(1, 0)}, "
+        f"non-manifold edges after welding="
+        f"{sum(count for multiplicity, count in welded_edge_counts.items() if multiplicity != 2)}."
+    )
+    return welded_file
+
+
 def _read_ugrid_boundary_id_counts(surface_mesh_file: Path) -> tuple[tuple[int, ...], Counter[int]]:
     endian = _ugrid_endianness(surface_mesh_file)
     with surface_mesh_file.open("rb") as file:
@@ -955,6 +1245,7 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
             "Provide an existing CGNS/UGRID surface mesh at this path."
         )
 
+    surface_mesh_file = weld_ugrid_surface_mesh(surface_mesh_file)
     _ensure_mapbc_for_ugrid(surface_mesh_file)
     mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
     if mapbc_file is not None and not mapbc_file.exists():
@@ -1129,7 +1420,8 @@ def define_and_run(
 
 def main():
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
-    generate_volume_mesh = False
+    use_beta_mesher = True
+    generate_volume_mesh = True
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
@@ -1140,6 +1432,7 @@ def main():
         submit_draft_only=True,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
+        use_beta_mesher=use_beta_mesher,
         bypass_length_scale_warning=True,
     )
     print(f"Project or draft id: {project_id}")

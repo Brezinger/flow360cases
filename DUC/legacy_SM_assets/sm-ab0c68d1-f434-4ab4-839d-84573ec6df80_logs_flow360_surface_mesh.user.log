@@ -1,0 +1,467 @@
+[26-07-24 13:40:03.348][USER   ]: {
+[26-07-24 13:40:03.348][USER   ]:     "success": true
+[26-07-24 13:40:03.348][USER   ]: }
+[26-07-24 13:40:03.348][USER   ]: Surface Mesher input file is valid.
+[26-07-24 13:40:09][USER   ]: Running getSurfaceMeshBaseline
+[26-07-24 13:40:09][USER   ]: config filename: config.json
+[26-07-24 13:40:09][USER   ]: input  filename: EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.egads.egads
+[26-07-24 13:40:09][USER   ]: running importGeometry
+[26-07-24 13:40:17][USER   ]: running check geometry model types
+[26-07-24 13:40:17][USER   ]: running check geometry model dependents
+[26-07-24 13:40:17][USER   ]:   running autoSurfMesh
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00043
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00062
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00063
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00064
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00065
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00010
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00029
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00030
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00031
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00032
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00041
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00058
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00059
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00060
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00061
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00012
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00025
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00026
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00027
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00028
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00001
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00011
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00033
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00034
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00042
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00066
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00046
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00049
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00007
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00008
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00038
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00039
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00015
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00018
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00044
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00045
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00047
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00048
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00050
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00051
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00054
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00055
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00002
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00003
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00004
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00005
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00006
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00009
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00021
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00022
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00035
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00036
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00037
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00040
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00052
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00053
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00056
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00057
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00013
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00014
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00016
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00017
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00019
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00020
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00023
+[26-07-24 13:40:17][USER   ]: setting local refinement for body00001_face00024
+[26-07-24 13:41:45][USER   ]: running getSurfaceMeshRefined
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running getFaceFromSurfaceMesh
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = hub, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade3TE, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade1TE, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade2TE, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade4TE, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade3main, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade3Inner, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade1main, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade1Inner, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade2Inner, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade2main, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade4Inner, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running setCAECondition, boundary = blade4main, type = Unspecified
+[26-07-24 13:41:46][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:47][USER   ]:   running groupCreateOrAppend
+[26-07-24 13:41:47][USER   ]:   applying edge refinement
+[26-07-24 13:41:47][USER   ]:   running setSurfaceMeshAttribute
+[26-07-24 13:41:47][USER   ]:   running reinitializeSurfaceMeshes
+[26-07-24 13:42:34][USER   ]: running exportSTL
+[26-07-24 13:42:36][USER   ]: running exportSTL
+[26-07-24 13:42:37][USER   ]: running exportSTL
+[26-07-24 13:42:38][USER   ]: running exportSTL
+[26-07-24 13:42:38][USER   ]: running exportDAT
+[26-07-24 13:42:38][USER   ]: running exportJson
+[26-07-24 13:42:41.038][USER   ]: Started reading stl file in binary format: surfaceAll.stl
+[26-07-24 13:42:42.338][USER   ]: Finished reading stl file. (1028223 Points - 2056442 Triangles)
+[26-07-24 13:42:46.812][USER   ]: Started concatenation of meshes
+[26-07-24 13:42:46.813][USER   ]: Started reading stl file in binary format: ./surface1.stl
+[26-07-24 13:42:46.815][USER   ]: Finished reading stl file. (3531 Points - 6735 Triangles)
+[26-07-24 13:42:46.815][USER   ]: Started reading stl file in binary format: ./surface2.stl
+[26-07-24 13:42:46.818][USER   ]: Finished reading stl file. (4402 Points - 8404 Triangles)
+[26-07-24 13:42:46.818][USER   ]: Started reading stl file in binary format: ./surface3.stl
+[26-07-24 13:42:46.818][USER   ]: Finished reading stl file. (849 Points - 1556 Triangles)
+[26-07-24 13:42:46.818][USER   ]: Started reading stl file in binary format: ./surface4.stl
+[26-07-24 13:42:46.821][USER   ]: Finished reading stl file. (4403 Points - 8406 Triangles)
+[26-07-24 13:42:46.821][USER   ]: Started reading stl file in binary format: ./surface5.stl
+[26-07-24 13:42:46.822][USER   ]: Finished reading stl file. (849 Points - 1556 Triangles)
+[26-07-24 13:42:46.822][USER   ]: Started reading stl file in binary format: ./surface6.stl
+[26-07-24 13:42:46.825][USER   ]: Finished reading stl file. (4456 Points - 8662 Triangles)
+[26-07-24 13:42:46.825][USER   ]: Started reading stl file in binary format: ./surface7.stl
+[26-07-24 13:42:46.827][USER   ]: Finished reading stl file. (4381 Points - 8371 Triangles)
+[26-07-24 13:42:46.827][USER   ]: Started reading stl file in binary format: ./surface8.stl
+[26-07-24 13:42:46.828][USER   ]: Finished reading stl file. (704 Points - 1273 Triangles)
+[26-07-24 13:42:46.828][USER   ]: Started reading stl file in binary format: ./surface9.stl
+[26-07-24 13:42:46.830][USER   ]: Finished reading stl file. (4550 Points - 8696 Triangles)
+[26-07-24 13:42:46.830][USER   ]: Started reading stl file in binary format: ./surface10.stl
+[26-07-24 13:42:46.831][USER   ]: Finished reading stl file. (735 Points - 1323 Triangles)
+[26-07-24 13:42:46.831][USER   ]: Started reading stl file in binary format: ./surface11.stl
+[26-07-24 13:42:46.833][USER   ]: Finished reading stl file. (3930 Points - 7645 Triangles)
+[26-07-24 13:42:46.834][USER   ]: Started reading stl file in binary format: ./surface12.stl
+[26-07-24 13:42:46.840][USER   ]: Finished reading stl file. (16948 Points - 30786 Triangles)
+[26-07-24 13:42:46.841][USER   ]: Started reading stl file in binary format: ./surface13.stl
+[26-07-24 13:42:46.841][USER   ]: Finished reading stl file. (786 Points - 1423 Triangles)
+[26-07-24 13:42:46.841][USER   ]: Started reading stl file in binary format: ./surface14.stl
+[26-07-24 13:42:46.844][USER   ]: Finished reading stl file. (4558 Points - 8711 Triangles)
+[26-07-24 13:42:46.844][USER   ]: Started reading stl file in binary format: ./surface15.stl
+[26-07-24 13:42:46.845][USER   ]: Finished reading stl file. (1228 Points - 2319 Triangles)
+[26-07-24 13:42:46.845][USER   ]: Started reading stl file in binary format: ./surface16.stl
+[26-07-24 13:42:46.877][USER   ]: Finished reading stl file. (48207 Points - 93726 Triangles)
+[26-07-24 13:42:46.878][USER   ]: Started reading stl file in binary format: ./surface17.stl
+[26-07-24 13:42:46.936][USER   ]: Finished reading stl file. (58244 Points - 115005 Triangles)
+[26-07-24 13:42:46.937][USER   ]: Started reading stl file in binary format: ./surface18.stl
+[26-07-24 13:42:46.942][USER   ]: Finished reading stl file. (7275 Points - 13975 Triangles)
+[26-07-24 13:42:46.942][USER   ]: Started reading stl file in binary format: ./surface19.stl
+[26-07-24 13:42:46.948][USER   ]: Finished reading stl file. (16948 Points - 30786 Triangles)
+[26-07-24 13:42:46.949][USER   ]: Started reading stl file in binary format: ./surface20.stl
+[26-07-24 13:42:46.949][USER   ]: Finished reading stl file. (790 Points - 1431 Triangles)
+[26-07-24 13:42:46.949][USER   ]: Started reading stl file in binary format: ./surface21.stl
+[26-07-24 13:42:46.952][USER   ]: Finished reading stl file. (4553 Points - 8701 Triangles)
+[26-07-24 13:42:46.952][USER   ]: Started reading stl file in binary format: ./surface22.stl
+[26-07-24 13:42:46.953][USER   ]: Finished reading stl file. (1217 Points - 2297 Triangles)
+[26-07-24 13:42:46.953][USER   ]: Started reading stl file in binary format: ./surface23.stl
+[26-07-24 13:42:46.984][USER   ]: Finished reading stl file. (48224 Points - 93760 Triangles)
+[26-07-24 13:42:46.985][USER   ]: Started reading stl file in binary format: ./surface24.stl
+[26-07-24 13:42:47.042][USER   ]: Finished reading stl file. (58188 Points - 114893 Triangles)
+[26-07-24 13:42:47.043][USER   ]: Started reading stl file in binary format: ./surface25.stl
+[26-07-24 13:42:47.048][USER   ]: Finished reading stl file. (7138 Points - 13700 Triangles)
+[26-07-24 13:42:47.048][USER   ]: Started reading stl file in binary format: ./surface26.stl
+[26-07-24 13:42:47.085][USER   ]: Finished reading stl file. (46521 Points - 90335 Triangles)
+[26-07-24 13:42:47.086][USER   ]: Started reading stl file in binary format: ./surface27.stl
+[26-07-24 13:42:47.087][USER   ]: Finished reading stl file. (1463 Points - 2777 Triangles)
+[26-07-24 13:42:47.087][USER   ]: Started reading stl file in binary format: ./surface28.stl
+[26-07-24 13:42:47.090][USER   ]: Finished reading stl file. (4389 Points - 8384 Triangles)
+[26-07-24 13:42:47.090][USER   ]: Started reading stl file in binary format: ./surface29.stl
+[26-07-24 13:42:47.090][USER   ]: Finished reading stl file. (789 Points - 1446 Triangles)
+[26-07-24 13:42:47.090][USER   ]: Started reading stl file in binary format: ./surface30.stl
+[26-07-24 13:42:47.096][USER   ]: Finished reading stl file. (16175 Points - 29241 Triangles)
+[26-07-24 13:42:47.096][USER   ]: Started reading stl file in binary format: ./surface31.stl
+[26-07-24 13:42:47.101][USER   ]: Finished reading stl file. (6689 Points - 12865 Triangles)
+[26-07-24 13:42:47.101][USER   ]: Started reading stl file in binary format: ./surface32.stl
+[26-07-24 13:42:47.155][USER   ]: Finished reading stl file. (57806 Points - 114128 Triangles)
+[26-07-24 13:42:47.156][USER   ]: Started reading stl file in binary format: ./surface33.stl
+[26-07-24 13:42:47.157][USER   ]: Finished reading stl file. (1203 Points - 2271 Triangles)
+[26-07-24 13:42:47.157][USER   ]: Started reading stl file in binary format: ./surface34.stl
+[26-07-24 13:42:47.160][USER   ]: Finished reading stl file. (4364 Points - 8331 Triangles)
+[26-07-24 13:42:47.160][USER   ]: Started reading stl file in binary format: ./surface35.stl
+[26-07-24 13:42:47.160][USER   ]: Finished reading stl file. (751 Points - 1363 Triangles)
+[26-07-24 13:42:47.160][USER   ]: Started reading stl file in binary format: ./surface36.stl
+[26-07-24 13:42:47.197][USER   ]: Finished reading stl file. (46289 Points - 89887 Triangles)
+[26-07-24 13:42:47.199][USER   ]: Started reading stl file in binary format: ./surface37.stl
+[26-07-24 13:42:47.206][USER   ]: Finished reading stl file. (16943 Points - 30776 Triangles)
+[26-07-24 13:42:47.206][USER   ]: Started reading stl file in binary format: ./surface38.stl
+[26-07-24 13:42:47.210][USER   ]: Finished reading stl file. (6666 Points - 12821 Triangles)
+[26-07-24 13:42:47.210][USER   ]: Started reading stl file in binary format: ./surface39.stl
+[26-07-24 13:42:47.265][USER   ]: Finished reading stl file. (57740 Points - 113994 Triangles)
+[26-07-24 13:42:47.270][USER   ]: Started reading stl file in binary format: ./surface40.stl
+[26-07-24 13:42:47.272][USER   ]: Finished reading stl file. (2305 Points - 4350 Triangles)
+[26-07-24 13:42:47.272][USER   ]: Started reading stl file in binary format: ./surface41.stl
+[26-07-24 13:42:47.307][USER   ]: Finished reading stl file. (46399 Points - 90101 Triangles)
+[26-07-24 13:42:47.308][USER   ]: Started reading stl file in binary format: ./surface42.stl
+[26-07-24 13:42:47.365][USER   ]: Finished reading stl file. (57855 Points - 114218 Triangles)
+[26-07-24 13:42:47.366][USER   ]: Started reading stl file in binary format: ./surface43.stl
+[26-07-24 13:42:47.366][USER   ]: Finished reading stl file. (195 Points - 312 Triangles)
+[26-07-24 13:42:47.366][USER   ]: Started reading stl file in binary format: ./surface44.stl
+[26-07-24 13:42:47.368][USER   ]: Finished reading stl file. (3101 Points - 5881 Triangles)
+[26-07-24 13:42:47.368][USER   ]: Started reading stl file in binary format: ./surface45.stl
+[26-07-24 13:42:47.370][USER   ]: Finished reading stl file. (2344 Points - 4422 Triangles)
+[26-07-24 13:42:47.370][USER   ]: Started reading stl file in binary format: ./surface46.stl
+[26-07-24 13:42:47.473][USER   ]: Finished reading stl file. (46381 Points - 90065 Triangles)
+[26-07-24 13:42:47.474][USER   ]: Started reading stl file in binary format: ./surface47.stl
+[26-07-24 13:42:47.531][USER   ]: Finished reading stl file. (57825 Points - 114158 Triangles)
+[26-07-24 13:42:47.533][USER   ]: Started reading stl file in binary format: ./surface48.stl
+[26-07-24 13:42:47.533][USER   ]: Finished reading stl file. (210 Points - 340 Triangles)
+[26-07-24 13:42:47.533][USER   ]: Started reading stl file in binary format: ./surface49.stl
+[26-07-24 13:42:47.534][USER   ]: Finished reading stl file. (3063 Points - 5821 Triangles)
+[26-07-24 13:42:47.535][USER   ]: Started reading stl file in binary format: ./surface50.stl
+[26-07-24 13:42:47.589][USER   ]: Finished reading stl file. (58255 Points - 115032 Triangles)
+[26-07-24 13:42:47.591][USER   ]: Started reading stl file in binary format: ./surface51.stl
+[26-07-24 13:42:47.978][USER   ]: Finished reading stl file. (48393 Points - 94085 Triangles)
+[26-07-24 13:42:47.979][USER   ]: Started reading stl file in binary format: ./surface52.stl
+[26-07-24 13:42:47.981][USER   ]: Finished reading stl file. (2293 Points - 4326 Triangles)
+[26-07-24 13:42:47.981][USER   ]: Started reading stl file in binary format: ./surface53.stl
+[26-07-24 13:42:47.983][USER   ]: Finished reading stl file. (3122 Points - 5922 Triangles)
+[26-07-24 13:42:47.983][USER   ]: Started reading stl file in binary format: ./surface54.stl
+[26-07-24 13:42:47.983][USER   ]: Finished reading stl file. (187 Points - 297 Triangles)
+[26-07-24 13:42:47.983][USER   ]: Started reading stl file in binary format: ./surface55.stl
+[26-07-24 13:42:48.023][USER   ]: Finished reading stl file. (48134 Points - 93586 Triangles)
+[26-07-24 13:42:48.024][USER   ]: Started reading stl file in binary format: ./surface56.stl
+[26-07-24 13:42:48.025][USER   ]: Finished reading stl file. (2375 Points - 4482 Triangles)
+[26-07-24 13:42:48.026][USER   ]: Started reading stl file in binary format: ./surface57.stl
+[26-07-24 13:42:48.027][USER   ]: Finished reading stl file. (3114 Points - 5909 Triangles)
+[26-07-24 13:42:48.027][USER   ]: Started reading stl file in binary format: ./surface58.stl
+[26-07-24 13:42:48.027][USER   ]: Finished reading stl file. (182 Points - 289 Triangles)
+[26-07-24 13:42:48.027][USER   ]: Started reading stl file in binary format: ./surface59.stl
+[26-07-24 13:42:48.087][USER   ]: Finished reading stl file. (58306 Points - 115135 Triangles)
+[26-07-24 13:42:48.089][USER   ]: Started reading stl file in binary format: ./surface60.stl
+[26-07-24 13:42:48.093][USER   ]: Finished reading stl file. (6990 Points - 13456 Triangles)
+[26-07-24 13:42:48.093][USER   ]: Started reading stl file in binary format: ./surface61.stl
+[26-07-24 13:42:48.098][USER   ]: Finished reading stl file. (6889 Points - 13259 Triangles)
+[26-07-24 13:42:48.098][USER   ]: Started reading stl file in binary format: ./surface62.stl
+[26-07-24 13:42:48.103][USER   ]: Finished reading stl file. (7535 Points - 14482 Triangles)
+[26-07-24 13:42:48.103][USER   ]: Started reading stl file in binary format: ./surface63.stl
+[26-07-24 13:42:48.108][USER   ]: Finished reading stl file. (7617 Points - 14636 Triangles)
+[26-07-24 13:42:48.108][USER   ]: Started reading stl file in binary format: ./surface64.stl
+[26-07-24 13:42:48.110][USER   ]: Finished reading stl file. (3175 Points - 5815 Triangles)
+[26-07-24 13:42:48.110][USER   ]: Started reading stl file in binary format: ./surface65.stl
+[26-07-24 13:42:48.112][USER   ]: Finished reading stl file. (3517 Points - 6708 Triangles)
+[26-07-24 13:42:48.112][USER   ]: Started reading stl file in binary format: ./surface66.stl
+[26-07-24 13:42:48.115][USER   ]: Finished reading stl file. (3585 Points - 6596 Triangles)
+[26-07-24 13:42:49.446][USER   ]: Finished concatenation of meshes
+[26-07-24 13:42:50.580][USER   ]: Started reading surfaceMesh.lb8.ugrid
+[26-07-24 13:42:50.617][USER   ]: Number of boundary patches found in mesh file: 66
+[26-07-24 13:42:51.111][USER   ]: Number of boundary patches read: 66
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 1 (name: body00001_face00001) contains 6735 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 2 (name: body00001_face00035) contains 8404 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 3 (name: body00001_face00057) contains 1556 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 4 (name: body00001_face00048) contains 8406 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 5 (name: body00001_face00055) contains 1556 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 6 (name: body00001_face00066) contains 8662 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 7 (name: body00001_face00005) contains 8371 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 8 (name: body00001_face00002) contains 1273 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 9 (name: body00001_face00013) contains 8696 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 10 (name: body00001_face00023) contains 1323 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 11 (name: body00001_face00011) contains 7645 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 12 (name: body00001_face00040) contains 30786 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 13 (name: body00001_face00056) contains 1423 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 14 (name: body00001_face00036) contains 8711 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 15 (name: body00001_face00037) contains 2319 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 16 (name: body00001_face00052) contains 93726 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 17 (name: body00001_face00038) contains 115005 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 18 (name: body00001_face00058) contains 13975 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 19 (name: body00001_face00047) contains 30786 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 20 (name: body00001_face00054) contains 1431 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 21 (name: body00001_face00044) contains 8701 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 22 (name: body00001_face00045) contains 2297 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 23 (name: body00001_face00050) contains 93760 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 24 (name: body00001_face00049) contains 114893 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 25 (name: body00001_face00065) contains 13700 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 26 (name: body00001_face00022) contains 90335 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 27 (name: body00001_face00006) contains 2777 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 28 (name: body00001_face00004) contains 8384 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 29 (name: body00001_face00003) contains 1446 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 30 (name: body00001_face00009) contains 29241 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 31 (name: body00001_face00010) contains 12865 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 32 (name: body00001_face00008) contains 114128 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 33 (name: body00001_face00014) contains 2271 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 34 (name: body00001_face00017) contains 8331 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 35 (name: body00001_face00024) contains 1363 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 36 (name: body00001_face00020) contains 89887 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 37 (name: body00001_face00016) contains 30776 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 38 (name: body00001_face00012) contains 12821 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 39 (name: body00001_face00015) contains 113994 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 40 (name: body00001_face00060) contains 4350 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 41 (name: body00001_face00053) contains 90101 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 42 (name: body00001_face00039) contains 114218 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 43 (name: body00001_face00059) contains 312 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 44 (name: body00001_face00061) contains 5881 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 45 (name: body00001_face00064) contains 4422 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 46 (name: body00001_face00051) contains 90065 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 47 (name: body00001_face00046) contains 114158 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 48 (name: body00001_face00062) contains 340 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 49 (name: body00001_face00063) contains 5821 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 50 (name: body00001_face00007) contains 115032 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 51 (name: body00001_face00021) contains 94085 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 52 (name: body00001_face00031) contains 4326 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 53 (name: body00001_face00030) contains 5922 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 54 (name: body00001_face00029) contains 297 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 55 (name: body00001_face00019) contains 93586 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 56 (name: body00001_face00026) contains 4482 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 57 (name: body00001_face00028) contains 5909 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 58 (name: body00001_face00027) contains 289 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 59 (name: body00001_face00018) contains 115135 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 60 (name: body00001_face00041) contains 13456 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 61 (name: body00001_face00043) contains 13259 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 62 (name: body00001_face00032) contains 14482 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 63 (name: body00001_face00025) contains 14636 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 64 (name: body00001_face00042) contains 5815 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 65 (name: body00001_face00034) contains 6708 triangles, 0 quads
+[26-07-24 13:42:51.111][USER   ]:  - Boundary patch 66 (name: body00001_face00033) contains 6596 triangles, 0 quads
+[26-07-24 13:42:51.187][USER   ]: Finished reading surfaceMesh.lb8.ugrid (1058229 points, 2056442 triangles, 0 quads)
+[26-07-24 13:42:56][USER   ]: Running validateSurfaceMesh
+[26-07-24 13:42:58][USER   ]:   running checkSurfaceMeshQuality
+[26-07-24 13:42:58][USER   ]:    Average DomainMaximumAngle: 78.65447868414999
+[26-07-24 13:42:58][USER   ]:    Number of cells with DomainMaximumAngle below 90 (good cells): 1675240
+[26-07-24 13:42:58][USER   ]:    Number of cells with DomainMaximumAngle above 160 (bad cells): 0
+[26-07-24 13:42:58][USER   ]:    Maximum DomainMaximumAngle: 144.96858782019095
+[26-07-24 13:42:58][USER   ]:    Maximum DomainMaximumAngle: located at 0.7820356872466967 -144.91756028343104 146.99958624530453
+[26-07-24 13:42:59][USER   ]:    Average DomainAspectRatio: 2.3812228595138922
+[26-07-24 13:42:59][USER   ]:    Number of cells with DomainAspectRatio below 10 (good cells): 2024453
+[26-07-24 13:42:59][USER   ]:    Number of cells with DomainAspectRatio above 100 (bad cells): 0
+[26-07-24 13:42:59][USER   ]:    Maximum DomainAspectRatio: 23.481635523803078
+[26-07-24 13:42:59][USER   ]:    Maximum DomainAspectRatio: located at 115.04061501641058 -1050.8870052271877 30.20470228210528
+[26-07-24 13:43:00][USER   ]:    Average DomainAreaRatio: 1.2075216050741673
+[26-07-24 13:43:00][USER   ]:    Number of cells with DomainAreaRatio below 2 (good cells): 2032949
+[26-07-24 13:43:00][USER   ]:    Number of cells with DomainAreaRatio above 20 (bad cells): 0
+[26-07-24 13:43:00][USER   ]:    Maximum DomainAreaRatio: 7.099368116559254
+[26-07-24 13:43:00][USER   ]:    Maximum DomainAreaRatio: located at -1.2395995909540232 144.8696276979525 86.99962859412994
+[26-07-24 13:43:00][USER   ]:    Number of Tri cells: 2056442
+[26-07-24 13:43:00][USER   ]:    Number of Quad cells: 0
+[26-07-24 13:43:00][USER   ]:   running checkShortEdge
+[26-07-24 13:43:00][USER   ]:    shortest edge length = 1.01911575975833
+[26-07-24 13:43:00][USER   ]:    edge begin: 46.67312561788691 1387.2624529610534 -2.4955159167290857
+[26-07-24 13:43:00][USER   ]:    edge end:   46.67312583509239 1387.2624523097872 -3.5146144841081965
+[26-07-24 13:43:00][USER   ]: running exportJson
+[26-07-24 13:43:00][USER   ]:   running checkBoundaryName
+[26-07-24 13:43:00][USER   ]: running exportJson
+[26-07-24 13:42:44.236][USER   ]: Surface mesh was successfully generated.
