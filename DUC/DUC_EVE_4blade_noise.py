@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 import math
+import re
+import struct
+from collections import Counter
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,8 +23,18 @@ GEOMETRY_FILE = GEOMETRY_STEP_FILE.with_suffix(".egads")
 AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
     "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
 )
-GENERATED_DIR = Path(__file__).resolve().parent / "generated"
-DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "sm-772abaad-de94-4b56-8f00-2b824aa60c1b_surfaceMesh.lb8.ugrid"
+LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_assets"
+DEFAULT_SURFACE_MESH_FILE = None
+#(
+#    LEGACY_SURFACE_MESH_ASSETS_DIR
+#    / "sm-022a0bc0-e2c6-4716-b50b-efa32dc37f09_surfaceMesh.lb8.ugrid"
+#)
+DEFAULT_SURFACE_MESH_LOG_FILE = None
+#(
+#    LEGACY_SURFACE_MESH_ASSETS_DIR
+#    / "sm-022a0bc0-e2c6-4716-b50b-efa32dc37f09_logs_flow360_surface_mesh.user.log"
+#)
+MAPBC_WALL_BC_CODE = 4000
 
 
 @dataclass(frozen=True)
@@ -204,16 +217,37 @@ BLADE_VORTEX_REFINEMENTS: tuple[BladeVortexBoxRefinementSpec, ...] = (
 )
 
 
+BLADE_IDS = (1, 2, 3, 4)
+
+
+def _blade_group_names(suffix: str) -> list[str]:
+    return [f"blade{blade_id}{suffix}" for blade_id in BLADE_IDS]
+
+
 # Update these after the first geometry upload if Flow360 exposes different names.
 FACE_GROUP_ALIASES = {
-    "bladeInner": ["bladeInner"],
+    "bladeInner": _blade_group_names("Inner"),
     "hub": ["hub"],
-    "bladeMain": ["bladeMain"],
-    "bladeTE": ["bladeTE"],
+    "bladeMain": _blade_group_names("main"),
+    "bladeTE": _blade_group_names("TE"),
 }
 
 EDGE_GROUP_ALIASES = {
-    "trailing_edge": ["trailingEdges", "trailingEdge", "trailing_edge", "bladeTrailingEdge"],
+    "leading_edge": [
+        "leadingEdges",
+        "leadingEdge",
+        "leading_edge",
+        *_blade_group_names("LE"),
+        *_blade_group_names("LeadingEdges"),
+    ],
+    "trailing_edge": [
+        "trailingEdges",
+        "trailingEdge",
+        "trailing_edge",
+        "bladeTrailingEdge",
+        *_blade_group_names("TEEdges"),
+        *_blade_group_names("TrailingEdges"),
+    ],
     "hub_edges": ["hubEdges", "hub_edges"],
 }
 
@@ -252,7 +286,19 @@ def _write_geometry_csm_file(csm_file: Path, step_file: Path) -> None:
     csm_file.write_text(csm_text, encoding="utf-8")
 
 
-def _entities_by_possible_names(geometry, possible_names: list[str]):
+def _matches_entity_type(entity, entity_type_name: str | None) -> bool:
+    if entity_type_name is None:
+        return True
+    actual_type_name = getattr(entity, "private_attribute_entity_type_name", None)
+    return actual_type_name is None or actual_type_name == entity_type_name
+
+
+def _entities_by_possible_names(
+    geometry,
+    possible_names: list[str],
+    *,
+    entity_type_name: str | None = None,
+):
     entities = []
     for name in possible_names:
         try:
@@ -265,9 +311,10 @@ def _entities_by_possible_names(geometry, possible_names: list[str]):
             if not matched:
                 continue
         if isinstance(matched, list):
-            entities.extend(matched)
+            entities.extend(entity for entity in matched if _matches_entity_type(entity, entity_type_name))
         else:
-            entities.append(matched)
+            if _matches_entity_type(matched, entity_type_name):
+                entities.append(matched)
     return entities
 
 
@@ -296,7 +343,11 @@ def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
 
 def _wall_entities(geometry) -> dict[str, list]:
     wall_entities = {
-        wall_name: _entities_by_possible_names(geometry, possible_names)
+        wall_name: _entities_by_possible_names(
+            geometry,
+            possible_names,
+            entity_type_name="Surface",
+        )
         for wall_name, possible_names in FACE_GROUP_ALIASES.items()
     }
     boundary_names = getattr(geometry, "boundary_names", None)
@@ -307,7 +358,11 @@ def _wall_entities(geometry) -> dict[str, list]:
 
 def _edge_entities(geometry) -> dict[str, list]:
     return {
-        edge_name: _entities_by_possible_names(geometry, possible_names)
+        edge_name: _entities_by_possible_names(
+            geometry,
+            possible_names,
+            entity_type_name="Edge",
+        )
         for edge_name, possible_names in EDGE_GROUP_ALIASES.items()
     }
 
@@ -395,12 +450,13 @@ def _get_or_create_flow360_folder(folder_path: tuple[str, ...]):
 def _make_surface_edge_refinements(geometry, cfg: CaseSetup):
     geometry.group_edges_by_tag("edgeName")
     edge_entities = _edge_entities(geometry)
-    missing = [name for name, entities in edge_entities.items() if not entities]
+    required_edge_groups = ("trailing_edge", "hub_edges")
+    missing = [name for name in required_edge_groups if not edge_entities[name]]
     if missing:
         raise ValueError(
             f"Could not resolve edge groups {missing}. "
             f"Available edge groups: {_available_edge_group_names(geometry)}. "
-            "Tag the trailing-edge CAD edges with edgeName/groupName='trailingEdges' in the CSM."
+            "Tag the CAD edges with edgeName/groupName='trailingEdges' and 'hubEdges' in the CSM."
         )
 
     return [
@@ -760,9 +816,135 @@ def _mapbc_file_for_ugrid(surface_mesh_file: Path) -> Path | None:
     file_name = surface_mesh_file.name
     if file_name.endswith(".lb8.ugrid"):
         return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + ".mapbc")
+    if file_name.endswith(".b8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".b8.ugrid") + ".mapbc")
     if file_name.endswith(".ugrid"):
         return surface_mesh_file.with_suffix(".mapbc")
     return None
+
+
+def _surface_mesh_log_for_ugrid(surface_mesh_file: Path) -> Path:
+    if DEFAULT_SURFACE_MESH_LOG_FILE.exists() and surface_mesh_file.parent == DEFAULT_SURFACE_MESH_LOG_FILE.parent:
+        return DEFAULT_SURFACE_MESH_LOG_FILE
+
+    candidates = sorted(
+        surface_mesh_file.parent.glob("*surface_mesh.user.log"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        raise FileNotFoundError(
+            f"Could not find a Flow360 surface mesh log next to {surface_mesh_file}. "
+            "The log is required to reconstruct boundary patch names for the MAPBC file."
+        )
+    return candidates[0]
+
+
+def _parse_surface_mesh_log_patches(log_file: Path) -> list[tuple[int, str, int, int]]:
+    pattern = re.compile(
+        r"Boundary patch (\d+) \(name: ([^)]+)\) contains (\d+) triangles, (\d+) quads"
+    )
+    patches = []
+    for line in log_file.read_text(errors="replace").splitlines():
+        match = pattern.search(line)
+        if match:
+            patches.append(
+                (
+                    int(match.group(1)),
+                    match.group(2),
+                    int(match.group(3)),
+                    int(match.group(4)),
+                )
+            )
+    if not patches:
+        raise ValueError(f"Could not find boundary patch rows in Flow360 surface mesh log: {log_file}")
+    return patches
+
+
+def _ugrid_endianness(surface_mesh_file: Path) -> str:
+    file_name = surface_mesh_file.name
+    if ".lb8." in file_name:
+        return "<"
+    if ".b8." in file_name:
+        return ">"
+    raise ValueError(
+        f"Cannot infer binary UGRID endianness from {surface_mesh_file.name}. "
+        "Expected .lb8.ugrid or .b8.ugrid."
+    )
+
+
+def _read_ugrid_boundary_id_counts(surface_mesh_file: Path) -> tuple[tuple[int, ...], Counter[int]]:
+    endian = _ugrid_endianness(surface_mesh_file)
+    with surface_mesh_file.open("rb") as file:
+        header = struct.unpack(endian + "7i", file.read(28))
+        n_nodes, n_tris, n_quads, n_tets, n_pyrs, n_prisms, n_hexes = header
+        if any(count < 0 for count in header):
+            raise ValueError(f"Invalid UGRID header in {surface_mesh_file}: {header}")
+        file.seek(28 + n_nodes * 3 * 8 + n_tris * 3 * 4 + n_quads * 4 * 4)
+        tri_ids = struct.unpack(endian + f"{n_tris}i", file.read(n_tris * 4)) if n_tris else ()
+        quad_ids = struct.unpack(endian + f"{n_quads}i", file.read(n_quads * 4)) if n_quads else ()
+
+    counts: Counter[int] = Counter(tri_ids)
+    counts.update(quad_ids)
+    return header, counts
+
+
+def generate_mapbc_from_surface_mesh_log(
+    surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
+    log_file: Path | None = None,
+    *,
+    wall_bc_code: int = MAPBC_WALL_BC_CODE,
+) -> Path:
+    surface_mesh_file = Path(surface_mesh_file)
+    mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
+    if mapbc_file is None:
+        raise ValueError(f"MAPBC generation is only needed for UGRID files, got: {surface_mesh_file}")
+    if log_file is None:
+        log_file = _surface_mesh_log_for_ugrid(surface_mesh_file)
+
+    patches = _parse_surface_mesh_log_patches(Path(log_file))
+    header, id_counts = _read_ugrid_boundary_id_counts(surface_mesh_file)
+    n_nodes, n_tris, n_quads, *_ = header
+    expected_surface_faces = n_tris + n_quads
+    log_surface_faces = sum(tri_count + quad_count for _, _, tri_count, quad_count in patches)
+    if log_surface_faces != expected_surface_faces:
+        raise ValueError(
+            f"Patch face count from {log_file} ({log_surface_faces}) does not match "
+            f"UGRID header for {surface_mesh_file} ({expected_surface_faces})."
+        )
+
+    mismatches = []
+    for patch_id, name, tri_count, quad_count in patches:
+        expected_count = tri_count + quad_count
+        actual_count = id_counts[patch_id]
+        if actual_count != expected_count:
+            mismatches.append((patch_id, name, expected_count, actual_count))
+    if mismatches:
+        raise ValueError(
+            "UGRID boundary IDs do not match Flow360 surface mesh log patch counts: "
+            f"{mismatches[:10]}"
+        )
+    if len(id_counts) != len(patches):
+        raise ValueError(
+            f"UGRID contains {len(id_counts)} boundary IDs but log contains {len(patches)} patches."
+        )
+
+    with mapbc_file.open("w", encoding="ascii", newline="\n") as file:
+        file.write(f"{len(patches)}\n")
+        for patch_id, name, _, _ in patches:
+            file.write(f"{patch_id} {wall_bc_code} {name}\n")
+
+    print(
+        f"Wrote {mapbc_file} from {log_file} "
+        f"({n_nodes} nodes, {expected_surface_faces} surface faces, {len(patches)} patches)."
+    )
+    return mapbc_file
+
+
+def _ensure_mapbc_for_ugrid(surface_mesh_file: Path) -> None:
+    mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
+    if mapbc_file is not None and not mapbc_file.exists():
+        generate_mapbc_from_surface_mesh_log(surface_mesh_file)
 
 
 def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flow360_folder):
@@ -773,6 +955,7 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
             "Provide an existing CGNS/UGRID surface mesh at this path."
         )
 
+    _ensure_mapbc_for_ugrid(surface_mesh_file)
     mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
     if mapbc_file is not None and not mapbc_file.exists():
         raise FileNotFoundError(
@@ -946,7 +1129,7 @@ def define_and_run(
 
 def main():
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
-    generate_volume_mesh = True
+    generate_volume_mesh = False
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
