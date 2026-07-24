@@ -5,6 +5,7 @@ import os
 import math
 import re
 import struct
+import sys
 from collections import Counter
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -14,6 +15,14 @@ import numpy as np
 import flow360 as fl
 from flow360 import u
 from flow360.component.simulation.folder import ROOT_FOLDER
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MESH_UTILS_DIR = REPO_ROOT / "mesh_utils"
+if str(MESH_UTILS_DIR) not in sys.path:
+    sys.path.insert(0, str(MESH_UTILS_DIR))
+
+from ugrid_to_cgns import write_surface_cgns
 
 
 GEOMETRY_STEP_FILE = Path(__file__).resolve().with_name(
@@ -28,6 +37,10 @@ LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_as
 DEFAULT_SURFACE_MESH_FILE = (
     LEGACY_SURFACE_MESH_ASSETS_DIR
     / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_surfaceMesh.lb8.ugrid"
+)
+DEFAULT_STL_SURFACE_MESH_FILE = (
+    LEGACY_SURFACE_MESH_ASSETS_DIR
+    / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_surfaceAll.stl"
 )
 DEFAULT_SURFACE_MESH_LOG_FILE = (
     LEGACY_SURFACE_MESH_ASSETS_DIR
@@ -96,7 +109,7 @@ class CaseSetup:
     farfield_relative_size: float = 50
     surface_max_edge_length: float = 9.88e-3
     curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5
+    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5 * 10
     boundary_layer_growth_rate: float = 1.16
     surface_edge_growth_rate: float = 1.12
     blade_inner_max_edge_length: float = 9.88e-3
@@ -109,6 +122,7 @@ class CaseSetup:
     tip_wake_z_lower: float = -0.1
     tip_wake_spacing: float = octree_base_spacing
     blade_vortex_spacing: float = octree_base_spacing
+    convert_uploaded_ugrid_to_cgns: bool = True
     # surface normal flip. Use if surface mesh is generated with the legacy mesher and volume mesh with the beta mesher
     flip_uploaded_surface_mesh_normals: bool = True
 
@@ -363,7 +377,7 @@ def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
 def _wall_entities(geometry) -> dict[str, list]:
     boundary_names = getattr(geometry, "boundary_names", None)
     if boundary_names is not None:
-        return {
+        wall_entities = {
             wall_name: [
                 geometry[boundary_name]
                 for boundary_name in boundary_names
@@ -371,6 +385,17 @@ def _wall_entities(geometry) -> dict[str, list]:
             ]
             for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
         }
+        if any(wall_entities.values()):
+            return wall_entities
+
+        wall_boundary_names = [
+            boundary_name
+            for boundary_name in boundary_names
+            if "farfield" not in boundary_name.lower() and "interface" not in boundary_name.lower()
+        ]
+        if not wall_boundary_names:
+            wall_boundary_names = list(boundary_names)
+        return {"wall": [geometry[boundary_name] for boundary_name in wall_boundary_names]}
 
     return {
         wall_name: _entities_by_possible_names(
@@ -1274,6 +1299,65 @@ def _ensure_mapbc_for_ugrid(surface_mesh_file: Path) -> None:
         generate_mapbc_from_surface_mesh_log(surface_mesh_file)
 
 
+def _cgns_file_for_ugrid(surface_mesh_file: Path) -> Path:
+    file_name = surface_mesh_file.name
+    if file_name.endswith(".lb8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + ".cgns")
+    if file_name.endswith(".b8.ugrid"):
+        return surface_mesh_file.with_name(file_name.removesuffix(".b8.ugrid") + ".cgns")
+    if file_name.endswith(".ugrid"):
+        return surface_mesh_file.with_suffix(".cgns")
+    raise ValueError(f"Cannot create CGNS file name for non-UGRID file: {surface_mesh_file}")
+
+
+def _flow360_cgns_from_ugrid(surface_mesh_file: Path, *, force: bool = False) -> Path:
+    mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
+    if mapbc_file is None:
+        raise ValueError(f"Cannot generate CGNS without a MAPBC path for UGRID file: {surface_mesh_file}")
+    if not mapbc_file.exists():
+        _ensure_mapbc_for_ugrid(surface_mesh_file)
+
+    cgns_file = _cgns_file_for_ugrid(surface_mesh_file)
+    if (
+        cgns_file.exists()
+        and not force
+        and cgns_file.stat().st_mtime >= surface_mesh_file.stat().st_mtime
+        and cgns_file.stat().st_mtime >= mapbc_file.stat().st_mtime
+    ):
+        return cgns_file
+
+    output = write_surface_cgns(
+        surface_mesh_file,
+        cgns_file,
+        mapbc_file=mapbc_file,
+        split_boundaries=True,
+    )
+    print(f"Wrote Flow360 surface CGNS {output} from {surface_mesh_file} and {mapbc_file}.")
+    return output
+
+
+def prepare_surface_mesh_for_flow360(surface_mesh_file: Path, cfg: CaseSetup = CONFIG) -> Path:
+    surface_mesh_file = Path(surface_mesh_file)
+    if not _is_binary_ugrid(surface_mesh_file):
+        return surface_mesh_file
+
+    processed_ugrid = weld_ugrid_surface_mesh(
+        surface_mesh_file,
+        flip_normals=cfg.flip_uploaded_surface_mesh_normals,
+    )
+    _ensure_mapbc_for_ugrid(processed_ugrid)
+    mapbc_file = _mapbc_file_for_ugrid(processed_ugrid)
+    if mapbc_file is not None and not mapbc_file.exists():
+        raise FileNotFoundError(
+            f"Could not find matching MAPBC file for UGRID surface mesh: {mapbc_file}. "
+            "The setup needs it to preserve boundary names in the generated CGNS."
+        )
+
+    if cfg.convert_uploaded_ugrid_to_cgns:
+        return _flow360_cgns_from_ugrid(processed_ugrid)
+    return processed_ugrid
+
+
 def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetup, flow360_folder):
     surface_mesh_file = Path(surface_mesh_file)
     if not surface_mesh_file.exists():
@@ -1282,18 +1366,7 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
             "Provide an existing CGNS/UGRID surface mesh at this path."
         )
 
-    surface_mesh_file = weld_ugrid_surface_mesh(
-        surface_mesh_file,
-        flip_normals=cfg.flip_uploaded_surface_mesh_normals,
-    )
-    _ensure_mapbc_for_ugrid(surface_mesh_file)
-    mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
-    if mapbc_file is not None and not mapbc_file.exists():
-        raise FileNotFoundError(
-            f"Could not find matching MAPBC file for UGRID surface mesh: {mapbc_file}. "
-            "Flow360 requires the MAPBC file in the same directory with the same prefix "
-            "to preserve boundary names."
-        )
+    surface_mesh_file = prepare_surface_mesh_for_flow360(surface_mesh_file, cfg)
 
     print(f"Uploading surface mesh: {surface_mesh_file}")
     return fl.Project.from_surface_mesh(
@@ -1465,7 +1538,8 @@ def main():
     # use_beta_mesher = False
     # surface_mesh_file = None
 
-    # volume mesh path
+    # volume mesh path from the legacy surface mesh.
+    # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
