@@ -27,11 +27,11 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
 LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_assets"
 DEFAULT_SURFACE_MESH_FILE = (
     LEGACY_SURFACE_MESH_ASSETS_DIR
-    / "sm-ab0c68d1-f434-4ab4-839d-84573ec6df80_surfaceMesh.lb8.ugrid"
+    / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_surfaceMesh.lb8.ugrid"
 )
 DEFAULT_SURFACE_MESH_LOG_FILE = (
     LEGACY_SURFACE_MESH_ASSETS_DIR
-    / "sm-ab0c68d1-f434-4ab4-839d-84573ec6df80_logs_flow360_surface_mesh.user.log"
+    / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_logs_flow360_surface_mesh.user.log"
 )
 MAPBC_WALL_BC_CODE = 4000
 UGRID_WELD_TOLERANCE = 1.0e-7
@@ -91,23 +91,26 @@ class CaseSetup:
     # until the CAD import tags and generated mesh are checked.
     rotation_volume_radius: float = 1.5
     rotation_volume_height: float = 0.38625
-    rotation_volume_spacing: float = 0.006
-    farfield_relative_size: float = 107
-    surface_max_edge_length: float = 0.00866
+    octree_base_spacing: float = 0.00295898 * 10
+    rotation_volume_spacing: float = octree_base_spacing * 2
+    farfield_relative_size: float = 50
+    surface_max_edge_length: float = 9.88e-3
     curvature_resolution_angle_deg: float = 5.0
     boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5
     boundary_layer_growth_rate: float = 1.16
     surface_edge_growth_rate: float = 1.12
-    blade_inner_max_edge_length: float = 8.66e-3
-    hub_max_edge_length: float = 4.4e-3
-    blade_main_max_edge_length: float = 2.65e-3
-    blade_te_max_edge_length: float = 1.25e-3
+    blade_inner_max_edge_length: float = 9.88e-3
+    hub_max_edge_length: float = 5.02e-3
+    blade_main_max_edge_length: float = 3.02e-3
+    blade_te_max_edge_length: float = 1.42e-3
     trailing_edge_normal_spacing: float = 8.9e-5
-    hub_edge_spacing: float = 0.87e-3
+    hub_edge_spacing: float = 0.992e-3
     tip_wake_inner_radius: float = 1.1
     tip_wake_z_lower: float = -0.1
-    tip_wake_spacing: float = 0.003
-    blade_vortex_spacing: float = 0.003
+    tip_wake_spacing: float = octree_base_spacing
+    blade_vortex_spacing: float = octree_base_spacing
+    # surface normal flip. Use if surface mesh is generated with the legacy mesher and volume mesh with the beta mesher
+    flip_uploaded_surface_mesh_normals: bool = True
 
     @property
     def ref_area(self) -> float:
@@ -137,7 +140,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=0.439453,
         inner_radius=0.0,
         outer_radius=1.68457,
-        spacing=0.03171385028658623,
+        spacing=CONFIG.octree_base_spacing * 2**3,
     ),
     VolumeCylinderRefinementSpec(
         name="intermediate_annulus",
@@ -146,7 +149,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=0.0732422,
         inner_radius=1.06201,
         outer_radius=1.9043,
-        spacing=0.03171385028658623,
+        spacing=CONFIG.octree_base_spacing * 2**3,
     ),
     VolumeCylinderRefinementSpec(
         name="coarse_cylinder",
@@ -155,7 +158,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=0.878906,
         inner_radius=0.0,
         outer_radius=1.9043,
-        spacing=0.06342770057317168,
+        spacing=CONFIG.octree_base_spacing * 2**4,
     ),
     VolumeCylinderRefinementSpec(
         name="short_coarse_annulus",
@@ -164,7 +167,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=0.732422,
         inner_radius=0.585938,
         outer_radius=2.05078,
-        spacing=0.06342770057317168,
+        spacing=CONFIG.octree_base_spacing * 2**4,
     ),
     VolumeCylinderRefinementSpec(
         name="coarse_annulus",
@@ -173,7 +176,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=0.439453,
         inner_radius=0.732422,
         outer_radius=2.27051,
-        spacing=0.06342770057317168,
+        spacing=CONFIG.octree_base_spacing * 2**4,
     ),
     VolumeCylinderRefinementSpec(
         name="outer_short_wide_cylinder",
@@ -182,7 +185,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=1.17118,
         inner_radius=0.0,
         outer_radius=2.65,
-        spacing=0.12685540114634414,
+        spacing=CONFIG.octree_base_spacing * 2**5,
     ),
     VolumeCylinderRefinementSpec(
         name="outermost_cylinder",
@@ -191,7 +194,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
         z_max=1.61133,
         inner_radius=0.0,
         outer_radius=3.06,
-        spacing=0.12685540114634414,
+        spacing=CONFIG.octree_base_spacing * 2**5,
     ),
 )
 
@@ -541,6 +544,7 @@ def _make_meshing_defaults(cfg: CaseSetup):
         curvature_resolution_angle=cfg.curvature_resolution_angle_deg * u.deg,
         boundary_layer_growth_rate=cfg.boundary_layer_growth_rate,
         boundary_layer_first_layer_thickness=cfg.boundary_layer_first_layer_thickness * u.m,
+        octree_spacing=fl.OctreeSpacing(base_spacing=cfg.octree_base_spacing * u.m),
     )
 
 
@@ -912,12 +916,21 @@ def _is_binary_ugrid(surface_mesh_file: Path) -> bool:
     return file_name.endswith(".lb8.ugrid") or file_name.endswith(".b8.ugrid")
 
 
-def _welded_ugrid_file_for(surface_mesh_file: Path) -> Path:
+def _is_welded_ugrid(surface_mesh_file: Path) -> bool:
+    return "_welded" in surface_mesh_file.name
+
+
+def _is_flipped_welded_ugrid(surface_mesh_file: Path) -> bool:
+    return "_welded_flipped" in surface_mesh_file.name
+
+
+def _welded_ugrid_file_for(surface_mesh_file: Path, *, flip_normals: bool = False) -> Path:
+    suffix = "_welded_flipped" if flip_normals else "_welded"
     file_name = surface_mesh_file.name
     if file_name.endswith(".lb8.ugrid"):
-        return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + "_welded.lb8.ugrid")
+        return surface_mesh_file.with_name(file_name.removesuffix(".lb8.ugrid") + suffix + ".lb8.ugrid")
     if file_name.endswith(".b8.ugrid"):
-        return surface_mesh_file.with_name(file_name.removesuffix(".b8.ugrid") + "_welded.b8.ugrid")
+        return surface_mesh_file.with_name(file_name.removesuffix(".b8.ugrid") + suffix + ".b8.ugrid")
     raise ValueError(f"Cannot create welded file name for non-binary UGRID: {surface_mesh_file}")
 
 
@@ -1105,13 +1118,33 @@ def weld_ugrid_surface_mesh(
     surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
     *,
     tolerance: float = UGRID_WELD_TOLERANCE,
+    flip_normals: bool = False,
     force: bool = False,
 ) -> Path:
     surface_mesh_file = Path(surface_mesh_file)
     if not _is_binary_ugrid(surface_mesh_file):
         return surface_mesh_file
 
-    welded_file = _welded_ugrid_file_for(surface_mesh_file)
+    if _is_welded_ugrid(surface_mesh_file):
+        if flip_normals and not _is_flipped_welded_ugrid(surface_mesh_file):
+            raise ValueError(
+                f"Surface mesh file is already welded but not flipped: {surface_mesh_file}. "
+                "Pass the original legacy UGRID file or set flip_uploaded_surface_mesh_normals=False."
+            )
+        if not flip_normals and _is_flipped_welded_ugrid(surface_mesh_file):
+            raise ValueError(
+                f"Surface mesh file is already flipped: {surface_mesh_file}. "
+                "Pass the original legacy UGRID file or set flip_uploaded_surface_mesh_normals=True."
+            )
+        mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
+        if mapbc_file is not None and not mapbc_file.exists():
+            raise FileNotFoundError(
+                f"Processed UGRID file is missing its matching MAPBC file: {mapbc_file}. "
+                "Pass the original legacy UGRID file so the setup can regenerate the welded UGRID and MAPBC."
+            )
+        return surface_mesh_file
+
+    welded_file = _welded_ugrid_file_for(surface_mesh_file, flip_normals=flip_normals)
     if (
         welded_file.exists()
         and not force
@@ -1136,6 +1169,9 @@ def weld_ugrid_surface_mesh(
     welded_quads = (inverse[quads - 1] + 1).astype(np.int32, copy=False)
     welded_tris, welded_tri_ids, dropped_tris = _drop_degenerate_faces(welded_tris, tri_ids)
     welded_quads, welded_quad_ids, dropped_quads = _drop_degenerate_faces(welded_quads, quad_ids)
+    if flip_normals:
+        welded_tris[:, [1, 2]] = welded_tris[:, [2, 1]]
+        welded_quads[:, [1, 3]] = welded_quads[:, [3, 1]]
     welded_edge_counts = _surface_edge_multiplicity_counts(welded_tris, welded_quads)
 
     _write_surface_ugrid(
@@ -1155,6 +1191,7 @@ def weld_ugrid_surface_mesh(
         f"nodes {len(coords)} -> {len(welded_coords)}, "
         f"triangles {len(tris)} -> {len(welded_tris)}, "
         f"quads {len(quads)} -> {len(welded_quads)}, "
+        f"flip_normals={flip_normals}, "
         f"dropped degenerate faces={dropped_tris + dropped_quads}, "
         f"open edges {original_edge_counts.get(1, 0)} -> {welded_edge_counts.get(1, 0)}, "
         f"non-manifold edges after welding="
@@ -1245,7 +1282,10 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
             "Provide an existing CGNS/UGRID surface mesh at this path."
         )
 
-    surface_mesh_file = weld_ugrid_surface_mesh(surface_mesh_file)
+    surface_mesh_file = weld_ugrid_surface_mesh(
+        surface_mesh_file,
+        flip_normals=cfg.flip_uploaded_surface_mesh_normals,
+    )
     _ensure_mapbc_for_ugrid(surface_mesh_file)
     mapbc_file = _mapbc_file_for_ugrid(surface_mesh_file)
     if mapbc_file is not None and not mapbc_file.exists():
@@ -1255,6 +1295,7 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
             "to preserve boundary names."
         )
 
+    print(f"Uploading surface mesh: {surface_mesh_file}")
     return fl.Project.from_surface_mesh(
         str(surface_mesh_file),
         name=cfg.name + "_simulation_from_surface_mesh",
@@ -1419,6 +1460,12 @@ def define_and_run(
 
 
 def main():
+
+    # surface mesh path
+    # use_beta_mesher = False
+    # surface_mesh_file = None
+
+    # volume mesh path
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
