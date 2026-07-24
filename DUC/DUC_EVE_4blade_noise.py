@@ -22,8 +22,6 @@ AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
 )
 GENERATED_DIR = Path(__file__).resolve().parent / "generated"
 DEFAULT_SURFACE_MESH_FILE = GENERATED_DIR / "sm-772abaad-de94-4b56-8f00-2b824aa60c1b_surfaceMesh.lb8.ugrid"
-DEFAULT_SURFACE_MESH_PROJECT_ID: str | None = "prj-d5491e5f-4ab7-4ce9-bc1f-4cedbe7340a3"
-DEFAULT_SURFACE_MESH_ID: str | None = "sm-9fed737d-adc9-4872-b80b-5204436b99a0"
 
 
 @dataclass(frozen=True)
@@ -522,16 +520,6 @@ def _make_blade_vortex_box_refinements(cfg: CaseSetup):
     return refinements
 
 
-def _make_surface_meshing_params(geometry, cfg: CaseSetup):
-    return fl.MeshingParams(
-        defaults=_make_meshing_defaults(cfg),
-        refinements=[
-            *_make_surface_refinements(geometry, cfg),
-            *_make_surface_edge_refinements(geometry, cfg),
-        ],
-    )
-
-
 def _make_meshing_params(
     rotation_volume,
     geometry,
@@ -768,76 +756,6 @@ def build_params(
         )
 
 
-def build_surface_mesh_params(project, cfg: CaseSetup = CONFIG):
-    with fl.SI_unit_system:
-        return fl.SimulationParams(
-            version="25.10.0",
-            unit_system=fl.SI_unit_system,
-            meshing=_make_surface_meshing_params(project.geometry, cfg),
-        )
-
-
-def _generate_legacy_surface_mesh_project(
-    *,
-    geometry_file: Path = GEOMETRY_FILE,
-    cfg: CaseSetup = CONFIG,
-    flow360_folder=None,
-    bypass_length_scale_warning: bool = True,
-):
-    project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher=False)
-    params = build_surface_mesh_params(project, cfg)
-
-    warning_context = (
-        fl.warning_bypass("potential_length_scale_mismatch")
-        if bypass_length_scale_warning
-        else nullcontext()
-    )
-
-    with warning_context:
-        project.generate_surface_mesh(
-            params=params,
-            name="LegacySurfaceMesh",
-            use_beta_mesher=False,
-            use_geometry_AI=False,
-            run_async=False,
-            raise_on_error=True,
-        )
-
-    return project, project.surface_mesh
-
-
-def generate_legacy_surface_mesh(
-    *,
-    geometry_file: Path = GEOMETRY_FILE,
-    cfg: CaseSetup = CONFIG,
-    flow360_folder=None,
-    bypass_length_scale_warning: bool = True,
-) -> str:
-    _, surface_mesh = _generate_legacy_surface_mesh_project(
-        geometry_file=geometry_file,
-        cfg=cfg,
-        flow360_folder=flow360_folder,
-        bypass_length_scale_warning=bypass_length_scale_warning,
-    )
-    return surface_mesh.id
-
-
-def generate_legacy_surface_mesh_source(
-    *,
-    geometry_file: Path = GEOMETRY_FILE,
-    cfg: CaseSetup = CONFIG,
-    flow360_folder=None,
-    bypass_length_scale_warning: bool = True,
-) -> tuple[str, str]:
-    project, surface_mesh = _generate_legacy_surface_mesh_project(
-        geometry_file=geometry_file,
-        cfg=cfg,
-        flow360_folder=flow360_folder,
-        bypass_length_scale_warning=bypass_length_scale_warning,
-    )
-    return project.id, surface_mesh.id
-
-
 def _mapbc_file_for_ugrid(surface_mesh_file: Path) -> Path | None:
     file_name = surface_mesh_file.name
     if file_name.endswith(".lb8.ugrid"):
@@ -871,21 +789,9 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
         run_async=False,
     )
 
-
-def _make_project_from_cloud_surface_mesh(
-    surface_mesh_project_id: str,
-    surface_mesh_id: str,
-):
-    source_project = fl.Project.from_cloud(surface_mesh_project_id)
-    surface_mesh = source_project.get_surface_mesh(asset_id=surface_mesh_id)
-    return fl.Project.from_cloud(source_project.id, new_run_from=surface_mesh)
-
-
 def define_and_run_from_surface_mesh(
     *,
     surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
-    surface_mesh_project_id: str | None = DEFAULT_SURFACE_MESH_PROJECT_ID,
-    surface_mesh_id: str | None = DEFAULT_SURFACE_MESH_ID,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
@@ -894,13 +800,8 @@ def define_and_run_from_surface_mesh(
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
-    if surface_mesh_project_id is not None:
-        if surface_mesh_id is None:
-            raise ValueError("surface_mesh_id must be provided with surface_mesh_project_id.")
-        project = _make_project_from_cloud_surface_mesh(surface_mesh_project_id, surface_mesh_id)
-    else:
-        surface_mesh_file = Path(surface_mesh_file)
-        project = _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
+    surface_mesh_file = Path(surface_mesh_file)
+    project = _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
     params = build_params(project, cfg, use_beta_mesher=True, use_surface_mesh=True)
 
     warning_context = (
@@ -962,31 +863,18 @@ def define_and_run(
     *,
     geometry_file: Path = GEOMETRY_FILE,
     surface_mesh_file: Path | None = None,
-    surface_mesh_project_id: str | None = DEFAULT_SURFACE_MESH_PROJECT_ID,
-    surface_mesh_id: str | None = DEFAULT_SURFACE_MESH_ID,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
-    generate_surface_mesh: bool = False,
     generate_volume_mesh: bool = True,
     run_case: bool = False,
     use_beta_mesher: bool = True,
     bypass_length_scale_warning: bool = True,
     results_path: str | None = None,
 ):
-    if surface_mesh_project_id is not None or surface_mesh_file is not None or generate_surface_mesh:
-        reusable_surface_mesh_file = Path(surface_mesh_file or DEFAULT_SURFACE_MESH_FILE)
-        if generate_surface_mesh:
-            surface_mesh_project_id, surface_mesh_id = generate_legacy_surface_mesh_source(
-                geometry_file=geometry_file,
-                cfg=cfg,
-                flow360_folder=flow360_folder,
-                bypass_length_scale_warning=bypass_length_scale_warning,
-            )
+    if surface_mesh_file is not None:
         return define_and_run_from_surface_mesh(
-            surface_mesh_file=reusable_surface_mesh_file,
-            surface_mesh_project_id=surface_mesh_project_id,
-            surface_mesh_id=surface_mesh_id,
+            surface_mesh_file=surface_mesh_file,
             cfg=cfg,
             flow360_folder=flow360_folder,
             submit_draft_only=submit_draft_only,
@@ -1006,7 +894,7 @@ def define_and_run(
     )
 
     with warning_context:
-        if submit_draft_only and not generate_surface_mesh and not generate_volume_mesh and not run_case:
+        if submit_draft_only and not generate_volume_mesh and not run_case:
             draft = project.run_case(
                 params=params,
                 name="DUC_EVE_4blade_noise_setup",
@@ -1017,16 +905,6 @@ def define_and_run(
                 draft_only=True,
             )
             return draft.id
-
-        if generate_surface_mesh:
-            project.generate_surface_mesh(
-                params=params,
-                name="SurfaceMesh",
-                use_beta_mesher=use_beta_mesher,
-                use_geometry_AI=False,
-                run_async=False,
-                raise_on_error=True,
-            )
 
         if generate_volume_mesh:
             project.generate_volume_mesh(
@@ -1068,9 +946,6 @@ def define_and_run(
 
 def main():
     surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
-    surface_mesh_project_id = DEFAULT_SURFACE_MESH_PROJECT_ID
-    surface_mesh_id = DEFAULT_SURFACE_MESH_ID
-    generate_surface_mesh = surface_mesh_project_id is None and not surface_mesh_file.exists()
     generate_volume_mesh = True
     run_case = False
 
@@ -1079,10 +954,7 @@ def main():
     project_id = define_and_run(
         flow360_folder=folder,
         surface_mesh_file=surface_mesh_file,
-        surface_mesh_project_id=surface_mesh_project_id,
-        surface_mesh_id=surface_mesh_id,
         submit_draft_only=True,
-        generate_surface_mesh=generate_surface_mesh,
         generate_volume_mesh=generate_volume_mesh,
         run_case=run_case,
         bypass_length_scale_warning=True,
