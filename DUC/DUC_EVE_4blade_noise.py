@@ -80,8 +80,7 @@ class CaseSetup:
     flow360_folder_path: tuple[str, ...] = ("DUC", "EVE Lifter 4 blade prop")
 
     propeller_radius: float = 1.4
-    rpm: float = 1075.0
-    time_steps_per_revolution: int = 120
+
     moment_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
     moment_length: tuple[float, float, float] = (1.4, 1.4, 1.4)
 
@@ -94,8 +93,16 @@ class CaseSetup:
     rotation_axis: tuple[float, float, float] = (0.0, 0.0, 1.0)
     rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    physical_steps: int = 600
-    max_pseudo_steps: int = 35
+    # step 0
+    # physical_steps: int = 600
+    # max_pseudo_steps: int = 35
+    #rpm: float = 1075.0
+    #time_steps_per_revolution: int = 120
+    # step 1
+    physical_steps: int = 3600
+    max_pseudo_steps: int = 15
+    rpm: float = 1075.0 * 0.980047894
+    time_steps_per_revolution: int = 120 * 6
 
     wall_roughness_height: float = 1.0e-5
 
@@ -704,6 +711,15 @@ def _tip_mach(cfg: CaseSetup, thermal_state) -> float:
     return cfg.tip_speed_m_s / thermal_state.speed_of_sound.to("m/s").value
 
 
+def _reference_velocity(thermal_state, reference_mach: float):
+    return reference_mach * thermal_state.speed_of_sound
+
+
+def calculate_stagnation_pressure(thermal_state, reference_mach: float, gamma: float = 1.4):
+    pressure_ratio = (1.0 + 0.5 * (gamma - 1.0) * reference_mach**2) ** (gamma / (gamma - 1.0))
+    return thermal_state.pressure * pressure_ratio
+
+
 def _make_fluid_model(cfg: CaseSetup):
     return fl.Fluid(
         initial_condition=fl.NavierStokesInitialCondition(
@@ -727,7 +743,7 @@ def _make_fluid_model(cfg: CaseSetup):
             max_force_jac_update_physical_steps=0,
             riemann_solver=fl.RoeFlux(
                 numerical_dissipation_factor=1.0,
-                low_mach_preconditioner=False,
+                low_mach_preconditioner=True,
             ),
         ),
         turbulence_model_solver=fl.NoneSolver(),
@@ -1556,6 +1572,29 @@ def main():
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
+
+    thermal_state = _make_thermal_state(CONFIG)
+    reference_mach = _tip_mach(CONFIG, thermal_state)
+    reference_velocity = _reference_velocity(thermal_state, reference_mach)
+    dynamic_pressure = 0.5 * thermal_state.density * reference_velocity**2
+    stagnation_pressure = calculate_stagnation_pressure(thermal_state, reference_mach)
+    print(
+        "Reference thermal state:\n"
+        f"  Temperature: {thermal_state.temperature.to('K').value:.2f} K "
+        f"({thermal_state.temperature.to('degC').value:.2f} degC)\n"
+        f"  Density: {thermal_state.density.to('kg/m**3').value:.6f} kg/m^3\n"
+        f"  Speed of sound: {thermal_state.speed_of_sound.to('m/s').value:.3f} m/s\n"
+        f"  Reference Mach: {reference_mach:.6f}\n"
+        f"  Reference velocity: {reference_velocity.to('m/s').value:.3f} m/s\n"
+        f"  Dynamic pressure: {dynamic_pressure.to('Pa').value:.2f} Pa "
+        f"({dynamic_pressure.to('kPa').value:.3f} kPa)\n"
+        f"  Reference stagnation pressure: {stagnation_pressure.to('Pa').value:.2f} Pa "
+        f"({stagnation_pressure.to('kPa').value:.3f} kPa)\n"
+        f"  RPM: {CONFIG.rpm:.3f}\n"
+        f"  Omega: {CONFIG.omega_rad_s:.6f} rad/s\n"
+        f"  Time step size: {CONFIG.time_step_size_s:.9f} s\n"
+
+    )
 
     project_id = define_and_run(
         flow360_folder=folder,
