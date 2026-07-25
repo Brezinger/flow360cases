@@ -104,12 +104,12 @@ class CaseSetup:
     # until the CAD import tags and generated mesh are checked.
     rotation_volume_radius: float = 1.5
     rotation_volume_height: float = 0.38625
-    octree_base_spacing: float = 0.00295898 * 10
+    octree_base_spacing: float = 0.00295898 * 1.234
     rotation_volume_spacing: float = octree_base_spacing * 2
     farfield_relative_size: float = 50
     surface_max_edge_length: float = 9.88e-3
     curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5 * 10
+    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5
     boundary_layer_growth_rate: float = 1.16
     surface_edge_growth_rate: float = 1.12
     blade_inner_max_edge_length: float = 9.88e-3
@@ -646,6 +646,7 @@ def _make_meshing_params(
     *,
     use_beta_mesher: bool,
     include_surface_refinements: bool = True,
+    enclosed_entities: list | None = None,
 ):
     farfield = fl.AutomatedFarfield(
         name="farfield",
@@ -671,6 +672,7 @@ def _make_meshing_params(
             fl.RotationVolume(
                 name="zone_r1",
                 entities=[rotation_volume],
+                enclosed_entities=enclosed_entities,
                 spacing_axial=cfg.rotation_volume_spacing * u.m,
                 spacing_radial=cfg.rotation_volume_spacing * u.m,
                 spacing_circumferential=cfg.rotation_volume_spacing * u.m,
@@ -743,10 +745,11 @@ def _make_wall_model(name: str, surfaces: list, cfg: CaseSetup):
     )
 
 
-def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup):
+def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup, wall_entities=None):
     if hasattr(geometry, "group_faces_by_tag"):
         geometry.group_faces_by_tag("faceName")
-    wall_entities = _wall_entities(geometry)
+    if wall_entities is None:
+        wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
     if missing:
         raise ValueError(
@@ -837,6 +840,10 @@ def build_params(
     use_surface_mesh: bool = False,
 ):
     geometry = project.surface_mesh if use_surface_mesh else project.geometry
+    if hasattr(geometry, "group_faces_by_tag"):
+        geometry.group_faces_by_tag("faceName")
+    wall_entities = _wall_entities(geometry)
+    wall_surfaces = _all_walls(wall_entities)
     rotation_volume = _rotation_volume(cfg)
     farfield, mesh_params = _make_meshing_params(
         rotation_volume,
@@ -844,8 +851,9 @@ def build_params(
         cfg,
         use_beta_mesher=use_beta_mesher,
         include_surface_refinements=not use_surface_mesh,
+        enclosed_entities=wall_surfaces,
     )
-    models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg)
+    models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg, wall_entities)
 
     with fl.SI_unit_system:
         return fl.SimulationParams(
