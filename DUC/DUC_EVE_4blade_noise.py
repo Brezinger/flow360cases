@@ -93,16 +93,40 @@ class CaseSetup:
     rotation_axis: tuple[float, float, float] = (0.0, 0.0, 1.0)
     rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
+    # ---------------------------------------
+    # consecutive refined time stepping setup
+    # ---------------------------------------
     # step 0
     # physical_steps: int = 600
     # max_pseudo_steps: int = 35
     #rpm: float = 1075.0
     #time_steps_per_revolution: int = 120
+    #navier_stokes_relative_tolerance: float = 0.01
+    #navier_stokes_order_of_accuracy: int = 1
+    #numerical_dissipation_factor: float = 1.
+    #low_mach_preconditioner: bool = False
+    #include_aeroacoustic_output: bool = False
     # step 1
-    physical_steps: int = 3600
-    max_pseudo_steps: int = 15
-    rpm: float = 1075.0 * 0.980047894
-    time_steps_per_revolution: int = 120 * 6
+    #physical_steps: int = 3600
+    #max_pseudo_steps: int = 15
+    #rpm: float = 1075.0 * 0.980047894
+    #time_steps_per_revolution: int = 120 * 6
+    #navier_stokes_relative_tolerance: float = 0.0175
+    #navier_stokes_order_of_accuracy: int = 2
+    #numerical_dissipation_factor: float = 0.7
+    #low_mach_preconditioner: bool = True
+    #include_aeroacoustic_output: bool = False
+    # step 2
+    physical_steps: int = 3840
+    max_pseudo_steps: int = 12
+    rpm: float = 1075.0 * 0.980047894 * 0.988510721
+    time_steps_per_revolution: int = 120 * 16
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    numerical_dissipation_factor: float = 0.5
+    low_mach_preconditioner: bool = True
+    include_aeroacoustic_output: bool = False
+
 
     wall_roughness_height: float = 1.0e-5
 
@@ -715,11 +739,6 @@ def _reference_velocity(thermal_state, reference_mach: float):
     return reference_mach * thermal_state.speed_of_sound
 
 
-def calculate_stagnation_pressure(thermal_state, reference_mach: float, gamma: float = 1.4):
-    pressure_ratio = (1.0 + 0.5 * (gamma - 1.0) * reference_mach**2) ** (gamma / (gamma - 1.0))
-    return thermal_state.pressure * pressure_ratio
-
-
 def _make_fluid_model(cfg: CaseSetup):
     return fl.Fluid(
         initial_condition=fl.NavierStokesInitialCondition(
@@ -731,8 +750,8 @@ def _make_fluid_model(cfg: CaseSetup):
         ),
         navier_stokes_solver=fl.NavierStokesSolver(
             absolute_tolerance=1.0e-11,
-            relative_tolerance=0.01,
-            order_of_accuracy=1,
+            relative_tolerance=cfg.navier_stokes_relative_tolerance,
+            order_of_accuracy=cfg.navier_stokes_order_of_accuracy,
             equation_evaluation_frequency=1,
             linear_solver=fl.LinearSolver(max_iterations=25),
             CFL_multiplier=1.0,
@@ -742,8 +761,8 @@ def _make_fluid_model(cfg: CaseSetup):
             update_jacobian_frequency=1,
             max_force_jac_update_physical_steps=0,
             riemann_solver=fl.RoeFlux(
-                numerical_dissipation_factor=1.0,
-                low_mach_preconditioner=True,
+                numerical_dissipation_factor=cfg.numerical_dissipation_factor,
+                low_mach_preconditioner=cfg.low_mach_preconditioner,
             ),
         ),
         turbulence_model_solver=fl.NoneSolver(),
@@ -809,8 +828,8 @@ def _make_aeroacoustic_output(source_file: Path = AEROACOUSTIC_SOURCE_FILE):
     )
 
 
-def _make_outputs(wall_surfaces: list):
-    return [
+def _make_outputs(wall_surfaces: list, cfg: CaseSetup):
+    outputs = [
         fl.VolumeOutput(
             name="VolumeOutput",
             output_format=["paraview"],
@@ -844,8 +863,12 @@ def _make_outputs(wall_surfaces: list):
             ],
             write_single_file=False,
         ),
-        _make_aeroacoustic_output(),
     ]
+
+    if cfg.include_aeroacoustic_output:
+        outputs.append(_make_aeroacoustic_output())
+
+    return outputs
 
 
 def build_params(
@@ -895,7 +918,7 @@ def build_params(
                 ),
                 order_of_accuracy=2,
             ),
-            outputs=_make_outputs(wall_surfaces),
+            outputs=_make_outputs(wall_surfaces, cfg),
         )
 
 
@@ -1577,7 +1600,6 @@ def main():
     reference_mach = _tip_mach(CONFIG, thermal_state)
     reference_velocity = _reference_velocity(thermal_state, reference_mach)
     dynamic_pressure = 0.5 * thermal_state.density * reference_velocity**2
-    stagnation_pressure = calculate_stagnation_pressure(thermal_state, reference_mach)
     print(
         "Reference thermal state:\n"
         f"  Temperature: {thermal_state.temperature.to('K').value:.2f} K "
@@ -1588,8 +1610,7 @@ def main():
         f"  Reference velocity: {reference_velocity.to('m/s').value:.3f} m/s\n"
         f"  Dynamic pressure: {dynamic_pressure.to('Pa').value:.2f} Pa "
         f"({dynamic_pressure.to('kPa').value:.3f} kPa)\n"
-        f"  Reference stagnation pressure: {stagnation_pressure.to('Pa').value:.2f} Pa "
-        f"({stagnation_pressure.to('kPa').value:.3f} kPa)\n"
+
         f"  RPM: {CONFIG.rpm:.3f}\n"
         f"  Omega: {CONFIG.omega_rad_s:.6f} rad/s\n"
         f"  Time step size: {CONFIG.time_step_size_s:.9f} s\n"
