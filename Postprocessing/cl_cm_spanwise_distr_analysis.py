@@ -13,47 +13,49 @@ from scipy.spatial import cKDTree
 # -----------------------------
 # User inputs
 # -----------------------------
-variant = "trap 24.5"
-#variant = "trap 39"
-#variant = "rect 24.5"
-#variant = "rect 39"
-variant = "rect 24.5 fine"
+result = "XWing 2.2 trap 24.5"
+#result = "XWing 2.2 trap 39"
+#result = "XWing 2.2 rect 24.5"
+#result = "XWing 2.2 rect 39"
+result = "XWing 2.2 rect 24.5 fine"
 
 show_plots = True
 
-if variant == "rect 24.5":
+if result == "XWing 2.2 rect 24.5":
     data_dir = Path(
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "rectangular wing/XWing2_2 fully_turbulent_SA U24.5_AOA10"
     )
-elif variant == "rect 24.5 fine":
+elif result == "XWing 2.2 rect 24.5 fine":
     data_dir = Path(
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "rectangular wing/XWing2_2 fully_turbulent_SA U24.5_AOA10_fine mesh"
     )
-elif variant == "rect 39":
+elif result == "XWing 2.2 rect 39":
     data_dir = Path(
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "rectangular wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
     )
-elif variant == "trap 24.5":
+elif result == "XWing 2.2 trap 24.5":
     data_dir = Path(
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "trapezoidal wing/XWing2_2 fully_turbulent_SA U24.5_AOA10"
     )
-elif variant == "trap 39":
+elif result == "XWing 2.2 trap 39":
     data_dir = Path(
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "trapezoidal wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
     )
-else:
-    raise ValueError(f"Unknown variant {variant}")
+elif result == "DUC step"
 
-if "trap" in variant:
+else:
+    raise ValueError(f"Unknown variant {result}")
+
+if "XWing 2.2" in result and "trap" in result:
     dy = 25.0                      # strip width in same length unit as Points
     S_ref = 0.277649 * 1e6  # reference area, set correctly
     b_ref = 1346                 # reference span for Cmx, for trap wing
-elif "rect" in variant:
+elif "XWing 2.2" in result and "rect" in result:
     dy = 25.0  # strip width in same length unit as Points
     S_ref = 0.2831 * 1e6  # reference area, set correctly
     b_ref = 1312  # reference span for Cmx, for trap wing
