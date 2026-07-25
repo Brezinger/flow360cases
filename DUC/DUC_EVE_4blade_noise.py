@@ -132,7 +132,7 @@ class CaseSetup:
 
     @property
     def omega_rad_s(self) -> float:
-        return -2.0 * math.pi * self.rpm / 60.0
+        return 2.0 * math.pi * self.rpm / 60.0
 
     @property
     def tip_speed_m_s(self) -> float:
@@ -685,7 +685,7 @@ def _make_meshing_params(
 def _make_operating_condition(cfg: CaseSetup):
     thermal_state = _make_thermal_state(cfg)
     return fl.AerospaceCondition.from_mach(
-        mach=cfg.mach,
+        mach=0 / thermal_state.speed_of_sound.to("m/s").value,
         reference_mach=_tip_mach(cfg, thermal_state),
         alpha=cfg.alpha_deg * u.deg,
         beta=cfg.beta_deg * u.deg,
@@ -1543,8 +1543,10 @@ def define_and_run(
 def main():
 
     # surface mesh path
-    # use_beta_mesher = False
-    # surface_mesh_file = None
+    """use_beta_mesher = False
+    surface_mesh_file = None
+    generate_volume_mesh = False
+    run_case = False"""
 
     # volume mesh path from the legacy surface mesh.
     # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
