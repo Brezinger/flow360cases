@@ -100,13 +100,15 @@ class CaseSetup:
     # consecutive refined time stepping setup
     # ---------------------------------------
     # step 0
+    # time_steps_per_revolution: int = 120
     # parent_case_id: str | None = None
     # physical_steps: int = 600
     # max_pseudo_steps: int = 35
     # rpm: float = 1075.0
-    # time_steps_per_revolution: int = 120
+    # wall_roughness_height: float = 1.0e-5
     # navier_stokes_relative_tolerance: float = 0.01
     # navier_stokes_order_of_accuracy: int = 1
+    # navier_stokes_linear_solver_max_iterations: int = 25
     # numerical_dissipation_factor: float = 1.
     # low_mach_preconditioner: bool = False
     # adaptive_cfl_min: float = 0.1
@@ -116,12 +118,14 @@ class CaseSetup:
     # include_aeroacoustic_output: bool = False
     # ------
     # step 1
+    # time_steps_per_revolution: int = 120 * 6
     # physical_steps: int = 3600
     # max_pseudo_steps: int = 15
     # rpm: float = 1075.0 * 0.980047894
-    # time_steps_per_revolution: int = 120 * 6
+    # wall_roughness_height: float = 1.0e-5
     # navier_stokes_relative_tolerance: float = 0.0175
     # navier_stokes_order_of_accuracy: int = 2
+    # navier_stokes_linear_solver_max_iterations: int = 25
     # numerical_dissipation_factor: float = 0.7
     # low_mach_preconditioner: bool = True
     # adaptive_cfl_min: float = 0.1
@@ -136,8 +140,10 @@ class CaseSetup:
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
     rpm: float = 1075.0 * 0.980047894 * 0.988510721
+    wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
     numerical_dissipation_factor: float = 0.5
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
@@ -152,8 +158,10 @@ class CaseSetup:
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
     rpm: float = 1076.228
+    wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
     numerical_dissipation_factor: float = 0.5
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
@@ -169,8 +177,10 @@ class CaseSetup:
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
     rpm: float = 1070.902
+    wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
     numerical_dissipation_factor: float = 0.5
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
@@ -186,35 +196,63 @@ class CaseSetup:
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
     rpm: float = 1063.677
+    wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
     numerical_dissipation_factor: float = 0.5
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False"""
+    include_aeroacoustic_output: bool = False
+    aeroacoustic_solver_start_time_s: float = 0.0
+    aeroacoustic_force_clean_start: bool = False"""
     # ------
-    #step 3
-    parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
+    # step 3
+    """parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
     time_steps_per_revolution: int = 120 * 32
-    num_revolutions: int = 3 # 3 in original simulation for step 3
+    num_revolutions: int = 2 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
-    max_pseudo_steps: int = 12
+    max_pseudo_steps: int = 8
     rpm: float = 1063.677
+    wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
     numerical_dissipation_factor: float = 0.25 # 0.2 original
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 100
-    adaptive_cfl_max_relative_change: float = 50.0
-    adaptive_cfl_convergence_limiting_factor: float = 0.5
+    adaptive_cfl_max: float = 1e3
+    adaptive_cfl_max_relative_change: float = 15
+    adaptive_cfl_convergence_limiting_factor: float = 0.25
     include_aeroacoustic_output: bool = True
+    aeroacoustic_solver_start_time_s: float = 0.0
+    aeroacoustic_force_clean_start: bool = False"""
+    # ------
+    # step 4
+    parent_case_id: str | None = "case-6fd80ded-eef0-42e4-9c59-8e835383ce16"
+    time_steps_per_revolution: int = int(120 * 32 * 25 / 12)
+    num_revolutions: int = 3 # 3 in original simulation for step 3
+    physical_steps: int = num_revolutions * time_steps_per_revolution
+    max_pseudo_steps: int = 10
+    rpm: float = 1063.677
+    wall_roughness_height: float = 0.
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 20
+    numerical_dissipation_factor: float = 0.2
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1e3
+    adaptive_cfl_max_relative_change: float = 15
+    adaptive_cfl_convergence_limiting_factor: float = 0.25
+    include_aeroacoustic_output: bool = True
+    aeroacoustic_solver_start_time_s: float = 0.0
+    aeroacoustic_force_clean_start: bool = True
 
 
-    wall_roughness_height: float = 1.0e-5
 
     # Mesh-generation placeholders. The old case JSON was produced from a
     # supplied volume mesh, so it does not define these. Keep these conservative
@@ -848,7 +886,7 @@ def _make_fluid_model(cfg: CaseSetup):
             relative_tolerance=cfg.navier_stokes_relative_tolerance,
             order_of_accuracy=cfg.navier_stokes_order_of_accuracy,
             equation_evaluation_frequency=1,
-            linear_solver=fl.LinearSolver(max_iterations=25),
+            linear_solver=fl.LinearSolver(max_iterations=cfg.navier_stokes_linear_solver_max_iterations),
             CFL_multiplier=1.0,
             kappa_MUSCL=0.33,
             limit_velocity=False,
@@ -963,7 +1001,7 @@ def _make_models_from_volume_mesh(volume_mesh, cfg: CaseSetup):
     return models, _all_walls(wall_entities)
 
 
-def _make_aeroacoustic_output(source_file: Path = AEROACOUSTIC_SOURCE_FILE):
+def _make_aeroacoustic_output(cfg: CaseSetup, source_file: Path = AEROACOUSTIC_SOURCE_FILE):
     with source_file.open(encoding="utf-8") as file:
         aeroacoustic_output = json.load(file)["aeroacousticOutput"]
 
@@ -980,6 +1018,8 @@ def _make_aeroacoustic_output(source_file: Path = AEROACOUSTIC_SOURCE_FILE):
         observers=observers,
         write_per_surface_output=aeroacoustic_output["writePerSurfaceOutput"],
         patch_type=aeroacoustic_output["patchType"],
+        aeroacoustic_solver_start_time=cfg.aeroacoustic_solver_start_time_s * u.s,
+        force_clean_start=cfg.aeroacoustic_force_clean_start,
     )
 
 
@@ -1021,7 +1061,7 @@ def _make_outputs(wall_surfaces: list, cfg: CaseSetup):
     ]
 
     if cfg.include_aeroacoustic_output:
-        outputs.append(_make_aeroacoustic_output())
+        outputs.append(_make_aeroacoustic_output(cfg))
 
     return outputs
 
