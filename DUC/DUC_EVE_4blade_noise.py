@@ -14,7 +14,10 @@ from pathlib import Path
 import numpy as np
 import flow360 as fl
 from flow360 import u
+from flow360.cloud.rest_api import RestApi
+from flow360.component.interfaces import CaseInterfaceV2
 from flow360.component.simulation.folder import ROOT_FOLDER
+from flow360.environment import current_environment
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -97,35 +100,118 @@ class CaseSetup:
     # consecutive refined time stepping setup
     # ---------------------------------------
     # step 0
+    # parent_case_id: str | None = None
     # physical_steps: int = 600
     # max_pseudo_steps: int = 35
-    #rpm: float = 1075.0
-    #time_steps_per_revolution: int = 120
-    #navier_stokes_relative_tolerance: float = 0.01
-    #navier_stokes_order_of_accuracy: int = 1
-    #numerical_dissipation_factor: float = 1.
-    #low_mach_preconditioner: bool = False
-    #include_aeroacoustic_output: bool = False
+    # rpm: float = 1075.0
+    # time_steps_per_revolution: int = 120
+    # navier_stokes_relative_tolerance: float = 0.01
+    # navier_stokes_order_of_accuracy: int = 1
+    # numerical_dissipation_factor: float = 1.
+    # low_mach_preconditioner: bool = False
+    # adaptive_cfl_min: float = 0.1
+    # adaptive_cfl_max: float = 1.0e6
+    # adaptive_cfl_max_relative_change: float = 50.0
+    # adaptive_cfl_convergence_limiting_factor: float = 1.0
+    # include_aeroacoustic_output: bool = False
+    # ------
     # step 1
-    #physical_steps: int = 3600
-    #max_pseudo_steps: int = 15
-    #rpm: float = 1075.0 * 0.980047894
-    #time_steps_per_revolution: int = 120 * 6
-    #navier_stokes_relative_tolerance: float = 0.0175
-    #navier_stokes_order_of_accuracy: int = 2
-    #numerical_dissipation_factor: float = 0.7
-    #low_mach_preconditioner: bool = True
-    #include_aeroacoustic_output: bool = False
-    # step 2
-    physical_steps: int = 3840
+    # physical_steps: int = 3600
+    # max_pseudo_steps: int = 15
+    # rpm: float = 1075.0 * 0.980047894
+    # time_steps_per_revolution: int = 120 * 6
+    # navier_stokes_relative_tolerance: float = 0.0175
+    # navier_stokes_order_of_accuracy: int = 2
+    # numerical_dissipation_factor: float = 0.7
+    # low_mach_preconditioner: bool = True
+    # adaptive_cfl_min: float = 0.1
+    # adaptive_cfl_max: float = 1.0e6
+    # adaptive_cfl_max_relative_change: float = 50.0
+    # adaptive_cfl_convergence_limiting_factor: float = 1.0
+    # include_aeroacoustic_output: bool = False
+    # ------
+    # step 2A
+    """time_steps_per_revolution: int = 120 * 16
+    num_revolutions: int = 2
+    physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
     rpm: float = 1075.0 * 0.980047894 * 0.988510721
-    time_steps_per_revolution: int = 120 * 16
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
     numerical_dissipation_factor: float = 0.5
     low_mach_preconditioner: bool = True
-    include_aeroacoustic_output: bool = False
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
+    # ------
+    # step 2B
+    """time_steps_per_revolution: int = 120 * 16
+    num_revolutions: int = 1
+    physical_steps: int = num_revolutions * time_steps_per_revolution
+    max_pseudo_steps: int = 12
+    rpm: float = 1076.228
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    numerical_dissipation_factor: float = 0.5
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
+    # ------
+    # step 2C
+    """parent_case_id: str | None = "case-a5d80787-d004-44d8-9892-3d1844516cb0"
+    time_steps_per_revolution: int = 120 * 16
+    num_revolutions: int = 1
+    physical_steps: int = num_revolutions * time_steps_per_revolution
+    max_pseudo_steps: int = 12
+    rpm: float = 1070.902
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    numerical_dissipation_factor: float = 0.5
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
+    # ------
+    # step 2D
+    """parent_case_id: str | None = "case-209d1630-20f5-4cba-928b-760d27e3939c"
+    time_steps_per_revolution: int = 120 * 16
+    num_revolutions: int = 1
+    physical_steps: int = num_revolutions * time_steps_per_revolution
+    max_pseudo_steps: int = 12
+    rpm: float = 1063.677
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    numerical_dissipation_factor: float = 0.5
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
+    # ------
+    #step 3
+    parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
+    time_steps_per_revolution: int = 120 * 32
+    num_revolutions: int = 3 # 3 in original simulation for step 3
+    physical_steps: int = num_revolutions * time_steps_per_revolution
+    max_pseudo_steps: int = 12
+    rpm: float = 1063.677
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    numerical_dissipation_factor: float = 0.25 # 0.2 original
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 100
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 0.5
+    include_aeroacoustic_output: bool = True
 
 
     wall_roughness_height: float = 1.0e-5
@@ -412,7 +498,11 @@ def _wall_entities(geometry) -> dict[str, list]:
             wall_name: [
                 geometry[boundary_name]
                 for boundary_name in boundary_names
-                if any(boundary_name.startswith(prefix) for prefix in prefixes)
+                if any(
+                    boundary_name.startswith(prefix)
+                    or boundary_name.rsplit("/", 1)[-1].startswith(prefix)
+                    for prefix in prefixes
+                )
             ]
             for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
         }
@@ -465,6 +555,11 @@ def _all_walls(wall_entities: dict[str, list]):
     for entities in wall_entities.values():
         walls.extend(entities)
     return walls
+
+
+def _project_root_type_name(project) -> str | None:
+    root_item_type = getattr(getattr(project, "metadata", None), "root_item_type", None)
+    return getattr(root_item_type, "name", None)
 
 
 def _rotation_volume(cfg: CaseSetup):
@@ -808,6 +903,66 @@ def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup, wall_entit
     return models, _all_walls(wall_entities)
 
 
+def _volume_mesh_rotation_volume(volume_mesh, cfg: CaseSetup):
+    preferred_zone_name = "zone_r1"
+    zone_names = getattr(volume_mesh, "zone_names", [])
+    if preferred_zone_name in zone_names:
+        return volume_mesh[preferred_zone_name]
+    if len(zone_names) == 1:
+        return volume_mesh[zone_names[0]]
+    raise ValueError(
+        f"Could not identify rotation volume {preferred_zone_name!r}. "
+        f"Available volume zones: {zone_names}"
+    )
+
+
+def _volume_mesh_farfield_surfaces(volume_mesh) -> list:
+    boundary_names = getattr(volume_mesh, "boundary_names", [])
+    farfield_names = [
+        boundary_name
+        for boundary_name in boundary_names
+        if "farfield" in boundary_name.lower()
+    ]
+    if not farfield_names:
+        raise ValueError(
+            f"Could not identify farfield boundaries in parent volume mesh. "
+            f"Available boundaries: {boundary_names}"
+        )
+    return [volume_mesh[boundary_name] for boundary_name in farfield_names]
+
+
+def _make_models_from_volume_mesh(volume_mesh, cfg: CaseSetup):
+    wall_entities = _wall_entities(volume_mesh)
+    missing = [name for name, entities in wall_entities.items() if not entities]
+    if missing:
+        raise ValueError(
+            f"Could not resolve wall boundary groups {missing}. "
+            f"Available boundaries: {getattr(volume_mesh, 'boundary_names', [])}. "
+            "Update SURFACE_MESH_WALL_PREFIXES."
+        )
+
+    rotation_volume = _volume_mesh_rotation_volume(volume_mesh, cfg)
+    rotation_name = getattr(rotation_volume, "name", "zone_r1")
+    models = [
+        _make_fluid_model(cfg),
+        fl.Rotation(
+            name=rotation_name,
+            volumes=[rotation_volume],
+            spec=fl.AngularVelocity(cfg.omega_rad_s * u.rad / u.s),
+            rotating_reference_frame_model=False,
+        ),
+    ]
+    for wall_name, surfaces in wall_entities.items():
+        models.append(_make_wall_model(f"{rotation_name}/{wall_name}", surfaces, cfg))
+    models.append(
+        fl.Freestream(
+            name="Freestream",
+            surfaces=_volume_mesh_farfield_surfaces(volume_mesh),
+        )
+    )
+    return models, _all_walls(wall_entities)
+
+
 def _make_aeroacoustic_output(source_file: Path = AEROACOUSTIC_SOURCE_FILE):
     with source_file.open(encoding="utf-8") as file:
         aeroacoustic_output = json.load(file)["aeroacousticOutput"]
@@ -878,48 +1033,56 @@ def build_params(
     use_beta_mesher: bool = False,
     use_surface_mesh: bool = False,
 ):
-    geometry = project.surface_mesh if use_surface_mesh else project.geometry
-    if hasattr(geometry, "group_faces_by_tag"):
-        geometry.group_faces_by_tag("faceName")
-    wall_entities = _wall_entities(geometry)
-    wall_surfaces = _all_walls(wall_entities)
-    rotation_volume = _rotation_volume(cfg)
-    farfield, mesh_params = _make_meshing_params(
-        rotation_volume,
-        geometry,
-        cfg,
-        use_beta_mesher=use_beta_mesher,
-        include_surface_refinements=not use_surface_mesh,
-        enclosed_entities=wall_surfaces,
-    )
-    models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg, wall_entities)
+    root_type_name = _project_root_type_name(project)
+    if root_type_name == "VOLUME_MESH":
+        mesh_params = None
+        models, wall_surfaces = _make_models_from_volume_mesh(project.volume_mesh, cfg)
+    else:
+        use_existing_surface_mesh = use_surface_mesh or root_type_name == "SURFACE_MESH"
+        geometry = project.surface_mesh if use_existing_surface_mesh else project.geometry
+        if hasattr(geometry, "group_faces_by_tag"):
+            geometry.group_faces_by_tag("faceName")
+        wall_entities = _wall_entities(geometry)
+        wall_surfaces = _all_walls(wall_entities)
+        rotation_volume = _rotation_volume(cfg)
+        farfield, mesh_params = _make_meshing_params(
+            rotation_volume,
+            geometry,
+            cfg,
+            use_beta_mesher=use_beta_mesher,
+            include_surface_refinements=not use_existing_surface_mesh,
+            enclosed_entities=wall_surfaces,
+        )
+        models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg, wall_entities)
 
     with fl.SI_unit_system:
-        return fl.SimulationParams(
-            version="25.10.0",
-            unit_system=fl.SI_unit_system,
-            meshing=mesh_params,
-            reference_geometry=fl.ReferenceGeometry(
+        params_kwargs = {
+            "version": "25.10.0",
+            "unit_system": fl.SI_unit_system,
+            "reference_geometry": fl.ReferenceGeometry(
                 moment_center=cfg.moment_center * u.m,
                 moment_length=cfg.moment_length * u.m,
                 area=cfg.ref_area * u.m**2,
             ),
-            operating_condition=_make_operating_condition(cfg),
-            models=models,
-            time_stepping=fl.Unsteady(
+            "operating_condition": _make_operating_condition(cfg),
+            "models": models,
+            "time_stepping": fl.Unsteady(
                 max_pseudo_steps=cfg.max_pseudo_steps,
                 steps=cfg.physical_steps,
                 step_size=cfg.time_step_size_s * u.s,
                 CFL=fl.AdaptiveCFL(
-                    min=0.1,
-                    max=1.0e6,
-                    max_relative_change=50.0,
-                    convergence_limiting_factor=1.0,
+                    min=cfg.adaptive_cfl_min,
+                    max=cfg.adaptive_cfl_max,
+                    max_relative_change=cfg.adaptive_cfl_max_relative_change,
+                    convergence_limiting_factor=cfg.adaptive_cfl_convergence_limiting_factor,
                 ),
                 order_of_accuracy=2,
             ),
-            outputs=_make_outputs(wall_surfaces, cfg),
-        )
+            "outputs": _make_outputs(wall_surfaces, cfg),
+        }
+        if mesh_params is not None:
+            params_kwargs["meshing"] = mesh_params
+        return fl.SimulationParams(**params_kwargs)
 
 
 def _mapbc_file_for_ugrid(surface_mesh_file: Path) -> Path | None:
@@ -1424,6 +1587,42 @@ def _make_project_from_local_surface_mesh(surface_mesh_file: Path, cfg: CaseSetu
         run_async=False,
     )
 
+
+def _fork_from_case(cfg: CaseSetup):
+    if not cfg.parent_case_id:
+        return None
+    parent_case_id = _parent_case_full_id(cfg)
+    case = fl.Case(parent_case_id.removeprefix("case-"))
+    # The SDK Case constructor validates bare UUIDs, but the v2 draft API
+    # expects the full asset id when selecting a Case as the draft source.
+    case._id = parent_case_id
+    return case
+
+
+def _parent_case_full_id(cfg: CaseSetup) -> str:
+    if not cfg.parent_case_id:
+        raise ValueError("Cannot resolve a parent case id without cfg.parent_case_id.")
+    parent_case_id = cfg.parent_case_id.strip()
+    return parent_case_id if parent_case_id.startswith("case-") else f"case-{parent_case_id}"
+
+
+def _parent_case_project_id(cfg: CaseSetup) -> str:
+    parent_case_id = _parent_case_full_id(cfg)
+    case_info = RestApi(CaseInterfaceV2.endpoint, environment_provider=current_environment).get(
+        path=f"{CaseInterfaceV2.endpoint}/{parent_case_id}"
+    )
+    project_id = case_info.get("projectId")
+    if not project_id:
+        raise ValueError(f"Parent case {parent_case_id} does not expose a projectId in v2 metadata.")
+    return project_id
+
+
+def _make_project_from_parent_case(cfg: CaseSetup):
+    project_id = _parent_case_project_id(cfg)
+    print(f"Loading parent project {project_id} from parent case {_parent_case_full_id(cfg)}.")
+    return fl.Project.from_cloud(project_id)
+
+
 def define_and_run_from_surface_mesh(
     *,
     surface_mesh_file: Path = DEFAULT_SURFACE_MESH_FILE,
@@ -1436,7 +1635,12 @@ def define_and_run_from_surface_mesh(
     results_path: str | None = None,
 ):
     surface_mesh_file = Path(surface_mesh_file)
-    project = _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
+    fork_from = _fork_from_case(cfg)
+    project = (
+        _make_project_from_parent_case(cfg)
+        if fork_from is not None
+        else _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
+    )
     params = build_params(project, cfg, use_beta_mesher=True, use_surface_mesh=True)
 
     warning_context = (
@@ -1452,6 +1656,7 @@ def define_and_run_from_surface_mesh(
                 name="DUC_EVE_4blade_noise_setup",
                 use_beta_mesher=True,
                 use_geometry_AI=False,
+                fork_from=fork_from,
                 run_async=False,
                 raise_on_error=True,
                 draft_only=True,
@@ -1475,6 +1680,7 @@ def define_and_run_from_surface_mesh(
             name="DUC_EVE_4blade_noise_case",
             use_beta_mesher=True,
             use_geometry_AI=False,
+            fork_from=fork_from,
             run_async=False,
             raise_on_error=True,
         )
@@ -1519,7 +1725,12 @@ def define_and_run(
             results_path=results_path,
         )
 
-    project = _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher)
+    fork_from = _fork_from_case(cfg)
+    project = (
+        _make_project_from_parent_case(cfg)
+        if fork_from is not None
+        else _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher)
+    )
     params = build_params(project, cfg, use_beta_mesher=use_beta_mesher)
 
     warning_context = (
@@ -1535,6 +1746,7 @@ def define_and_run(
                 name="DUC_EVE_4blade_noise_setup",
                 use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
+                fork_from=fork_from,
                 run_async=False,
                 raise_on_error=True,
                 draft_only=True,
@@ -1558,6 +1770,7 @@ def define_and_run(
             name="DUC_EVE_4blade_noise_case",
             use_beta_mesher=use_beta_mesher,
             use_geometry_AI=False,
+            fork_from=fork_from,
             run_async=False,
             raise_on_error=True,
         )
@@ -1589,9 +1802,15 @@ def main():
 
     # volume mesh path from the legacy surface mesh.
     # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
-    surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
+    """surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
+    run_case = False"""
+
+    # fork case path
+    surface_mesh_file = None
+    use_beta_mesher = True
+    generate_volume_mesh = False
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
@@ -1610,10 +1829,11 @@ def main():
         f"  Reference velocity: {reference_velocity.to('m/s').value:.3f} m/s\n"
         f"  Dynamic pressure: {dynamic_pressure.to('Pa').value:.2f} Pa "
         f"({dynamic_pressure.to('kPa').value:.3f} kPa)\n"
-
         f"  RPM: {CONFIG.rpm:.3f}\n"
         f"  Omega: {CONFIG.omega_rad_s:.6f} rad/s\n"
+        f"  Physical steps: {CONFIG.physical_steps}\n"
         f"  Time step size: {CONFIG.time_step_size_s:.9f} s\n"
+        f"  Parent case id: {CONFIG.parent_case_id or 'None'}\n"
 
     )
 

@@ -46,7 +46,10 @@ elif result == "XWing 2.2 trap 39":
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "trapezoidal wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
     )
-elif result == "DUC step"
+elif result == "DUC step 2":
+    data_dir = Path(
+        "C:\git/flow360cases/DUC/results/step2_case-950e2800-b54d-4826-b85f-56206efdc51f_results_total_forces_v2.csv"
+    )
 
 else:
     raise ValueError(f"Unknown variant {result}")
@@ -59,6 +62,10 @@ elif "XWing 2.2" in result and "rect" in result:
     dy = 25.0  # strip width in same length unit as Points
     S_ref = 0.2831 * 1e6  # reference area, set correctly
     b_ref = 1312  # reference span for Cmx, for trap wing
+if "DUC" in result:
+    dy = 20.
+    S_ref = 1.4**2 * np.pi
+    b_ref = 1.4
 
 
 surface_names = [
