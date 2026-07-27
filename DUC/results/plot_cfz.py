@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-"""RESULTS_DIR = Path(Path(__file__).resolve().parent + "/forces/")
+RESULTS_DIR = Path("C:/git/flow360cases/DUC/results/forces").resolve()
 STEP_CONFIG_OVERRIDES = {
     "step0C": {"rpm": 1075.0, "time_steps_per_revolution": 120},
     "step0D": {"rpm": 1075.0, "time_steps_per_revolution": 120},
@@ -21,20 +21,20 @@ STEP_CONFIG_OVERRIDES = {
     "step2D": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 16},
     "step3": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 32},
     "step4": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 32 * 25/12},
-}"""
+}
 
-RESULTS_DIR = Path("C:/git/flow360cases/DUC/POC2x2/results/forces")
+"""RESULTS_DIR = Path("C:/git/flow360cases/DUC/POC2x2/results/forces")
 STEP_CONFIG_OVERRIDES = {
     "step0": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120},
     "step1": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120 * 6},
     "step2": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120 * 16,},
     "step3": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120 * 32},
     "step4": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120 * 32 * 25/12},
-}
+}"""
 
 
 OUTPUT_FILE = RESULTS_DIR / "thrust_torque_coefficients_over_revolutions.png"
-AVERAGING_WINDOW_REVOLUTIONS = 0.5
+AVERAGING_WINDOW_REVOLUTIONS = 3
 AXIS_PERCENTILE_LOW = 2
 AXIS_PERCENTILE_HIGH = 98
 REFERENCE_DENSITY_KG_M3 = 1.111635

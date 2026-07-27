@@ -130,7 +130,7 @@ def pressure_to_wav(
 
 if __name__ == "__main__":
     information = pressure_to_wav(
-        input_file="observer_pressure.txt",
+        input_file="Lifter4B_step4_results_total_acoustics_v3.csv",
         output_file="propeller_noise.wav",
         target_fs=48_000,
     )

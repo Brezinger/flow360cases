@@ -28,7 +28,9 @@ OBSERVER_ANGLES_DEG = {
 }
 FLOW360_OBSERVER_NUMBERING_OFFSET = -1
 DEFAULT_RPM = 1063.677
-DEFAULT_TIME_STEPS_PER_REVOLUTION = 120 * 32
+STEP3_TIME_STEPS_PER_REVOLUTION = 120 * 32
+STEP4_TIME_STEPS_PER_REVOLUTION = STEP3_TIME_STEPS_PER_REVOLUTION * 25 / 12
+DEFAULT_TIME_STEPS_PER_REVOLUTION = STEP4_TIME_STEPS_PER_REVOLUTION
 DEFAULT_BLADE_COUNT = 4
 LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3 = 1.064099
 LOCAL_RESULTS_REFERENCE_VELOCITY_M_S = 155.9432
@@ -37,12 +39,12 @@ POC2X2_REFERENCE_DENSITY_KG_M3 = 1.149
 POC2X2_REFERENCE_VELOCITY_M_S = 146.857683
 POC2X2_REFERENCE_TEMPERATURE_K = 283.275
 CASE_TIMING_BY_PREFIX = {
-    "step3": (1063.677, 120 * 32),
-    "step4": (1063.677, 120 * 32 * 25 / 12),
+    "step3": (DEFAULT_RPM, STEP3_TIME_STEPS_PER_REVOLUTION),
+    "step4": (DEFAULT_RPM, STEP4_TIME_STEPS_PER_REVOLUTION),
 }
 COMPARISON_OUTPUT_FILE = "oaspl_observers_1_5_comparison.png"
-OASPL_MIN_FREQUENCY_HZ = 50.0
-OASPL_MAX_FREQUENCY_HZ = 8_000.0
+OASPL_MIN_FREQUENCY_HZ = 40.0
+OASPL_MAX_FREQUENCY_HZ = 1_000.0
 SPECTRUM_MIN_FREQUENCY_HZ = 40.0
 SPECTRUM_MAX_FREQUENCY_HZ = 10_000.0
 SPECTRUM_X_TICKS_HZ = (40, 60, 80, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000)
@@ -331,13 +333,32 @@ def evaluate_plot(dataset: AcousticDataset, plot: PlotDefinition) -> dict[int, f
     }
 
 
+def print_oaspl_values(
+    dataset: AcousticDataset,
+    values_by_plot: dict[str, dict[int, float]],
+    observers: tuple[int, ...],
+) -> None:
+    print(f"OASPL values for {_case_label(dataset.source_file)}:")
+    for observer in observers:
+        unweighted = values_by_plot["oaspl_unweighted"][observer]
+        a_weighted = values_by_plot["oaspl_a_weighted"][observer]
+        print(f"  Observer {observer}: {unweighted:.2f} dB, {a_weighted:.2f} dBA")
+
+
 def _case_label(source_file: Path) -> str:
     return source_file.name.split("_results_total_acoustics", 1)[0]
 
 
-def _legend_label(source_file: Path) -> str:
+def _step_label(source_file: Path) -> str:
     case_label = _case_label(source_file)
-    step_label = case_label.split("_case-", 1)[0]
+    for separator in ("_case-", "_"):
+        if separator in case_label:
+            return case_label.split(separator, 1)[0]
+    return case_label
+
+
+def _legend_label(source_file: Path) -> str:
+    step_label = _step_label(source_file)
     if "poc2x2" in {part.lower() for part in source_file.resolve().parts}:
         return f"total - Case: POC2x2 {step_label}"
     return f"total - Case: {step_label}"
@@ -347,8 +368,7 @@ def _timing_for_file(csv_file: Path, rpm: float | None, time_steps_per_revolutio
     if rpm is not None and time_steps_per_revolution is not None:
         return rpm, time_steps_per_revolution
 
-    case_label = _case_label(csv_file)
-    step_label = case_label.split("_case-", 1)[0]
+    step_label = _step_label(csv_file)
     default_rpm, default_steps_per_revolution = CASE_TIMING_BY_PREFIX.get(
         step_label,
         (DEFAULT_RPM, DEFAULT_TIME_STEPS_PER_REVOLUTION),
@@ -779,11 +799,15 @@ def make_plots(
     )
 
     output_files = []
+    values_by_plot = {}
     for plot in plots:
         values_by_observer = evaluate_plot(dataset, plot)
+        values_by_plot[plot.name] = values_by_observer
         output_file = render_bar_plot(values_by_observer, plot, dataset.source_file, output_dir)
         output_files.append(output_file)
         print(f"Wrote {output_file}")
+    if all(plot.name in values_by_plot for plot in PLOTS):
+        print_oaspl_values(dataset, values_by_plot, observers)
     return output_files
 
 
@@ -822,6 +846,8 @@ def make_comparison_plot(
             f"sample_rate={dataset.sample_rate_hz:.3f} Hz, "
             f"pressure_scale=gamma*p_inf={dataset.pressure_scale_pa:.3f} Pa"
         )
+        if all(plot.name in values_by_plot for plot in PLOTS):
+            print_oaspl_values(dataset, values_by_plot, observers)
 
     output_file = render_comparison_plot(results_by_case, observers, output_dir)
     print(f"Wrote {output_file}")
