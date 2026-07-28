@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Callable
 
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, LogLocator, MultipleLocator
 import numpy as np
+from scipy.signal import spectrogram, welch
 
 
 RESULTS_DIR = Path(__file__).resolve().parent
@@ -35,50 +36,47 @@ DEFAULT_BLADE_COUNT = 4
 LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3 = 1.064099
 LOCAL_RESULTS_REFERENCE_VELOCITY_M_S = 155.9432
 LOCAL_RESULTS_REFERENCE_TEMPERATURE_K = 303.275
+LOCAL_RESULTS_L_GRID_UNIT_M = 0.001
 POC2X2_REFERENCE_DENSITY_KG_M3 = 1.149
 POC2X2_REFERENCE_VELOCITY_M_S = 146.857683
 POC2X2_REFERENCE_TEMPERATURE_K = 283.275
+POC2X2_L_GRID_UNIT_M = 1.0
 CASE_TIMING_BY_PREFIX = {
     "step3": (DEFAULT_RPM, STEP3_TIME_STEPS_PER_REVOLUTION),
     "step4": (DEFAULT_RPM, STEP4_TIME_STEPS_PER_REVOLUTION),
 }
 COMPARISON_OUTPUT_FILE = "oaspl_observers_1_5_comparison.png"
 OASPL_MIN_FREQUENCY_HZ = 40.0
-OASPL_MAX_FREQUENCY_HZ = 1_000.0
+OASPL_MAX_FREQUENCY_HZ = 10_000.0
 SPECTRUM_MIN_FREQUENCY_HZ = 40.0
 SPECTRUM_MAX_FREQUENCY_HZ = 10_000.0
 SPECTRUM_X_TICKS_HZ = (40, 60, 80, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000)
 SPECTRUM_Y_LIMITS_DB = (-20.0, 70.0)
+SPECTROGRAM_MAX_FREQUENCY_HZ = 5_000.0
+SPECTROGRAM_LIMITS_DB = (0.0, 120.0)
+SPECTROGRAM_NPERSEG = 512
 HARMONIC_INDICES = tuple(range(1, 11))
 HARMONIC_Y_LIMITS_DB = (0.0, 110.0)
-THIRD_OCTAVE_CENTER_FREQUENCIES_HZ = (
-    31.5,
-    40.0,
-    50.0,
-    63.0,
-    80.0,
-    100.0,
-    125.0,
-    160.0,
-    200.0,
-    250.0,
-    315.0,
-    400.0,
-    500.0,
-    630.0,
-    800.0,
-    1000.0,
-    1250.0,
-    1600.0,
-    2000.0,
-    2500.0,
-    3150.0,
-    4000.0,
-    5000.0,
-    6300.0,
-    8000.0,
-    10000.0,
-)
+APPLY_A_WEIGHTING_TO_SPECTRA = True
+LEGEND_LABEL_OVERRIDE: str | None = None
+NPERSEG = "All"
+WINDOW = "hann"
+
+
+def _default_line_colors() -> list[str]:
+    return plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+
+def _is_local_step4(source_file: Path) -> bool:
+    path_parts = {part.lower() for part in source_file.resolve().parts}
+    return _step_label(source_file) == "step4" and "poc2x2" not in path_parts
+
+
+def _line_color(source_file: Path, index: int) -> str:
+    colors = _default_line_colors()
+    if _is_local_step4(source_file):
+        return colors[0]
+    return colors[(index + 1) % len(colors)]
 
 
 @dataclass(frozen=True)
@@ -93,22 +91,34 @@ class AcousticDataset:
     reference_density_kg_m3: float
     reference_velocity_m_s: float
     reference_temperature_k: float
+    l_grid_unit_m: float
 
     @property
     def sample_spacing_s(self) -> float:
-        return 60.0 / (self.rpm * self.time_steps_per_revolution)
+        if len(self.time) < 2:
+            raise ValueError("At least two time samples are required to compute the acoustic sample spacing.")
+        return float(np.mean(np.diff(self.time * (self.l_grid_unit_m / self.speed_of_sound_m_s))))
 
     @property
     def sample_rate_hz(self) -> float:
         return 1.0 / self.sample_spacing_s
 
     @property
+    def time_seconds(self) -> np.ndarray:
+        return self.time * (self.l_grid_unit_m / self.speed_of_sound_m_s)
+
+    @property
     def pressure_scale_pa(self) -> float:
-        return (
-            AIR_SPECIFIC_HEAT_RATIO
-            * self.reference_density_kg_m3
-            * AIR_GAS_CONSTANT_J_KG_K
-            * self.reference_temperature_k
+        return self.reference_density_kg_m3 * self.speed_of_sound_m_s**2
+
+    @property
+    def speed_of_sound_m_s(self) -> float:
+        return float(
+            np.sqrt(
+                AIR_SPECIFIC_HEAT_RATIO
+                * AIR_GAS_CONSTANT_J_KG_K
+                * self.reference_temperature_k
+            )
         )
 
 
@@ -146,6 +156,7 @@ def load_acoustic_dataset(
     reference_density_kg_m3: float = LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3,
     reference_velocity_m_s: float = LOCAL_RESULTS_REFERENCE_VELOCITY_M_S,
     reference_temperature_k: float = LOCAL_RESULTS_REFERENCE_TEMPERATURE_K,
+    l_grid_unit_m: float = LOCAL_RESULTS_L_GRID_UNIT_M,
 ) -> AcousticDataset:
     csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
     pressure_columns = {
@@ -208,6 +219,7 @@ def load_acoustic_dataset(
         reference_density_kg_m3=reference_density_kg_m3,
         reference_velocity_m_s=reference_velocity_m_s,
         reference_temperature_k=reference_temperature_k,
+        l_grid_unit_m=l_grid_unit_m,
     )
 
 
@@ -215,97 +227,167 @@ def _fluctuating_pressure(pressure: np.ndarray) -> np.ndarray:
     return pressure - np.mean(pressure)
 
 
+def _filter_zero_signal_edges(pressure: np.ndarray) -> np.ndarray:
+    pressure = np.asarray(pressure, dtype=float)
+    nonzero_indices = np.where(pressure != 0.0)[0]
+    if nonzero_indices.size == 0:
+        return pressure
+    return pressure[nonzero_indices[0]:nonzero_indices[-1] + 1]
+
+
+def _db_from_power(mean_square_pressure: np.ndarray | float) -> np.ndarray | float:
+    mean_square_pressure = np.asarray(mean_square_pressure, dtype=float)
+    spl_db = 10.0 * np.log10(
+        np.maximum(mean_square_pressure, np.finfo(float).tiny)
+        / ACOUSTIC_PRESSURE_REFERENCE_PA**2
+    )
+    if spl_db.ndim == 0:
+        return float(spl_db)
+    return spl_db
+
+
+def _nperseg(sample_count: int) -> int:
+    if isinstance(NPERSEG, str) and NPERSEG.strip().lower() == "all":
+        return sample_count
+    return min(int(NPERSEG), sample_count)
+
+
 def oaspl_unweighted_db(pressure: np.ndarray, sample_rate_hz: float) -> float:
     frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
     del frequencies
     mean_square_pressure = float(np.sum(mean_square_by_bin))
-    return 10.0 * np.log10(mean_square_pressure / ACOUSTIC_PRESSURE_REFERENCE_PA**2)
+    return float(_db_from_power(mean_square_pressure))
 
 
 def _a_weighting_db(frequency_hz: np.ndarray) -> np.ndarray:
     frequency = np.asarray(frequency_hz, dtype=float)
-    frequency_squared = frequency**2
-    with np.errstate(divide="ignore", invalid="ignore"):
-        numerator = (12194.0**2) * frequency_squared**2
-        denominator = (
-            (frequency_squared + 20.6**2)
-            * np.sqrt((frequency_squared + 107.7**2) * (frequency_squared + 737.9**2))
-            * (frequency_squared + 12194.0**2)
-        )
-        weighting = 20.0 * np.log10(numerator / denominator) + 2.0
-    weighting[~np.isfinite(weighting)] = -np.inf
-    return weighting
+    frequency_squared = np.square(frequency)
+    ra = (12200.0**2 * frequency_squared**2) / (
+        (frequency_squared + 20.6**2)
+        * (frequency_squared + 12200.0**2)
+        * np.sqrt((frequency_squared + 107.7**2) * (frequency_squared + 737.9**2))
+    )
+    ra = np.maximum(ra, 1.0e-12)
+    ra_1khz = (12200.0**2 * (1000.0**2) ** 2) / (
+        (1000.0**2 + 20.6**2)
+        * (1000.0**2 + 12200.0**2)
+        * np.sqrt((1000.0**2 + 107.7**2) * (1000.0**2 + 737.9**2))
+    )
+    weighting = 20.0 * np.log10(ra / ra_1khz)
+    return np.where(frequency > 0.0, weighting, -np.inf)
 
 
-def _one_sided_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
-    pressure_fluctuation = _fluctuating_pressure(pressure)
-    sample_count = len(pressure_fluctuation)
-    if sample_count < 2:
-        raise ValueError("At least two samples are required for spectral OASPL.")
+def _weighting_db(frequency_hz: np.ndarray, apply_a_weighting: bool) -> np.ndarray:
+    if apply_a_weighting:
+        return _a_weighting_db(frequency_hz)
+    return np.zeros_like(np.asarray(frequency_hz, dtype=float))
 
-    spectrum = np.fft.rfft(pressure_fluctuation)
-    mean_square_by_bin = (np.abs(spectrum) / sample_count) ** 2
-    if sample_count % 2 == 0:
-        mean_square_by_bin[1:-1] *= 2.0
-    else:
-        mean_square_by_bin[1:] *= 2.0
-    frequencies = np.fft.rfftfreq(sample_count, d=1.0 / sample_rate_hz)
+
+def _welch_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
+    pressure = _filter_zero_signal_edges(pressure)
+    sample_count = len(pressure)
+    if sample_count < 8:
+        raise ValueError("Too few samples for Welch calculation.")
+
+    nperseg = _nperseg(sample_count)
+    frequencies, mean_square_by_bin = welch(
+        _fluctuating_pressure(pressure),
+        fs=sample_rate_hz,
+        window=WINDOW,
+        nperseg=nperseg,
+        noverlap=nperseg // 2,
+        scaling="spectrum",
+    )
     return frequencies, mean_square_by_bin
 
 
 def _band_limited_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
-    frequencies, mean_square_by_bin = _one_sided_mean_square_spectrum(pressure, sample_rate_hz)
+    frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
     frequency_mask = (
         (frequencies >= OASPL_MIN_FREQUENCY_HZ)
         & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
     )
+    if not np.any(frequency_mask):
+        raise ValueError("No frequencies remain inside the configured frequency band.")
     return frequencies[frequency_mask], mean_square_by_bin[frequency_mask]
 
 
 def oaspl_a_weighted_db(pressure: np.ndarray, sample_rate_hz: float) -> float:
     frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
-    linear_a_weight = 10.0 ** (_a_weighting_db(frequencies) / 10.0)
+    linear_a_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting=True) / 10.0)
     weighted_mean_square_pressure = float(np.sum(mean_square_by_bin * linear_a_weight))
-    return 10.0 * np.log10(weighted_mean_square_pressure / ACOUSTIC_PRESSURE_REFERENCE_PA**2)
+    return float(_db_from_power(weighted_mean_square_pressure))
 
 
-def spl_spectrum_db(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
-    frequencies, mean_square_by_bin = _one_sided_mean_square_spectrum(pressure, sample_rate_hz)
-    positive_frequency_mask = frequencies > 0.0
-    frequencies = frequencies[positive_frequency_mask]
-    mean_square_by_bin = np.maximum(mean_square_by_bin[positive_frequency_mask], np.finfo(float).tiny)
-    spl_db = 10.0 * np.log10(mean_square_by_bin / ACOUSTIC_PRESSURE_REFERENCE_PA**2)
-    return frequencies, spl_db
+def spl_spectrum_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    apply_a_weighting: bool = APPLY_A_WEIGHTING_TO_SPECTRA,
+) -> tuple[np.ndarray, np.ndarray]:
+    frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
+    linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
+    return frequencies, _db_from_power(mean_square_by_bin * linear_weight)
 
 
 def tone_spl_db(pressure: np.ndarray, sample_rate_hz: float, target_frequency_hz: float) -> tuple[float, float]:
-    frequencies, mean_square_by_bin = _one_sided_mean_square_spectrum(pressure, sample_rate_hz)
+    frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
     valid_frequency_mask = frequencies > 0.0
     frequencies = frequencies[valid_frequency_mask]
     mean_square_by_bin = mean_square_by_bin[valid_frequency_mask]
     nearest_index = int(np.argmin(np.abs(frequencies - target_frequency_hz)))
-    mean_square_pressure = max(float(mean_square_by_bin[nearest_index]), np.finfo(float).tiny)
-    spl_db = 10.0 * np.log10(mean_square_pressure / ACOUSTIC_PRESSURE_REFERENCE_PA**2)
+    spl_db = _db_from_power(mean_square_by_bin[nearest_index])
     return float(frequencies[nearest_index]), float(spl_db)
 
 
-def third_octave_spectrum_db(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
-    frequencies, mean_square_by_bin = _one_sided_mean_square_spectrum(pressure, sample_rate_hz)
-    center_frequencies = np.asarray(THIRD_OCTAVE_CENTER_FREQUENCIES_HZ, dtype=float)
-    exact_center_frequencies = 1000.0 * 10.0 ** (np.round(10.0 * np.log10(center_frequencies / 1000.0)) / 10.0)
-    lower_band_edges = exact_center_frequencies / 10.0 ** (1.0 / 20.0)
-    upper_band_edges = exact_center_frequencies * 10.0 ** (1.0 / 20.0)
-    band_levels = []
+def harmonic_third_octave_spl_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    target_frequency_hz: float,
+) -> float:
+    frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
+    band_factor = 2.0 ** (1.0 / 6.0)
+    band_mask = (
+        (frequencies >= target_frequency_hz / band_factor)
+        & (frequencies < target_frequency_hz * band_factor)
+    )
+    return float(_db_from_power(np.sum(mean_square_by_bin[band_mask])))
+
+
+def _third_octave_centers(fmin_hz: float, fmax_hz: float) -> np.ndarray:
+    centers = []
+    k_min = int(np.floor(3.0 * np.log2(max(fmin_hz, 1.0e-12) / 1000.0)))
+    k_max = int(np.ceil(3.0 * np.log2(fmax_hz / 1000.0)))
+    for k in range(k_min, k_max + 1):
+        center_frequency = 1000.0 * (2.0 ** (k / 3.0))
+        if center_frequency >= fmin_hz:
+            centers.append(center_frequency)
+    return np.asarray(centers, dtype=float)
+
+
+def _third_octave_bands(fmin_hz: float, fmax_hz: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    centers = _third_octave_centers(fmin_hz, fmax_hz)
+    factor = 2.0 ** (1.0 / 6.0)
+    return centers, centers / factor, centers * factor
+
+
+def third_octave_spectrum_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    apply_a_weighting: bool = APPLY_A_WEIGHTING_TO_SPECTRA,
+) -> tuple[np.ndarray, np.ndarray]:
+    frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
+    linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
+    center_frequencies, lower_band_edges, upper_band_edges = _third_octave_bands(
+        OASPL_MIN_FREQUENCY_HZ,
+        OASPL_MAX_FREQUENCY_HZ,
+    )
+    mean_square_by_band = []
 
     for lower_edge, upper_edge in zip(lower_band_edges, upper_band_edges):
         band_mask = (frequencies >= lower_edge) & (frequencies < upper_edge)
-        mean_square_pressure = float(np.sum(mean_square_by_bin[band_mask]))
-        if mean_square_pressure <= 0.0:
-            band_levels.append(np.nan)
-        else:
-            band_levels.append(10.0 * np.log10(mean_square_pressure / ACOUSTIC_PRESSURE_REFERENCE_PA**2))
+        mean_square_by_band.append(float(np.sum(mean_square_by_bin[band_mask] * linear_weight[band_mask])))
 
-    return center_frequencies, np.asarray(band_levels, dtype=float)
+    return center_frequencies, _db_from_power(np.asarray(mean_square_by_band, dtype=float))
 
 
 PLOTS = (
@@ -314,14 +396,14 @@ PLOTS = (
         filename="oaspl_unweighted_observers_1_5.png",
         evaluator=oaspl_unweighted_db,
         ylabel="OASPL [dB]",
-        title="Unweighted OASPL, 50-8000 Hz",
+        title="Unweighted OASPL",
     ),
     PlotDefinition(
         name="oaspl_a_weighted",
         filename="oaspl_a_weighted_observers_1_5.png",
         evaluator=oaspl_a_weighted_db,
         ylabel="A-weighted OASPL [dBA]",
-        title="A-weighted OASPL, 50-8000 Hz",
+        title="A-weighted OASPL",
     ),
 )
 
@@ -358,6 +440,8 @@ def _step_label(source_file: Path) -> str:
 
 
 def _legend_label(source_file: Path) -> str:
+    if LEGEND_LABEL_OVERRIDE is not None:
+        return LEGEND_LABEL_OVERRIDE
     step_label = _step_label(source_file)
     if "poc2x2" in {part.lower() for part in source_file.resolve().parts}:
         return f"total - Case: POC2x2 {step_label}"
@@ -384,28 +468,33 @@ def _reference_values_for_file(
     reference_density_kg_m3: float | None,
     reference_velocity_m_s: float | None,
     reference_temperature_k: float | None,
-) -> tuple[float, float, float]:
+    l_grid_unit_m: float | None,
+) -> tuple[float, float, float, float]:
     if (
         reference_density_kg_m3 is not None
         and reference_velocity_m_s is not None
         and reference_temperature_k is not None
+        and l_grid_unit_m is not None
     ):
-        return reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k
+        return reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m
 
     path_parts = {part.lower() for part in csv_file.resolve().parts}
     if "poc2x2" in path_parts:
         default_density = POC2X2_REFERENCE_DENSITY_KG_M3
         default_velocity = POC2X2_REFERENCE_VELOCITY_M_S
         default_temperature = POC2X2_REFERENCE_TEMPERATURE_K
+        default_l_grid_unit_m = POC2X2_L_GRID_UNIT_M
     else:
         default_density = LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3
         default_velocity = LOCAL_RESULTS_REFERENCE_VELOCITY_M_S
         default_temperature = LOCAL_RESULTS_REFERENCE_TEMPERATURE_K
+        default_l_grid_unit_m = LOCAL_RESULTS_L_GRID_UNIT_M
 
     return (
         default_density if reference_density_kg_m3 is None else reference_density_kg_m3,
         default_velocity if reference_velocity_m_s is None else reference_velocity_m_s,
         default_temperature if reference_temperature_k is None else reference_temperature_k,
+        default_l_grid_unit_m if l_grid_unit_m is None else l_grid_unit_m,
     )
 
 
@@ -446,12 +535,7 @@ def render_comparison_plot(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(18, 5.5), sharex=True)
-    style_cycle = [
-        {"color": "green", "marker": "o", "linestyle": "-"},
-        {"color": "red", "marker": ">", "linestyle": "-"},
-        {"color": "tab:blue", "marker": "s", "linestyle": "-"},
-        {"color": "tab:orange", "marker": "D", "linestyle": "-"},
-    ]
+    markers = ("o", ">", "s", "D")
 
     for ax, plot in zip(axes, PLOTS):
         all_values = []
@@ -465,7 +549,9 @@ def render_comparison_plot(
                 linewidth=1.2,
                 markersize=5,
                 label=_legend_label(dataset.source_file),
-                **style_cycle[index % len(style_cycle)],
+                color=_line_color(dataset.source_file, index),
+                marker=markers[index % len(markers)],
+                linestyle="-",
             )
 
         y_min = min(all_values)
@@ -507,9 +593,35 @@ def render_comparison_plot(
 
 def _frequency_tick_label(value: float, position: int) -> str:
     del position
-    if value >= 1000.0:
-        return f"{int(value)}"
-    return f"{value:g}"
+    if value == 0:
+        return "0"
+    return f"{value:.0f}"
+
+
+def _weighting_filename_part() -> str:
+    return "_a_weighted" if APPLY_A_WEIGHTING_TO_SPECTRA else ""
+
+
+def _style_frequency_axis(ax) -> None:
+    ax.tick_params(axis="both", which="major", labelsize=13)
+    ax.tick_params(axis="both", which="minor", labelsize=10)
+
+    ax.grid(True, which="major", linestyle="--", alpha=0.6)
+    ax.grid(True, which="minor", linestyle="--", alpha=0.35)
+
+    ax.xaxis.set_major_locator(LogLocator(base=10))
+    ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=(2, 4, 6, 8), numticks=5))
+    ax.xaxis.set_major_formatter(FuncFormatter(_frequency_tick_label))
+    ax.xaxis.set_minor_formatter(FuncFormatter(_frequency_tick_label))
+
+    ax.tick_params(axis="x", which="major", labelsize=10)
+    ax.tick_params(axis="x", which="minor", labelsize=8)
+    ax.tick_params(axis="y", which="major", labelsize=10)
+    ax.tick_params(axis="y", which="minor", labelsize=8)
+
+    ax.yaxis.set_major_formatter(FuncFormatter(_frequency_tick_label))
+    ax.yaxis.set_minor_locator(MultipleLocator(5))
+    ax.yaxis.set_minor_formatter(FuncFormatter(_frequency_tick_label))
 
 
 def render_spectrum_plots(
@@ -519,12 +631,6 @@ def render_spectrum_plots(
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_files = []
-    style_cycle = [
-        {"color": "green", "linestyle": "-", "linewidth": 1.2},
-        {"color": "red", "linestyle": "-", "linewidth": 1.2},
-        {"color": "tab:blue", "linestyle": "-", "linewidth": 1.2},
-        {"color": "tab:orange", "linestyle": "-", "linewidth": 1.2},
-    ]
 
     for observer in observers:
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
@@ -539,22 +645,22 @@ def render_spectrum_plots(
                 frequencies[frequency_mask],
                 spl_db[frequency_mask],
                 label=_legend_label(dataset.source_file),
-                **style_cycle[index % len(style_cycle)],
+                color=_line_color(dataset.source_file, index),
+                linestyle="-",
+                linewidth=1.2,
             )
 
         ax.set_title(f"Spectra for observer ID: {observer}")
         ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel("SPL [dB]")
+        ax.set_ylabel("SPL [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else "SPL [dB]")
         ax.set_xscale("log")
         ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ)
-        ax.set_xticks(SPECTRUM_X_TICKS_HZ)
-        ax.xaxis.set_major_formatter(FuncFormatter(_frequency_tick_label))
         ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
-        ax.grid(True, which="both", alpha=0.3)
-        ax.legend(loc="upper right")
+        _style_frequency_axis(ax)
+        ax.legend(loc="upper right", fontsize=12)
         fig.tight_layout()
 
-        output_file = output_dir / f"spectrum_observer_{observer}.png"
+        output_file = output_dir / f"spectrum{_weighting_filename_part()}_observer_{observer}.png"
         fig.savefig(output_file, dpi=200)
         plt.close(fig)
         output_files.append(output_file)
@@ -568,39 +674,38 @@ def render_third_octave_plots(
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_files = []
-    style_cycle = [
-        {"color": "green", "marker": "o", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-        {"color": "red", "marker": "s", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-        {"color": "tab:blue", "marker": "D", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-        {"color": "tab:orange", "marker": "^", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-    ]
+    markers = ("o", "s", "D", "^")
 
     for observer in observers:
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
+        upper_frequency_limit = SPECTRUM_MAX_FREQUENCY_HZ
         for index, (dataset, _) in enumerate(results_by_case):
             pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
             center_frequencies, band_spl_db = third_octave_spectrum_db(pressure_pa, dataset.sample_rate_hz)
+            upper_frequency_limit = max(upper_frequency_limit, float(np.max(center_frequencies)))
             valid_band_mask = np.isfinite(band_spl_db)
             ax.plot(
                 center_frequencies[valid_band_mask],
                 band_spl_db[valid_band_mask],
                 label=_legend_label(dataset.source_file),
-                **style_cycle[index % len(style_cycle)],
+                color=_line_color(dataset.source_file, index),
+                marker=markers[index % len(markers)],
+                markerfacecolor="none",
+                linestyle="-",
+                linewidth=1.2,
             )
 
         ax.set_title(f"1/3 Octave Spectra for observer ID: {observer}")
         ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel(r"SPL$_{1/3}$ [dB]")
+        ax.set_ylabel(r"SPL$_{1/3}$ [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else r"SPL$_{1/3}$ [dB]")
         ax.set_xscale("log")
-        ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ)
-        ax.set_xticks(SPECTRUM_X_TICKS_HZ)
-        ax.xaxis.set_major_formatter(FuncFormatter(_frequency_tick_label))
+        ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, upper_frequency_limit)
         ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
-        ax.grid(True, which="both", alpha=0.3)
-        ax.legend(loc="upper right")
+        _style_frequency_axis(ax)
+        ax.legend(loc="upper right", fontsize=12)
         fig.tight_layout()
 
-        output_file = output_dir / f"third_octave_spectrum_observer_{observer}.png"
+        output_file = output_dir / f"third_octave_spectrum{_weighting_filename_part()}_observer_{observer}.png"
         fig.savefig(output_file, dpi=200)
         plt.close(fig)
         output_files.append(output_file)
@@ -624,12 +729,7 @@ def render_bpf_component_plots(
         ("Loading pressure", "loading_by_observer"),
         ("Total pressure", "pressure_by_observer"),
     )
-    style_cycle = [
-        {"color": "green", "marker": "^", "markerfacecolor": "green", "linestyle": "-", "linewidth": 1.2},
-        {"color": "black", "marker": ">", "markerfacecolor": "black", "linestyle": "-", "linewidth": 1.2},
-        {"color": "red", "marker": "s", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-        {"color": "tab:blue", "marker": "o", "markerfacecolor": "none", "linestyle": "-", "linewidth": 1.2},
-    ]
+    markers = ("^", ">", "s", "o")
 
     for harmonic, harmonic_label in ((1, "first"), (2, "second")):
         fig, axes = plt.subplots(1, 3, figsize=(16, 5.8), sharey=True)
@@ -657,7 +757,11 @@ def render_bpf_component_plots(
                     values,
                     observers,
                     label=_legend_label(dataset.source_file),
-                    **style_cycle[index % len(style_cycle)],
+                    color=_line_color(dataset.source_file, index),
+                    marker=markers[index % len(markers)],
+                    markerfacecolor=_line_color(dataset.source_file, index),
+                    linestyle="-",
+                    linewidth=1.2,
                 )
 
             ax.set_title(component_title)
@@ -699,12 +803,7 @@ def render_harmonic_content_plots(
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_files = []
-    style_cycle = [
-        {"color": "green", "marker": "^", "markerfacecolor": "green"},
-        {"color": "black", "marker": ">", "markerfacecolor": "black"},
-        {"color": "red", "marker": "s", "markerfacecolor": "none"},
-        {"color": "tab:blue", "marker": "o", "markerfacecolor": "none"},
-    ]
+    markers = ("^", ">", "s", "o")
 
     harmonics = np.asarray(HARMONIC_INDICES, dtype=int)
     for observer in observers:
@@ -715,15 +814,19 @@ def render_harmonic_content_plots(
             for harmonic in harmonics:
                 target_frequency = float(harmonic * bpf_frequency)
                 pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
-                _, spl_db = tone_spl_db(pressure_pa, dataset.sample_rate_hz, target_frequency)
+                spl_db = harmonic_third_octave_spl_db(
+                    pressure_pa,
+                    dataset.sample_rate_hz,
+                    target_frequency,
+                )
                 harmonic_levels.append(spl_db)
 
-            style = style_cycle[index % len(style_cycle)]
+            color = _line_color(dataset.source_file, index)
             ax.vlines(
                 harmonics,
                 0.0,
                 harmonic_levels,
-                colors=style["color"],
+                colors=color,
                 linewidth=4.0,
                 alpha=0.95,
             )
@@ -733,12 +836,14 @@ def render_harmonic_content_plots(
                 linestyle="none",
                 markersize=8,
                 label=_legend_label(dataset.source_file),
-                **style,
+                color=color,
+                marker=markers[index % len(markers)],
+                markerfacecolor=color,
             )
 
         ax.set_title(f"Harmonic content for observer ID: {observer}")
         ax.set_xlabel("Harmonics")
-        ax.set_ylabel("SPL [dB]")
+        ax.set_ylabel(r"SPL$_{1/3}$ [dB]")
         ax.set_xlim(0, max(HARMONIC_INDICES) + 1)
         ax.set_xticks(range(0, max(HARMONIC_INDICES) + 2))
         ax.set_ylim(*HARMONIC_Y_LIMITS_DB)
@@ -754,6 +859,201 @@ def render_harmonic_content_plots(
     return output_files
 
 
+def render_pressure_time_history_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files = []
+    for observer in observers:
+        fig, ax = plt.subplots(figsize=(10.5, 6.0))
+        all_pressure_values = []
+
+        for index, (dataset, _) in enumerate(results_by_case):
+            time_seconds = dataset.time_seconds
+            time_span = time_seconds[-1] - time_seconds[0]
+            if time_span <= 0.0:
+                raise ValueError(f"Non-positive acoustic time span in {dataset.source_file}")
+
+            time_fraction = (time_seconds - time_seconds[0]) / time_span
+            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            all_pressure_values.extend(pressure_pa)
+            ax.plot(
+                time_fraction,
+                pressure_pa,
+                label=_legend_label(dataset.source_file),
+                color=_line_color(dataset.source_file, index),
+                linestyle="-",
+                linewidth=1.2,
+            )
+
+        ax.set_title(f"Pressure-time History for observer ID: {observer}")
+        ax.set_xlabel("Time Fraction")
+        ax.set_ylabel("Pressure [Pa]")
+        ax.set_xlim(0.0, 1.0)
+        if all_pressure_values:
+            pressure_min = min(all_pressure_values)
+            pressure_max = max(all_pressure_values)
+            padding = 0.15 * (pressure_max - pressure_min) if pressure_max > pressure_min else 0.01
+            ax.set_ylim(pressure_min - padding, pressure_max + padding)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper left")
+        fig.tight_layout()
+
+        output_file = output_dir / f"pressure_time_history_observer_{observer}.png"
+        fig.savefig(output_file, dpi=200)
+        plt.close(fig)
+        output_files.append(output_file)
+
+    return output_files
+
+
+def _average_revolutions(signal: np.ndarray, revolution_count: int = 3) -> np.ndarray:
+    signal = np.asarray(signal, dtype=float)
+    samples_per_revolution = len(signal) // revolution_count
+    if samples_per_revolution < 2:
+        raise ValueError(
+            f"Need at least {2 * revolution_count} samples to average {revolution_count} revolutions."
+        )
+    trimmed_sample_count = samples_per_revolution * revolution_count
+    revolutions = signal[:trimmed_sample_count].reshape(revolution_count, samples_per_revolution)
+    return np.mean(revolutions, axis=0)
+
+
+def render_average_pressure_time_history_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+    revolution_count: int = 3,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files = []
+
+    for observer in observers:
+        fig, ax = plt.subplots(figsize=(10.5, 6.0))
+        all_pressure_values = []
+
+        for index, (dataset, _) in enumerate(results_by_case):
+            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            averaged_pressure_pa = _average_revolutions(
+                pressure_pa,
+                revolution_count=revolution_count,
+            )
+            all_pressure_values.extend(averaged_pressure_pa)
+            time_fraction = np.linspace(0.0, 1.0, len(averaged_pressure_pa))
+
+            ax.plot(
+                time_fraction,
+                averaged_pressure_pa,
+                label=_legend_label(dataset.source_file),
+                color=_line_color(dataset.source_file, index),
+                linestyle="-",
+                linewidth=1.2,
+            )
+
+        ax.set_title(f"Average Pressure-time History for observer ID: {observer}")
+        ax.set_xlabel("Time Fraction")
+        ax.set_ylabel("Pressure [Pa]")
+        ax.set_xlim(0.0, 1.0)
+        if all_pressure_values:
+            pressure_min = min(all_pressure_values)
+            pressure_max = max(all_pressure_values)
+            padding = 0.15 * (pressure_max - pressure_min) if pressure_max > pressure_min else 0.01
+            ax.set_ylim(pressure_min - padding, pressure_max + padding)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper left")
+        fig.tight_layout()
+
+        output_file = output_dir / f"average_pressure_time_history_observer_{observer}.png"
+        fig.savefig(output_file, dpi=200)
+        plt.close(fig)
+        output_files.append(output_file)
+
+    return output_files
+
+
+def _spectrogram_spl_db(
+    pressure_pa: np.ndarray,
+    sample_rate_hz: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    pressure_pa = _filter_zero_signal_edges(pressure_pa)
+    nperseg = min(SPECTROGRAM_NPERSEG, len(pressure_pa))
+    if nperseg < 8:
+        raise ValueError("Too few samples for spectrogram calculation.")
+
+    frequencies, times, power_by_time = spectrogram(
+        _fluctuating_pressure(pressure_pa),
+        fs=sample_rate_hz,
+        window=WINDOW,
+        nperseg=nperseg,
+        noverlap=nperseg // 2,
+        scaling="spectrum",
+        mode="psd",
+    )
+    spl_db = _db_from_power(power_by_time)
+    return frequencies, times, spl_db
+
+
+def render_spectrogram_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files = []
+    component_definitions = (
+        ("PRESSURE", "pressure_by_observer", "total_pressure"),
+        ("LOADING", "loading_by_observer", "loading_pressure"),
+    )
+
+    for dataset, _ in results_by_case:
+        case_label = _case_label(dataset.source_file)
+        for observer in observers:
+            for component_title, attribute_name, filename_part in component_definitions:
+                component_by_observer = getattr(dataset, attribute_name)
+                pressure_pa = component_by_observer[observer] * dataset.pressure_scale_pa
+                frequencies, times, spl_db = _spectrogram_spl_db(
+                    pressure_pa,
+                    dataset.sample_rate_hz,
+                )
+
+                frequency_mask = frequencies <= SPECTROGRAM_MAX_FREQUENCY_HZ
+                frequencies = frequencies[frequency_mask]
+                spl_db = spl_db[frequency_mask, :]
+                time_fraction = times / times[-1] if times[-1] > 0.0 else times
+
+                fig, ax = plt.subplots(figsize=(10.5, 6.0))
+                mesh = ax.pcolormesh(
+                    time_fraction,
+                    frequencies,
+                    spl_db,
+                    shading="nearest",
+                    cmap="jet",
+                    vmin=SPECTROGRAM_LIMITS_DB[0],
+                    vmax=SPECTROGRAM_LIMITS_DB[1],
+                )
+                colorbar = fig.colorbar(mesh, ax=ax, pad=0.10)
+                colorbar.set_label("SPL [dB]")
+
+                ax.set_title(f"{component_title} - Spectrogram for Observer ID: {observer}")
+                ax.set_xlabel("Time Fraction")
+                ax.set_ylabel("Frequency [Hz]")
+                ax.set_xlim(0.0, 1.0)
+                ax.set_ylim(0.0, SPECTROGRAM_MAX_FREQUENCY_HZ)
+                ax.grid(True, color="white", linewidth=0.5, alpha=0.5)
+                fig.tight_layout()
+
+                output_file = output_dir / (
+                    f"spectrogram_{filename_part}_{case_label}_observer_{observer}.png"
+                )
+                fig.savefig(output_file, dpi=200)
+                plt.close(fig)
+                output_files.append(output_file)
+
+    return output_files
+
+
 def make_plots(
     csv_file: Path | None = None,
     observers: tuple[int, ...] = DEFAULT_OBSERVERS,
@@ -764,6 +1064,7 @@ def make_plots(
     reference_density_kg_m3: float | None = None,
     reference_velocity_m_s: float | None = None,
     reference_temperature_k: float | None = None,
+    l_grid_unit_m: float | None = None,
 ) -> list[Path]:
     resolved_csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
     rpm, time_steps_per_revolution = _timing_for_file(
@@ -771,11 +1072,12 @@ def make_plots(
         rpm,
         time_steps_per_revolution,
     )
-    reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k = _reference_values_for_file(
+    reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m = _reference_values_for_file(
         resolved_csv_file,
         reference_density_kg_m3,
         reference_velocity_m_s,
         reference_temperature_k,
+        l_grid_unit_m,
     )
     dataset = load_acoustic_dataset(
         resolved_csv_file,
@@ -785,6 +1087,7 @@ def make_plots(
         reference_density_kg_m3=reference_density_kg_m3,
         reference_velocity_m_s=reference_velocity_m_s,
         reference_temperature_k=reference_temperature_k,
+        l_grid_unit_m=l_grid_unit_m,
     )
     print(
         f"Loaded {dataset.source_file.name}: "
@@ -794,6 +1097,8 @@ def make_plots(
         f"sample_rate={dataset.sample_rate_hz:.3f} Hz, "
         f"rho={dataset.reference_density_kg_m3:.6f} kg/m^3, "
         f"T={dataset.reference_temperature_k:.3f} K, "
+        f"a={dataset.speed_of_sound_m_s:.6f} m/s, "
+        f"L_grid_unit={dataset.l_grid_unit_m:g} m, "
         f"U_ref={dataset.reference_velocity_m_s:.6f} m/s, "
         f"pressure_scale=gamma*p_inf={dataset.pressure_scale_pa:.3f} Pa"
     )
@@ -808,6 +1113,27 @@ def make_plots(
         print(f"Wrote {output_file}")
     if all(plot.name in values_by_plot for plot in PLOTS):
         print_oaspl_values(dataset, values_by_plot, observers)
+    for pressure_time_output_file in render_pressure_time_history_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    ):
+        output_files.append(pressure_time_output_file)
+        print(f"Wrote {pressure_time_output_file}")
+    for average_pressure_time_output_file in render_average_pressure_time_history_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    ):
+        output_files.append(average_pressure_time_output_file)
+        print(f"Wrote {average_pressure_time_output_file}")
+    for spectrogram_output_file in render_spectrogram_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    ):
+        output_files.append(spectrogram_output_file)
+        print(f"Wrote {spectrogram_output_file}")
     return output_files
 
 
@@ -821,8 +1147,9 @@ def make_comparison_plot(
     results_by_case = []
     for csv_file in csv_files:
         rpm, time_steps_per_revolution = _timing_for_file(csv_file, None, None)
-        reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k = _reference_values_for_file(
+        reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m = _reference_values_for_file(
             csv_file,
+            None,
             None,
             None,
             None,
@@ -835,6 +1162,7 @@ def make_comparison_plot(
             reference_density_kg_m3=reference_density_kg_m3,
             reference_velocity_m_s=reference_velocity_m_s,
             reference_temperature_k=reference_temperature_k,
+            l_grid_unit_m=l_grid_unit_m,
         )
         values_by_plot = {plot.name: evaluate_plot(dataset, plot) for plot in plots}
         results_by_case.append((dataset, values_by_plot))
@@ -844,6 +1172,8 @@ def make_comparison_plot(
             f"rpm={dataset.rpm:.3f}, "
             f"steps/rev={dataset.time_steps_per_revolution:g}, "
             f"sample_rate={dataset.sample_rate_hz:.3f} Hz, "
+            f"a={dataset.speed_of_sound_m_s:.6f} m/s, "
+            f"L_grid_unit={dataset.l_grid_unit_m:g} m, "
             f"pressure_scale=gamma*p_inf={dataset.pressure_scale_pa:.3f} Pa"
         )
         if all(plot.name in values_by_plot for plot in PLOTS):
@@ -859,6 +1189,16 @@ def make_comparison_plot(
         print(f"Wrote {bpf_output_file}")
     for harmonic_output_file in render_harmonic_content_plots(results_by_case, observers, output_dir):
         print(f"Wrote {harmonic_output_file}")
+    for pressure_time_output_file in render_pressure_time_history_plots(results_by_case, observers, output_dir):
+        print(f"Wrote {pressure_time_output_file}")
+    for average_pressure_time_output_file in render_average_pressure_time_history_plots(
+        results_by_case,
+        observers,
+        output_dir,
+    ):
+        print(f"Wrote {average_pressure_time_output_file}")
+    for spectrogram_output_file in render_spectrogram_plots(results_by_case, observers, output_dir):
+        print(f"Wrote {spectrogram_output_file}")
     return output_file
 
 
@@ -891,28 +1231,57 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--u-ref", type=float, default=None, help="Reference velocity retained for reporting.")
     parser.add_argument(
+        "--l-grid-unit",
+        type=float,
+        default=None,
+        help="Flow360 grid-unit length in meters for dimensionalizing acoustic CSV time.",
+    )
+    parser.add_argument(
         "--csv-observer-offset",
         type=int,
         default=FLOW360_OBSERVER_NUMBERING_OFFSET,
         help="Offset from user observer number to CSV observer index. Default maps observer 1 to observer_0.",
+    )
+    parser.add_argument(
+        "--legend-label",
+        type=str,
+        default=None,
+        help="Override the plotted case label in legends.",
+    )
+    weighting_group = parser.add_mutually_exclusive_group()
+    weighting_group.add_argument(
+        "--a-weighting",
+        dest="apply_a_weighting_to_spectra",
+        action="store_true",
+        default=APPLY_A_WEIGHTING_TO_SPECTRA,
+        help="Use A-weighting for spectrum and third-octave plots.",
+    )
+    weighting_group.add_argument(
+        "--no-a-weighting",
+        dest="apply_a_weighting_to_spectra",
+        action="store_false",
+        help="Use unweighted spectrum and third-octave plots.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    global FLOW360_OBSERVER_NUMBERING_OFFSET
+    global APPLY_A_WEIGHTING_TO_SPECTRA, FLOW360_OBSERVER_NUMBERING_OFFSET, LEGEND_LABEL_OVERRIDE
+    APPLY_A_WEIGHTING_TO_SPECTRA = args.apply_a_weighting_to_spectra
     FLOW360_OBSERVER_NUMBERING_OFFSET = args.csv_observer_offset
+    LEGEND_LABEL_OVERRIDE = args.legend_label
     if (
         args.rpm is not None
         or args.steps_per_rev is not None
         or args.rho is not None
         or args.temperature_k is not None
         or args.u_ref is not None
+        or args.l_grid_unit is not None
     ):
         if args.csv is not None and len(args.csv) > 1:
             raise ValueError(
-                "Manual --rpm/--steps-per-rev/--rho/--temperature-k/--u-ref overrides "
+                "Manual --rpm/--steps-per-rev/--rho/--temperature-k/--u-ref/--l-grid-unit overrides "
                 "are only supported for one CSV."
             )
         make_plots(
@@ -924,6 +1293,7 @@ def main() -> None:
             reference_density_kg_m3=args.rho,
             reference_velocity_m_s=args.u_ref,
             reference_temperature_k=args.temperature_k,
+            l_grid_unit_m=args.l_grid_unit,
         )
     else:
         make_comparison_plot(

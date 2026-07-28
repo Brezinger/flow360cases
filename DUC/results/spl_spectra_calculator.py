@@ -20,13 +20,20 @@ import argparse
 # ============================================================
 # USER INPUTS (hardcoded)
 # ============================================================
-"""AIR_SPEED = 349.112
-RHO = 1.064099
+AIR_SPECIFIC_HEAT_RATIO = 1.4
+AIR_GAS_CONSTANT_J_KG_K = 287.05287
+
+# Local Lifter4B Flow360 reference quantities.
+"""REFERENCE_TEMPERATURE_K = 303.275
+REFERENCE_DENSITY_KG_M3 = 1.064099
 L_GRID_UNIT = 0.001"""
 
-AIR_SPEED = (1.4 * 287.05287 * 283.275)**0.5
-RHO = 1.149
-L_GRID_UNIT = 1.
+# POC2x2 reference quantities.
+REFERENCE_TEMPERATURE_K = 283.275
+REFERENCE_DENSITY_KG_M3 = 1.149
+L_GRID_UNIT = 1.0
+
+U_SCALE = (AIR_SPECIFIC_HEAT_RATIO * AIR_GAS_CONSTANT_J_KG_K * REFERENCE_TEMPERATURE_K) ** 0.5
 
 FMIN = 40.0
 FMAX = 10000.0
@@ -143,8 +150,8 @@ def spectra_calculation(input_path, observer_index, apply_a):
     if len(t_raw) < 2:
         raise ValueError("Not enough non-zero samples after trimming.")
 
-    t = t_raw * (L_GRID_UNIT / AIR_SPEED)
-    p = p_raw * (RHO * AIR_SPEED**2)
+    t = t_raw * (L_GRID_UNIT / U_SCALE)
+    p = p_raw * (REFERENCE_DENSITY_KG_M3 * U_SCALE**2)
 
     dt = np.mean(np.diff(t))
     fs = 1.0 / dt
@@ -260,8 +267,9 @@ def spectra_write(results):
         "observer_index": observer_index,
         "pressure_column": results["pressure_column"],
         "apply_a_weighting": apply_a,
-        "air_speed_m_per_s": AIR_SPEED,
-        "density_kg_per_m3": RHO,
+        "u_scale_m_per_s": U_SCALE,
+        "density_kg_per_m3": REFERENCE_DENSITY_KG_M3,
+        "temperature_k": REFERENCE_TEMPERATURE_K,
         "l_grid_unit_m": L_GRID_UNIT,
         "fmin_hz": FMIN,
         "fmax_hz": FMAX,
@@ -375,8 +383,9 @@ def main():
     print(f"Observer index         : {results['observer_index']}")
     print(f"Pressure column        : {results['pressure_column']}")
     print(f"A-weighting applied    : {results['apply_a_weighting']}")
-    print(f"Air speed [m/s]        : {AIR_SPEED}")
-    print(f"Density [kg/m^3]       : {RHO}")
+    print(f"U_scale [m/s]          : {U_SCALE}")
+    print(f"Density [kg/m^3]       : {REFERENCE_DENSITY_KG_M3}")
+    print(f"Temperature [K]        : {REFERENCE_TEMPERATURE_K}")
     print(f"L_grid_unit [m]        : {L_GRID_UNIT}")
     print(f"Welch segments         : {results['nperseg_label']}")
     print(f"Samples after trim     : {results['samples_after_trim']}")
