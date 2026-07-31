@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+try:
+    from bunch_surface_acoustics import bunch_surface_resolved_acoustics
+except ImportError:
+    bunch_surface_resolved_acoustics = None
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, MultipleLocator
@@ -57,10 +63,17 @@ SPECTROGRAM_LIMITS_DB = (0.0, 120.0)
 SPECTROGRAM_NPERSEG = 512
 HARMONIC_INDICES = tuple(range(1, 11))
 HARMONIC_Y_LIMITS_DB = (0.0, 110.0)
+SURFACE_TIME_HISTORY_GROUPS = ("blade1", "blade2")
+SURFACE_THIRD_OCTAVE_GROUP_PAIRS = (
+    ("blade1+blade3", ("blade1", "blade3")),
+    ("blade2+blade4", ("blade2", "blade4")),
+)
 APPLY_A_WEIGHTING_TO_SPECTRA = True
 LEGEND_LABEL_OVERRIDE: str | None = None
+LEGEND_LABELS_BY_FILE: dict[Path, str] = {}
 NPERSEG = "All"
 WINDOW = "hann"
+CASE_ID_PATTERN = re.compile(r"case-[0-9a-fA-F-]+")
 
 
 def _default_line_colors() -> list[str]:
@@ -73,10 +86,9 @@ def _is_local_step4(source_file: Path) -> bool:
 
 
 def _line_color(source_file: Path, index: int) -> str:
+    del source_file
     colors = _default_line_colors()
-    if _is_local_step4(source_file):
-        return colors[0]
-    return colors[(index + 1) % len(colors)]
+    return colors[index % len(colors)]
 
 
 @dataclass(frozen=True)
@@ -120,6 +132,13 @@ class AcousticDataset:
                 * self.reference_temperature_k
             )
         )
+
+
+@dataclass(frozen=True)
+class SurfaceResolvedDataset:
+    group_name: str
+    dataset: AcousticDataset
+    case_source_file: Path
 
 
 @dataclass(frozen=True)
@@ -223,6 +242,38 @@ def load_acoustic_dataset(
     )
 
 
+def load_surface_resolved_datasets(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    groups: tuple[str, ...] = SURFACE_TIME_HISTORY_GROUPS,
+    observers: tuple[int, ...] = DEFAULT_OBSERVERS,
+) -> list[SurfaceResolvedDataset]:
+    surface_datasets = []
+    for total_dataset, _ in results_by_case:
+        for group_name in groups:
+            surface_file = _surface_file_for_case(total_dataset.source_file, group_name)
+            if surface_file is None:
+                print(f"Skipping missing surface-resolved file for {total_dataset.source_file.name}: {group_name}")
+                continue
+            surface_dataset = load_acoustic_dataset(
+                surface_file,
+                observers=observers,
+                rpm=total_dataset.rpm,
+                time_steps_per_revolution=total_dataset.time_steps_per_revolution,
+                reference_density_kg_m3=total_dataset.reference_density_kg_m3,
+                reference_velocity_m_s=total_dataset.reference_velocity_m_s,
+                reference_temperature_k=total_dataset.reference_temperature_k,
+                l_grid_unit_m=total_dataset.l_grid_unit_m,
+            )
+            surface_datasets.append(
+                SurfaceResolvedDataset(
+                    group_name=group_name,
+                    dataset=surface_dataset,
+                    case_source_file=total_dataset.source_file,
+                )
+            )
+    return surface_datasets
+
+
 def _fluctuating_pressure(pressure: np.ndarray) -> np.ndarray:
     return pressure - np.mean(pressure)
 
@@ -322,8 +373,10 @@ def oaspl_a_weighted_db(pressure: np.ndarray, sample_rate_hz: float) -> float:
 def spl_spectrum_db(
     pressure: np.ndarray,
     sample_rate_hz: float,
-    apply_a_weighting: bool = APPLY_A_WEIGHTING_TO_SPECTRA,
+    apply_a_weighting: bool | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if apply_a_weighting is None:
+        apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
     frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
     linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
     return frequencies, _db_from_power(mean_square_by_bin * linear_weight)
@@ -373,8 +426,10 @@ def _third_octave_bands(fmin_hz: float, fmax_hz: float) -> tuple[np.ndarray, np.
 def third_octave_spectrum_db(
     pressure: np.ndarray,
     sample_rate_hz: float,
-    apply_a_weighting: bool = APPLY_A_WEIGHTING_TO_SPECTRA,
+    apply_a_weighting: bool | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if apply_a_weighting is None:
+        apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
     frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
     linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
     center_frequencies, lower_band_edges, upper_band_edges = _third_octave_bands(
@@ -431,7 +486,19 @@ def _case_label(source_file: Path) -> str:
     return source_file.name.split("_results_total_acoustics", 1)[0]
 
 
+def _case_id(source_file: Path) -> str:
+    match = CASE_ID_PATTERN.search(source_file.name)
+    if match is None:
+        raise ValueError(f"Could not infer case id from {source_file}")
+    return match.group(0)
+
+
 def _step_label(source_file: Path) -> str:
+    for path_part in reversed(source_file.resolve().parts):
+        path_part_lower = path_part.lower()
+        if path_part_lower in CASE_TIMING_BY_PREFIX:
+            return path_part_lower
+
     case_label = _case_label(source_file)
     for separator in ("_case-", "_"):
         if separator in case_label:
@@ -442,10 +509,50 @@ def _step_label(source_file: Path) -> str:
 def _legend_label(source_file: Path) -> str:
     if LEGEND_LABEL_OVERRIDE is not None:
         return LEGEND_LABEL_OVERRIDE
+    label = LEGEND_LABELS_BY_FILE.get(source_file.resolve())
+    if label is not None:
+        return f"total - Case: {label}"
     step_label = _step_label(source_file)
-    if "poc2x2" in {part.lower() for part in source_file.resolve().parts}:
-        return f"total - Case: POC2x2 {step_label}"
+    path_parts = {part.lower() for part in source_file.resolve().parts}
+    if "poc2x2" in path_parts:
+        return "total - Case: Q40-LT"
+    if _case_id(source_file) == "case-cf29e49e-da21-43ad-80e2-61a6f97bec80":
+        return "total - Case: DUC EVE100 CCW Lifter4B"
     return f"total - Case: {step_label}"
+
+
+def _surface_legend_label(surface_dataset: SurfaceResolvedDataset, case_index: int) -> str:
+    group_label = f"zone_r1/{surface_dataset.group_name}"
+    return f"{group_label} - Case: {_legend_label(surface_dataset.case_source_file).removeprefix('total - Case: ')}"
+
+
+def _surface_resolved_dir_for_case(total_csv_file: Path) -> Path:
+    return Path(total_csv_file).parent / "surface_resolved"
+
+
+def _ensure_bunched_surface_files(surface_resolved_dir: Path) -> None:
+    if any(surface_resolved_dir.glob("*_results_surface_zone_r1_blade1_acoustics_v*.csv")):
+        return
+    if bunch_surface_resolved_acoustics is None:
+        return
+    if any(surface_resolved_dir.glob("*_results_surface_zone_r1_blade1*_face*_acoustics_v*.csv")):
+        bunch_surface_resolved_acoustics(surface_resolved_dir=surface_resolved_dir)
+
+
+def _surface_file_for_case(total_csv_file: Path, group_name: str) -> Path | None:
+    surface_resolved_dir = _surface_resolved_dir_for_case(total_csv_file)
+    if not surface_resolved_dir.exists():
+        return None
+    _ensure_bunched_surface_files(surface_resolved_dir)
+    case_id = _case_id(total_csv_file)
+    matches = sorted(
+        surface_resolved_dir.glob(f"{case_id}_results_surface_zone_r1_{group_name}_acoustics_v*.csv")
+    )
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise ValueError(f"Found multiple surface files for {case_id} {group_name}: {matches}")
+    return matches[0]
 
 
 def _timing_for_file(csv_file: Path, rpm: float | None, time_steps_per_revolution: float | None) -> tuple[float, float]:
@@ -712,6 +819,217 @@ def render_third_octave_plots(
     return output_files
 
 
+def _validate_matching_surface_signals(
+    reference_dataset: AcousticDataset,
+    other_dataset: AcousticDataset,
+    pair_label: str,
+) -> None:
+    if len(reference_dataset.time) != len(other_dataset.time):
+        raise ValueError(
+            f"Cannot sum {pair_label}: {reference_dataset.source_file.name} and "
+            f"{other_dataset.source_file.name} have different sample counts."
+        )
+    if not np.allclose(reference_dataset.time, other_dataset.time, rtol=0.0, atol=1.0e-12):
+        raise ValueError(
+            f"Cannot sum {pair_label}: {reference_dataset.source_file.name} and "
+            f"{other_dataset.source_file.name} have different time coordinates."
+        )
+
+
+def render_surface_pair_third_octave_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+    group_pairs: tuple[tuple[str, tuple[str, ...]], ...] = SURFACE_THIRD_OCTAVE_GROUP_PAIRS,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files = []
+    pair_groups = tuple(group for _, groups in group_pairs for group in groups)
+    surface_datasets = load_surface_resolved_datasets(
+        results_by_case,
+        groups=pair_groups,
+        observers=observers,
+    )
+    if not surface_datasets:
+        return []
+
+    surface_datasets_by_case: dict[Path, dict[str, SurfaceResolvedDataset]] = {}
+    for surface_dataset in surface_datasets:
+        surface_datasets_by_case.setdefault(surface_dataset.case_source_file, {})[
+            surface_dataset.group_name
+        ] = surface_dataset
+
+    pair_styles = {
+        "blade1+blade3": {"linestyle": "-", "marker": "o"},
+        "blade2+blade4": {"linestyle": "--", "marker": "s"},
+    }
+
+    for observer in observers:
+        fig, ax = plt.subplots(figsize=(8.5, 5.2))
+        upper_frequency_limit = SPECTRUM_MAX_FREQUENCY_HZ
+        for case_index, (total_dataset, _) in enumerate(results_by_case):
+            case_surfaces = surface_datasets_by_case.get(total_dataset.source_file, {})
+            for pair_label, group_names in group_pairs:
+                missing_groups = [group_name for group_name in group_names if group_name not in case_surfaces]
+                if missing_groups:
+                    print(
+                        f"Skipping {pair_label} for {total_dataset.source_file.name}; "
+                        f"missing {missing_groups}."
+                    )
+                    continue
+
+                first_surface_dataset = case_surfaces[group_names[0]].dataset
+                summed_pressure = np.zeros_like(first_surface_dataset.pressure_by_observer[observer])
+                for group_name in group_names:
+                    surface_dataset = case_surfaces[group_name].dataset
+                    _validate_matching_surface_signals(first_surface_dataset, surface_dataset, pair_label)
+                    summed_pressure += surface_dataset.pressure_by_observer[observer]
+
+                pressure_pa = summed_pressure * total_dataset.pressure_scale_pa
+                center_frequencies, band_spl_db = third_octave_spectrum_db(
+                    pressure_pa,
+                    total_dataset.sample_rate_hz,
+                )
+                upper_frequency_limit = max(upper_frequency_limit, float(np.max(center_frequencies)))
+                valid_band_mask = np.isfinite(band_spl_db)
+                style = pair_styles.get(
+                    pair_label,
+                    {
+                        "linestyle": "-",
+                        "marker": "o",
+                    },
+                )
+                ax.plot(
+                    center_frequencies[valid_band_mask],
+                    band_spl_db[valid_band_mask],
+                    label=f"{pair_label} - {_legend_label(total_dataset.source_file)}",
+                    color=_line_color(total_dataset.source_file, case_index),
+                    markerfacecolor="none",
+                    linewidth=1.2,
+                    **style,
+                )
+
+        ax.set_title(f"Blade Pair 1/3 Octave Spectra for observer ID: {observer}")
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_ylabel(r"SPL$_{1/3}$ [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else r"SPL$_{1/3}$ [dB]")
+        ax.set_xscale("log")
+        ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, upper_frequency_limit)
+        ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
+        _style_frequency_axis(ax)
+        ax.legend(loc="upper right", fontsize=12)
+        fig.tight_layout()
+
+        output_file = output_dir / f"surface_pair_third_octave_spectrum{_weighting_filename_part()}_observer_{observer}.png"
+        fig.savefig(output_file, dpi=200)
+        plt.close(fig)
+        output_files.append(output_file)
+
+    return output_files
+
+
+def _summed_surface_pair_pressure(
+    case_surfaces: dict[str, SurfaceResolvedDataset],
+    group_names: tuple[str, ...],
+    observer: int,
+    pair_label: str,
+) -> np.ndarray:
+    first_surface_dataset = case_surfaces[group_names[0]].dataset
+    summed_pressure = np.zeros_like(first_surface_dataset.pressure_by_observer[observer])
+    for group_name in group_names:
+        surface_dataset = case_surfaces[group_name].dataset
+        _validate_matching_surface_signals(first_surface_dataset, surface_dataset, pair_label)
+        summed_pressure += surface_dataset.pressure_by_observer[observer]
+    return summed_pressure
+
+
+def render_surface_pair_oaspl_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+    group_pairs: tuple[tuple[str, tuple[str, ...]], ...] = SURFACE_THIRD_OCTAVE_GROUP_PAIRS,
+) -> Path | None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pair_groups = tuple(group for _, groups in group_pairs for group in groups)
+    surface_datasets = load_surface_resolved_datasets(
+        results_by_case,
+        groups=pair_groups,
+        observers=observers,
+    )
+    if not surface_datasets:
+        return None
+
+    surface_datasets_by_case: dict[Path, dict[str, SurfaceResolvedDataset]] = {}
+    for surface_dataset in surface_datasets:
+        surface_datasets_by_case.setdefault(surface_dataset.case_source_file, {})[
+            surface_dataset.group_name
+        ] = surface_dataset
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 5.5), sharex=True)
+    plot_definitions = (
+        ("Unweighted Surface-Pair OASPL", "OASPL [dB]", oaspl_unweighted_db),
+        ("A-weighted Surface-Pair OASPL", "A-weighted OASPL [dBA]", oaspl_a_weighted_db),
+    )
+    pair_styles = {
+        "blade1+blade3": {"linestyle": "-", "marker": "o"},
+        "blade2+blade4": {"linestyle": "--", "marker": "s"},
+    }
+
+    for ax, (title, ylabel, evaluator) in zip(axes, plot_definitions):
+        all_values = []
+        for case_index, (total_dataset, _) in enumerate(results_by_case):
+            case_surfaces = surface_datasets_by_case.get(total_dataset.source_file, {})
+            for pair_label, group_names in group_pairs:
+                missing_groups = [group_name for group_name in group_names if group_name not in case_surfaces]
+                if missing_groups:
+                    print(
+                        f"Skipping {pair_label} OASPL for {total_dataset.source_file.name}; "
+                        f"missing {missing_groups}."
+                    )
+                    continue
+
+                values = []
+                for observer in observers:
+                    summed_pressure = _summed_surface_pair_pressure(
+                        case_surfaces,
+                        group_names,
+                        observer,
+                        pair_label,
+                    )
+                    pressure_pa = summed_pressure * total_dataset.pressure_scale_pa
+                    values.append(evaluator(pressure_pa, total_dataset.sample_rate_hz))
+                all_values.extend(values)
+                style = pair_styles.get(pair_label, {"linestyle": "-", "marker": "o"})
+                ax.plot(
+                    observers,
+                    values,
+                    label=f"{pair_label} - {_legend_label(total_dataset.source_file)}",
+                    color=_line_color(total_dataset.source_file, case_index),
+                    linewidth=1.2,
+                    markersize=5,
+                    markerfacecolor="none",
+                    **style,
+                )
+
+        if all_values:
+            y_min = min(all_values)
+            y_max = max(all_values)
+            padding = max(3.0, 0.2 * (y_max - y_min)) if y_max > y_min else 3.0
+            ax.set_ylim(y_min - padding, y_max + padding)
+        ax.set_title(title)
+        ax.set_xlabel("Observer")
+        ax.set_ylabel(ylabel)
+        ax.set_xlim(0, max(observers) + 1)
+        ax.set_xticks(range(0, max(observers) + 2))
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right")
+
+    fig.tight_layout()
+    output_file = output_dir / "surface_pair_oaspl_observers_1_5.png"
+    fig.savefig(output_file, dpi=200)
+    plt.close(fig)
+    return output_file
+
+
 def _bpf_frequency_hz(dataset: AcousticDataset, harmonic: int, blade_count: int = DEFAULT_BLADE_COUNT) -> float:
     return harmonic * blade_count * dataset.rpm / 60.0
 
@@ -902,6 +1220,81 @@ def render_pressure_time_history_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"pressure_time_history_observer_{observer}.png"
+        fig.savefig(output_file, dpi=200)
+        plt.close(fig)
+        output_files.append(output_file)
+
+    return output_files
+
+
+def render_surface_pressure_time_history_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+    groups: tuple[str, ...] = SURFACE_TIME_HISTORY_GROUPS,
+) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    surface_datasets = load_surface_resolved_datasets(
+        results_by_case,
+        groups=groups,
+        observers=observers,
+    )
+    if not surface_datasets:
+        return []
+
+    output_files = []
+    line_styles = {
+        ("blade1", 0): {"color": "green", "linewidth": 1.2},
+        ("blade2", 0): {"color": "red", "linewidth": 1.2},
+        ("blade1", 1): {"color": "blue", "linewidth": 1.2},
+        ("blade2", 1): {"color": "cyan", "linewidth": 1.2},
+    }
+
+    for observer in observers:
+        fig, ax = plt.subplots(figsize=(10.5, 6.0))
+        all_pressure_values = []
+        case_indices: dict[Path, int] = {}
+
+        for surface_dataset in surface_datasets:
+            case_index = case_indices.setdefault(
+                surface_dataset.case_source_file,
+                len(case_indices),
+            )
+            dataset = surface_dataset.dataset
+            time_seconds = dataset.time_seconds
+            time_span = time_seconds[-1] - time_seconds[0]
+            if time_span <= 0.0:
+                raise ValueError(f"Non-positive acoustic time span in {dataset.source_file}")
+
+            time_fraction = (time_seconds - time_seconds[0]) / time_span
+            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            all_pressure_values.extend(pressure_pa)
+            style = line_styles.get(
+                (surface_dataset.group_name, case_index),
+                {"color": _line_color(surface_dataset.case_source_file, case_index), "linewidth": 1.2},
+            )
+            ax.plot(
+                time_fraction,
+                pressure_pa,
+                label=_surface_legend_label(surface_dataset, case_index),
+                linestyle="-",
+                **style,
+            )
+
+        ax.set_title(f"Pressure-time History for observer ID: {observer}")
+        ax.set_xlabel("Time Fraction")
+        ax.set_ylabel("Pressure [Pa]")
+        ax.set_xlim(0.1, 1.0)
+        if all_pressure_values:
+            pressure_min = min(all_pressure_values)
+            pressure_max = max(all_pressure_values)
+            padding = 0.15 * (pressure_max - pressure_min) if pressure_max > pressure_min else 0.01
+            ax.set_ylim(pressure_min - padding, pressure_max + padding)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="lower right")
+        fig.tight_layout()
+
+        output_file = output_dir / f"surface_pressure_time_history_blade1_blade2_observer_{observer}.png"
         fig.savefig(output_file, dpi=200)
         plt.close(fig)
         output_files.append(output_file)
@@ -1120,6 +1513,28 @@ def make_plots(
     ):
         output_files.append(pressure_time_output_file)
         print(f"Wrote {pressure_time_output_file}")
+    for surface_pressure_time_output_file in render_surface_pressure_time_history_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    ):
+        output_files.append(surface_pressure_time_output_file)
+        print(f"Wrote {surface_pressure_time_output_file}")
+    for surface_pair_third_octave_output_file in render_surface_pair_third_octave_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    ):
+        output_files.append(surface_pair_third_octave_output_file)
+        print(f"Wrote {surface_pair_third_octave_output_file}")
+    surface_pair_oaspl_output_file = render_surface_pair_oaspl_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+    )
+    if surface_pair_oaspl_output_file is not None:
+        output_files.append(surface_pair_oaspl_output_file)
+        print(f"Wrote {surface_pair_oaspl_output_file}")
     for average_pressure_time_output_file in render_average_pressure_time_history_plots(
         [(dataset, values_by_plot)],
         observers,
@@ -1185,12 +1600,31 @@ def make_comparison_plot(
         print(f"Wrote {spectrum_output_file}")
     for third_octave_output_file in render_third_octave_plots(results_by_case, observers, output_dir):
         print(f"Wrote {third_octave_output_file}")
+    for surface_pair_third_octave_output_file in render_surface_pair_third_octave_plots(
+        results_by_case,
+        observers,
+        output_dir,
+    ):
+        print(f"Wrote {surface_pair_third_octave_output_file}")
+    surface_pair_oaspl_output_file = render_surface_pair_oaspl_plots(
+        results_by_case,
+        observers,
+        output_dir,
+    )
+    if surface_pair_oaspl_output_file is not None:
+        print(f"Wrote {surface_pair_oaspl_output_file}")
     for bpf_output_file in render_bpf_component_plots(results_by_case, observers, output_dir):
         print(f"Wrote {bpf_output_file}")
     for harmonic_output_file in render_harmonic_content_plots(results_by_case, observers, output_dir):
         print(f"Wrote {harmonic_output_file}")
     for pressure_time_output_file in render_pressure_time_history_plots(results_by_case, observers, output_dir):
         print(f"Wrote {pressure_time_output_file}")
+    for surface_pressure_time_output_file in render_surface_pressure_time_history_plots(
+        results_by_case,
+        observers,
+        output_dir,
+    ):
+        print(f"Wrote {surface_pressure_time_output_file}")
     for average_pressure_time_output_file in render_average_pressure_time_history_plots(
         results_by_case,
         observers,
@@ -1207,6 +1641,13 @@ def _parse_observers(value: str) -> tuple[int, ...]:
     if not observers:
         raise argparse.ArgumentTypeError("Provide at least one observer index.")
     return observers
+
+
+def _parse_legend_labels(value: str) -> tuple[str, ...]:
+    labels = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not labels:
+        raise argparse.ArgumentTypeError("Provide at least one legend label.")
+    return labels
 
 
 def parse_args() -> argparse.Namespace:
@@ -1248,6 +1689,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override the plotted case label in legends.",
     )
+    parser.add_argument(
+        "--legend-labels",
+        type=_parse_legend_labels,
+        default=None,
+        help="Comma-separated legend labels mapped to --csv order.",
+    )
     weighting_group = parser.add_mutually_exclusive_group()
     weighting_group.add_argument(
         "--a-weighting",
@@ -1267,10 +1714,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    global APPLY_A_WEIGHTING_TO_SPECTRA, FLOW360_OBSERVER_NUMBERING_OFFSET, LEGEND_LABEL_OVERRIDE
+    global APPLY_A_WEIGHTING_TO_SPECTRA, FLOW360_OBSERVER_NUMBERING_OFFSET, LEGEND_LABEL_OVERRIDE, LEGEND_LABELS_BY_FILE
     APPLY_A_WEIGHTING_TO_SPECTRA = args.apply_a_weighting_to_spectra
     FLOW360_OBSERVER_NUMBERING_OFFSET = args.csv_observer_offset
     LEGEND_LABEL_OVERRIDE = args.legend_label
+    if args.legend_labels is not None:
+        if args.csv is None:
+            raise ValueError("--legend-labels requires explicit --csv arguments.")
+        if len(args.legend_labels) != len(args.csv):
+            raise ValueError("--legend-labels must contain the same number of labels as --csv arguments.")
+        LEGEND_LABELS_BY_FILE = {
+            csv_file.resolve(): label
+            for csv_file, label in zip(args.csv, args.legend_labels)
+        }
     if (
         args.rpm is not None
         or args.steps_per_rev is not None

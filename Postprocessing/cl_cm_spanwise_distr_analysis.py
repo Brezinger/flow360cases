@@ -16,8 +16,8 @@ from scipy.spatial import cKDTree
 result = "XWing 2.2 trap 24.5"
 #result = "XWing 2.2 trap 39"
 #result = "XWing 2.2 rect 24.5"
-#result = "XWing 2.2 rect 39"
-result = "XWing 2.2 rect 24.5 fine"
+result = "XWing 2.2 rect 39"
+#result = "XWing 2.2 rect 24.5 fine"
 
 show_plots = True
 
