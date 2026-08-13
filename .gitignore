@@ -9,3 +9,4 @@ jsc_config1.csm
 *.csv
 *.png
 *.wav
+*.cgns

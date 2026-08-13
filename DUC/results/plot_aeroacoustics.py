@@ -92,6 +92,17 @@ def _line_color(source_file: Path, index: int) -> str:
 
 
 @dataclass(frozen=True)
+class RevolutionRange:
+    start_index: int
+    end_index: int
+    label: str
+
+    @property
+    def count(self) -> int:
+        return self.end_index - self.start_index
+
+
+@dataclass(frozen=True)
 class AcousticDataset:
     source_file: Path
     time: np.ndarray
@@ -104,6 +115,7 @@ class AcousticDataset:
     reference_velocity_m_s: float
     reference_temperature_k: float
     l_grid_unit_m: float
+    revolution_range: RevolutionRange | None = None
 
     @property
     def sample_spacing_s(self) -> float:
@@ -125,13 +137,7 @@ class AcousticDataset:
 
     @property
     def speed_of_sound_m_s(self) -> float:
-        return float(
-            np.sqrt(
-                AIR_SPECIFIC_HEAT_RATIO
-                * AIR_GAS_CONSTANT_J_KG_K
-                * self.reference_temperature_k
-            )
-        )
+        return _speed_of_sound_m_s(self.reference_temperature_k)
 
 
 @dataclass(frozen=True)
@@ -167,6 +173,53 @@ def _default_acoustic_files() -> list[Path]:
     return candidates
 
 
+def _speed_of_sound_m_s(reference_temperature_k: float) -> float:
+    return float(
+        np.sqrt(
+            AIR_SPECIFIC_HEAT_RATIO
+            * AIR_GAS_CONSTANT_J_KG_K
+            * reference_temperature_k
+        )
+    )
+
+
+def _samples_per_revolution(
+    time_values: np.ndarray,
+    rpm: float,
+    reference_temperature_k: float,
+    l_grid_unit_m: float,
+) -> int:
+    if len(time_values) < 2:
+        raise ValueError("At least two time samples are required to select revolutions.")
+
+    speed_of_sound_m_s = _speed_of_sound_m_s(reference_temperature_k)
+    sample_spacing_s = float(np.mean(np.diff(time_values * (l_grid_unit_m / speed_of_sound_m_s))))
+    samples_per_revolution = int(round((60.0 / rpm) / sample_spacing_s))
+    if samples_per_revolution < 1:
+        raise ValueError("Could not infer a valid acoustic sample count per revolution.")
+    return samples_per_revolution
+
+
+def _slice_revolutions(
+    values: np.ndarray,
+    revolution_range: RevolutionRange | None,
+    samples_per_revolution: int,
+    source_file: Path,
+) -> np.ndarray:
+    if revolution_range is None:
+        return values
+
+    start_sample = revolution_range.start_index * samples_per_revolution
+    end_sample = revolution_range.end_index * samples_per_revolution
+    if end_sample > len(values):
+        available_revolutions = len(values) // samples_per_revolution
+        raise ValueError(
+            f"Requested revolutions {revolution_range.label} from {source_file}, but only "
+            f"{available_revolutions} complete revolutions are available."
+        )
+    return values[start_sample:end_sample]
+
+
 def load_acoustic_dataset(
     csv_file: Path | None = None,
     observers: tuple[int, ...] = DEFAULT_OBSERVERS,
@@ -176,6 +229,7 @@ def load_acoustic_dataset(
     reference_velocity_m_s: float = LOCAL_RESULTS_REFERENCE_VELOCITY_M_S,
     reference_temperature_k: float = LOCAL_RESULTS_REFERENCE_TEMPERATURE_K,
     l_grid_unit_m: float = LOCAL_RESULTS_L_GRID_UNIT_M,
+    revolution_range: RevolutionRange | None = None,
 ) -> AcousticDataset:
     csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
     pressure_columns = {
@@ -218,27 +272,59 @@ def load_acoustic_dataset(
     if not time_values:
         raise ValueError(f"No acoustic samples found in {csv_file}")
 
+    time_array = np.asarray(time_values, dtype=float)
+    pressure_arrays = {
+        observer: np.asarray(values, dtype=float)
+        for observer, values in pressure_values.items()
+    }
+    thickness_arrays = {
+        observer: np.asarray(values, dtype=float)
+        for observer, values in thickness_values.items()
+    }
+    loading_arrays = {
+        observer: np.asarray(values, dtype=float)
+        for observer, values in loading_values.items()
+    }
+
+    if revolution_range is not None:
+        samples_per_revolution = _samples_per_revolution(
+            time_array,
+            rpm,
+            reference_temperature_k,
+            l_grid_unit_m,
+        )
+        time_array = _slice_revolutions(
+            time_array,
+            revolution_range,
+            samples_per_revolution,
+            csv_file,
+        )
+        pressure_arrays = {
+            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
+            for observer, values in pressure_arrays.items()
+        }
+        thickness_arrays = {
+            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
+            for observer, values in thickness_arrays.items()
+        }
+        loading_arrays = {
+            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
+            for observer, values in loading_arrays.items()
+        }
+
     return AcousticDataset(
         source_file=csv_file,
-        time=np.asarray(time_values, dtype=float),
-        pressure_by_observer={
-            observer: np.asarray(values, dtype=float)
-            for observer, values in pressure_values.items()
-        },
-        thickness_by_observer={
-            observer: np.asarray(values, dtype=float)
-            for observer, values in thickness_values.items()
-        },
-        loading_by_observer={
-            observer: np.asarray(values, dtype=float)
-            for observer, values in loading_values.items()
-        },
+        time=time_array,
+        pressure_by_observer=pressure_arrays,
+        thickness_by_observer=thickness_arrays,
+        loading_by_observer=loading_arrays,
         rpm=rpm,
         time_steps_per_revolution=time_steps_per_revolution,
         reference_density_kg_m3=reference_density_kg_m3,
         reference_velocity_m_s=reference_velocity_m_s,
         reference_temperature_k=reference_temperature_k,
         l_grid_unit_m=l_grid_unit_m,
+        revolution_range=revolution_range,
     )
 
 
@@ -263,6 +349,7 @@ def load_surface_resolved_datasets(
                 reference_velocity_m_s=total_dataset.reference_velocity_m_s,
                 reference_temperature_k=total_dataset.reference_temperature_k,
                 l_grid_unit_m=total_dataset.l_grid_unit_m,
+                revolution_range=total_dataset.revolution_range,
             )
             surface_datasets.append(
                 SurfaceResolvedDataset(
@@ -1314,6 +1401,12 @@ def _average_revolutions(signal: np.ndarray, revolution_count: int = 3) -> np.nd
     return np.mean(revolutions, axis=0)
 
 
+def _average_revolution_count(dataset: AcousticDataset, default_revolution_count: int) -> int:
+    if dataset.revolution_range is not None:
+        return dataset.revolution_range.count
+    return default_revolution_count
+
+
 def render_average_pressure_time_history_plots(
     results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
     observers: tuple[int, ...],
@@ -1331,7 +1424,7 @@ def render_average_pressure_time_history_plots(
             pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
             averaged_pressure_pa = _average_revolutions(
                 pressure_pa,
-                revolution_count=revolution_count,
+                revolution_count=_average_revolution_count(dataset, revolution_count),
             )
             all_pressure_values.extend(averaged_pressure_pa)
             time_fraction = np.linspace(0.0, 1.0, len(averaged_pressure_pa))
@@ -1458,6 +1551,7 @@ def make_plots(
     reference_velocity_m_s: float | None = None,
     reference_temperature_k: float | None = None,
     l_grid_unit_m: float | None = None,
+    revolution_range: RevolutionRange | None = None,
 ) -> list[Path]:
     resolved_csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
     rpm, time_steps_per_revolution = _timing_for_file(
@@ -1481,10 +1575,12 @@ def make_plots(
         reference_velocity_m_s=reference_velocity_m_s,
         reference_temperature_k=reference_temperature_k,
         l_grid_unit_m=l_grid_unit_m,
+        revolution_range=revolution_range,
     )
     print(
         f"Loaded {dataset.source_file.name}: "
         f"{len(dataset.time)} samples, "
+        f"revolutions={dataset.revolution_range.label if dataset.revolution_range is not None else 'all'}, "
         f"rpm={dataset.rpm:.3f}, "
         f"steps/rev={dataset.time_steps_per_revolution:g}, "
         f"sample_rate={dataset.sample_rate_hz:.3f} Hz, "
@@ -1557,6 +1653,7 @@ def make_comparison_plot(
     observers: tuple[int, ...] = DEFAULT_OBSERVERS,
     plots: tuple[PlotDefinition, ...] = PLOTS,
     output_dir: Path = PLOTS_DIR,
+    revolution_range: RevolutionRange | None = None,
 ) -> Path:
     csv_files = _default_acoustic_files() if csv_files is None else [Path(path) for path in csv_files]
     results_by_case = []
@@ -1578,12 +1675,14 @@ def make_comparison_plot(
             reference_velocity_m_s=reference_velocity_m_s,
             reference_temperature_k=reference_temperature_k,
             l_grid_unit_m=l_grid_unit_m,
+            revolution_range=revolution_range,
         )
         values_by_plot = {plot.name: evaluate_plot(dataset, plot) for plot in plots}
         results_by_case.append((dataset, values_by_plot))
         print(
             f"Loaded {dataset.source_file.name}: "
             f"{len(dataset.time)} samples, "
+            f"revolutions={dataset.revolution_range.label if dataset.revolution_range is not None else 'all'}, "
             f"rpm={dataset.rpm:.3f}, "
             f"steps/rev={dataset.time_steps_per_revolution:g}, "
             f"sample_rate={dataset.sample_rate_hz:.3f} Hz, "
@@ -1650,6 +1749,43 @@ def _parse_legend_labels(value: str) -> tuple[str, ...]:
     return labels
 
 
+def _parse_revolution_range(value: str) -> RevolutionRange | None:
+    value = value.strip()
+    if value.lower() == "all":
+        return None
+
+    match = re.fullmatch(r"(?:(zero|one|0|1):)?(\d+)\s*-\s*(\d+)", value, flags=re.IGNORECASE)
+    if match is None:
+        raise argparse.ArgumentTypeError(
+            "Use a half-open revolution range such as 0-2 or 1-3. "
+            "Use zero:1-3 or one:2-4 to force the index base."
+        )
+
+    base_token, start_text, end_text = match.groups()
+    start = int(start_text)
+    end = int(end_text)
+    if base_token is None:
+        index_base = 0 if start == 0 else 1
+    elif base_token.lower() in {"zero", "0"}:
+        index_base = 0
+    else:
+        index_base = 1
+
+    normalized_start = start - index_base
+    normalized_end = end - index_base
+    if normalized_start < 0 or normalized_end <= normalized_start:
+        raise argparse.ArgumentTypeError(
+            f"Invalid revolution range {value!r}; the end must be greater than the start."
+        )
+
+    label = f"{value} ({normalized_start}-{normalized_end} zero-based, end-exclusive)"
+    return RevolutionRange(
+        start_index=normalized_start,
+        end_index=normalized_end,
+        label=label,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot Flow360 aeroacoustic OASPL results.")
     parser.add_argument(
@@ -1661,6 +1797,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", type=Path, default=PLOTS_DIR)
     parser.add_argument("--observers", type=_parse_observers, default=DEFAULT_OBSERVERS)
+    parser.add_argument(
+        "--revolutions",
+        type=_parse_revolution_range,
+        default=None,
+        help=(
+            "Optional half-open revolution range used for all aeroacoustic calculations. "
+            "Default uses all samples. Examples: 0-2 or 1-3 select the first two revolutions; "
+            "zero:1-3 forces zero-based indexing."
+        ),
+    )
     parser.add_argument("--rpm", type=float, default=None)
     parser.add_argument("--steps-per-rev", type=float, default=None)
     parser.add_argument("--rho", type=float, default=None, help="Density for dimensionalizing acoustic pressure.")
@@ -1750,12 +1896,14 @@ def main() -> None:
             reference_velocity_m_s=args.u_ref,
             reference_temperature_k=args.temperature_k,
             l_grid_unit_m=args.l_grid_unit,
+            revolution_range=args.revolutions,
         )
     else:
         make_comparison_plot(
             csv_files=args.csv,
             observers=args.observers,
             output_dir=args.output_dir,
+            revolution_range=args.revolutions,
         )
 
 

@@ -113,8 +113,8 @@
           {
             "name": "manual progression curves",
             "curve_ids": [
-              "1137_unidentified",
-              "1136_unidentified",
+              1139,
+              1138,
               1193,
               1194,
               1309,
@@ -125,8 +125,8 @@
               1239,
               1296,
               1297,
-              "1177_unidentified",
-              "1178_unidentified",
+              1180,
+              1179,
               1350,
               1351
             ],
@@ -1470,7 +1470,7 @@
       {
         "name": "wing 4",
         "curve_definition": "automatic",
-        "start_pt": "729_unidentified",
+        "start_pt": 731,
         "circumferential_direction": [
           -1.0,
           0.0,

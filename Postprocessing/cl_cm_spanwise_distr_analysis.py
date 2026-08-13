@@ -20,6 +20,7 @@ result = "XWing 2.2 rect 39"
 #result = "XWing 2.2 rect 24.5 fine"
 
 show_plots = True
+mirror_one_sided_spanwise_results = True
 
 if result == "XWing 2.2 rect 24.5":
     data_dir = Path(
@@ -158,8 +159,42 @@ def process_surface_dataframe(
         strip["Fn_q"] / strip["area_xy"],
         np.nan,
     )
+    if mirror_one_sided_spanwise_results:
+        strip = mirror_one_sided_spanwise_distribution(strip)
 
     return df, strip, cmx_total
+
+
+def mirror_one_sided_spanwise_distribution(
+    strip: pd.DataFrame,
+    tolerance: float = 1.0e-9,
+) -> pd.DataFrame:
+    """Mirror one-sided y distributions from symmetry-plane simulations."""
+    if strip.empty:
+        return strip
+
+    y_mid = strip["y_mid"].to_numpy()
+    has_negative_y = np.any(y_mid < -tolerance)
+    has_positive_y = np.any(y_mid > tolerance)
+    if has_negative_y and has_positive_y:
+        return strip
+
+    rows_to_mirror = strip[np.abs(strip["y_mid"]) > tolerance]
+    if rows_to_mirror.empty:
+        return strip
+
+    mirrored = rows_to_mirror.copy()
+    mirrored["y_mid"] = -mirrored["y_mid"]
+    mirrored["strip"] = -mirrored["strip"] - 1
+    for column in ("Mx_q", "Cmx", "dCmx_dy"):
+        if column in mirrored:
+            mirrored[column] = -mirrored[column]
+
+    return (
+        pd.concat([strip, mirrored], ignore_index=True)
+        .sort_values("y_mid")
+        .reset_index(drop=True)
+    )
 
 
 def load_vtu_cell_center_dataframe(filepath: Path) -> pd.DataFrame:
@@ -304,13 +339,13 @@ def main() -> None:
     fig_cmx = plt.figure(figsize=(9.0, 5.5), constrained_layout=True)
     for surface_name, strip, _ in surface_results:
         plt.plot(
-            strip["y_mid"].abs(),
+            strip["y_mid"],
             strip["dCmx_dy"].abs(),
             marker="o",
             label=_surface_label(surface_name),
             color=surface_colors[surface_name],
         )
-    plt.xlabel(r"$|y|$")
+    plt.xlabel("y")
     plt.ylabel(r"$|dC_{mx}/dy|$")
     plt.title(f"{plot_title} - rolling moment distribution")
     plt.grid(True)
@@ -323,13 +358,13 @@ def main() -> None:
     cl_normalization = aircraft_cl if not np.isclose(aircraft_cl, 0.0) else np.nan
     for surface_name, strip, _ in surface_results:
         plt.plot(
-            abs(strip["y_mid"]),
+            strip["y_mid"],
             strip["cl_local"] / cl_normalization,
             marker="o",
             label=_surface_label(surface_name),
             color=surface_colors[surface_name],
         )
-    plt.xlabel("|y|")
+    plt.xlabel("y")
     plt.ylabel(r"$c_l / C_L$")
     plt.title(f"{plot_title} - normalized local strip lift coefficient")
     plt.grid(True)
