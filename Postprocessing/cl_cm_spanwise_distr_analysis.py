@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from scipy.spatial import cKDTree
 # -----------------------------
 # User inputs
 # -----------------------------
-result = "XWing 2.2 trap 24.5"
+#result = "XWing 2.2 trap 24.5"
 #result = "XWing 2.2 trap 39"
 #result = "XWing 2.2 rect 24.5"
 result = "XWing 2.2 rect 39"
@@ -47,10 +48,7 @@ elif result == "XWing 2.2 trap 39":
         "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
         "trapezoidal wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
     )
-elif result == "DUC step 2":
-    data_dir = Path(
-        "C:\git/flow360cases/DUC/results/step2_case-950e2800-b54d-4826-b85f-56206efdc51f_results_total_forces_v2.csv"
-    )
+
 
 else:
     raise ValueError(f"Unknown variant {result}")
@@ -63,10 +61,14 @@ elif "XWing 2.2" in result and "rect" in result:
     dy = 25.0  # strip width in same length unit as Points
     S_ref = 0.2831 * 1e6  # reference area, set correctly
     b_ref = 1312  # reference span for Cmx, for trap wing
-if "DUC" in result:
-    dy = 20.
-    S_ref = 1.4**2 * np.pi
-    b_ref = 1.4
+
+i_wing_offset = [2, 3]
+
+P_mot = 3500    # Motor shaft power
+rpm_mot = 13200 # Motor RPM
+motor_torque_sign = 1.0  # +1 means motor torque adds positive Cmx.
+rho_inf_kg_m3 = 1.225
+length_unit_m = 1.0e-3
 
 
 surface_names = [
@@ -93,6 +95,22 @@ surface_lift_force_direction_deg = {
 x_ref = 743
 y_ref = 0.0
 z_ref = 0.0
+
+
+@dataclass(frozen=True)
+class WingOffsetResult:
+    wing_names: tuple[str, ...]
+    selected_fz_q: float
+    aerodynamic_cmx: float
+    motor_torque_nm: float
+    motor_torque_cmx: float
+    target_cmx: float
+    required_delta_cmx: float
+    offset_y: float
+    offset_y_m: float
+    selected_mean_y: float
+    tipward_offset: float
+    tipward_offset_m: float
 
 
 def process_surface_dataframe(
@@ -279,10 +297,116 @@ def select_vtu_cells_from_selection_file(
     return vtu_cell_df[vtu_cell_df["PatchID"].isin(patch_ids)].copy()
 
 
+def _wing_names_from_indices(wing_indices: list[int]) -> tuple[str, ...]:
+    wing_names = tuple(f"wing{index}" for index in wing_indices)
+    missing_wings = [wing_name for wing_name in wing_names if wing_name not in surface_names]
+    if missing_wings:
+        raise ValueError(f"Unknown wings requested for y-offset: {missing_wings}")
+    return wing_names
+
+
+def _freestream_speed_m_s_from_result(result_label: str, path: Path) -> float:
+    for text in (result_label, path.name):
+        speed = _regex_group(text, r"U([-+]?\d+(?:\.\d+)?)")
+        if speed is not None:
+            return float(speed)
+    raise ValueError(
+        "Could not infer freestream speed from result label or data directory. "
+        "Add a U-value to the case name or pass an explicit speed in the code."
+    )
+
+
+def _motor_torque_nm(power_w: float, rpm: float) -> float:
+    if rpm <= 0.0:
+        raise ValueError(f"Motor RPM must be positive, got {rpm}.")
+    angular_speed_rad_s = 2.0 * np.pi * rpm / 60.0
+    return power_w / angular_speed_rad_s
+
+
+def _moment_coefficient_from_torque_nm(
+    torque_nm: float,
+    q_inf_pa: float,
+    s_ref: float,
+    b_ref: float,
+    length_unit_to_m: float,
+) -> float:
+    s_ref_m2 = s_ref * length_unit_to_m**2
+    b_ref_m = b_ref * length_unit_to_m
+    denominator = q_inf_pa * s_ref_m2 * b_ref_m
+    if np.isclose(denominator, 0.0):
+        raise ValueError("Cannot convert motor torque to Cmx with zero q*S_ref*b_ref.")
+    return torque_nm / denominator
+
+
+def calculate_required_wing_y_offset(
+    surface_results: list[tuple[str, pd.DataFrame, pd.DataFrame, float]],
+    wing_indices: list[int],
+    aerodynamic_cmx: float,
+    power_w: float,
+    rpm: float,
+    torque_sign: float,
+    rho_kg_m3: float,
+    freestream_speed_m_s: float,
+    length_unit_to_m: float,
+) -> WingOffsetResult:
+    wing_names = _wing_names_from_indices(wing_indices)
+    df_by_surface = {
+        surface_name: surface_df
+        for surface_name, surface_df, _, _ in surface_results
+    }
+    selected_fz_q = float(
+        sum(df_by_surface[wing_name]["dFz_q"].sum() for wing_name in wing_names)
+    )
+    if np.isclose(selected_fz_q, 0.0):
+        raise ValueError(
+            f"Selected wings {wing_names} have near-zero summed dFz_q; cannot calculate a y-offset."
+        )
+    selected_mean_y = float(
+        np.mean(
+            np.concatenate(
+                [
+                    df_by_surface[wing_name]["Points:1"].to_numpy()
+                    for wing_name in wing_names
+                ]
+            )
+        )
+    )
+
+    q_inf_pa = 0.5 * rho_kg_m3 * freestream_speed_m_s**2
+    signed_motor_torque_nm = torque_sign * _motor_torque_nm(power_w, rpm)
+    motor_torque_cmx = _moment_coefficient_from_torque_nm(
+        signed_motor_torque_nm,
+        q_inf_pa,
+        S_ref,
+        b_ref,
+        length_unit_to_m,
+    )
+    target_cmx = aerodynamic_cmx + motor_torque_cmx
+    required_delta_cmx = -target_cmx
+    offset_y = required_delta_cmx * S_ref * b_ref / selected_fz_q
+    tipward_sign = np.sign(selected_mean_y) if not np.isclose(selected_mean_y, 0.0) else np.nan
+    tipward_offset = offset_y / tipward_sign
+
+    return WingOffsetResult(
+        wing_names=wing_names,
+        selected_fz_q=selected_fz_q,
+        aerodynamic_cmx=aerodynamic_cmx,
+        motor_torque_nm=signed_motor_torque_nm,
+        motor_torque_cmx=motor_torque_cmx,
+        target_cmx=target_cmx,
+        required_delta_cmx=required_delta_cmx,
+        offset_y=offset_y,
+        offset_y_m=offset_y * length_unit_to_m,
+        selected_mean_y=selected_mean_y,
+        tipward_offset=tipward_offset,
+        tipward_offset_m=tipward_offset * length_unit_to_m,
+    )
+
+
 def main() -> None:
     plt.close("all")
 
-    surface_results: list[tuple[str, pd.DataFrame, float]] = []
+    surface_results: list[tuple[str, pd.DataFrame, pd.DataFrame, float]] = []
     plot_title = _plot_title_from_data_dir(data_dir)
 
     missing_patch_files = [
@@ -298,24 +422,24 @@ def main() -> None:
 
     for surface_name in surface_names:
         lift_direction = surface_lift_force_direction_deg[surface_name]
-        _, strip, cmx_total = process_vtu_surface(
+        surface_df, strip, cmx_total = process_vtu_surface(
             vtu_cell_df,
             surface_patch_id_files[surface_name],
             lift_direction,
         )
-        surface_results.append((surface_name, strip, cmx_total))
+        surface_results.append((surface_name, surface_df, strip, cmx_total))
         print(
             f"{surface_name}: lift direction = {lift_direction:.1f} deg, "
             f"Cmx = {cmx_total:.6f}"
         )
 
-    cmx_sum = sum(cmx_total for _, _, cmx_total in surface_results)
+    cmx_sum = sum(cmx_total for _, _, _, cmx_total in surface_results)
     print(f"Wing + stab Cmx sum = {cmx_sum:.6f}")
     component_sums: dict[str, float] = {}
     for prefix in ("wing", "stab"):
         prefix_sum = sum(
             cmx_total
-            for surface_name, _, cmx_total in surface_results
+            for surface_name, _, _, cmx_total in surface_results
             if surface_name.startswith(prefix)
         )
         component_sums[prefix] = prefix_sum
@@ -330,14 +454,43 @@ def main() -> None:
     print(f"aircraft global CL = {aircraft_cl:.6f}")
     print(f"fuselage Cmx = {fuselage_cmx:.6f}")
 
+    freestream_speed_m_s = _freestream_speed_m_s_from_result(result, data_dir)
+    wing_offset_result = calculate_required_wing_y_offset(
+        surface_results,
+        i_wing_offset,
+        aircraft_cmx_total,
+        P_mot,
+        rpm_mot,
+        motor_torque_sign,
+        rho_inf_kg_m3,
+        freestream_speed_m_s,
+        length_unit_m,
+    )
+    print(
+        "Required wing y-offset to counter aircraft Cmx plus motor torque:\n"
+        f"  selected wings = {', '.join(wing_offset_result.wing_names)}\n"
+        f"  freestream speed = {freestream_speed_m_s:.3f} m/s, rho = {rho_inf_kg_m3:.3f} kg/m^3\n"
+        f"  selected sum(Fz/q) = {wing_offset_result.selected_fz_q:.6e}\n"
+        f"  aerodynamic Cmx = {wing_offset_result.aerodynamic_cmx:.6f}\n"
+        f"  motor torque = {wing_offset_result.motor_torque_nm:.6f} N m\n"
+        f"  motor torque Cmx = {wing_offset_result.motor_torque_cmx:.6f}\n"
+        f"  target Cmx = {wing_offset_result.target_cmx:.6f}\n"
+        f"  required delta Cmx = {wing_offset_result.required_delta_cmx:.6f}\n"
+        f"  selected mean y = {wing_offset_result.selected_mean_y:.3f} model units\n"
+        f"  required y-offset = {wing_offset_result.offset_y:.3f} model units "
+        f"({wing_offset_result.offset_y_m:.6f} m)\n"
+        f"  required tipward offset = {wing_offset_result.tipward_offset:.3f} model units "
+        f"({wing_offset_result.tipward_offset_m:.6f} m)"
+    )
+
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     surface_colors = {
         surface_name: color_cycle[index % len(color_cycle)]
-        for index, (surface_name, _, _) in enumerate(surface_results)
+        for index, (surface_name, _, _, _) in enumerate(surface_results)
     }
 
     fig_cmx = plt.figure(figsize=(9.0, 5.5), constrained_layout=True)
-    for surface_name, strip, _ in surface_results:
+    for surface_name, _, strip, _ in surface_results:
         plt.plot(
             strip["y_mid"],
             strip["dCmx_dy"].abs(),
@@ -356,7 +509,7 @@ def main() -> None:
 
     fig_cl = plt.figure(figsize=(9.0, 5.5), constrained_layout=True)
     cl_normalization = aircraft_cl if not np.isclose(aircraft_cl, 0.0) else np.nan
-    for surface_name, strip, _ in surface_results:
+    for surface_name, _, strip, _ in surface_results:
         plt.plot(
             strip["y_mid"],
             strip["cl_local"] / cl_normalization,
@@ -388,10 +541,10 @@ def main() -> None:
         "stab3": -1.15,
         "stab4": -1.45,
     }
-    max_abs_cmx = max(abs(cmx_total) for _, _, cmx_total in surface_results)
+    max_abs_cmx = max(abs(cmx_total) for _, _, _, cmx_total in surface_results)
     cmx_by_surface = {
         surface_name: cmx_total
-        for surface_name, _, cmx_total in surface_results
+        for surface_name, _, _, cmx_total in surface_results
     }
     pair_sum_results = [
         (
@@ -427,7 +580,7 @@ def main() -> None:
     max_abs_for_offset = max(abs(min_bar_value), abs(max_bar_value))
     label_offset = 0.02 * max_abs_for_offset if max_abs_for_offset > 0.0 else 0.01
 
-    for surface_name, _, cmx_total in surface_results:
+    for surface_name, _, _, cmx_total in surface_results:
         abs_cmx = abs(cmx_total)
         plt.barh(
             row_positions[surface_name],

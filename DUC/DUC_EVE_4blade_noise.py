@@ -100,39 +100,39 @@ class CaseSetup:
     # consecutive refined time stepping setup
     # ---------------------------------------
     # step 0
-    # time_steps_per_revolution: int = 120
-    # parent_case_id: str | None = None
-    # physical_steps: int = 600
-    # max_pseudo_steps: int = 35
-    # rpm: float = 1075.0
-    # wall_roughness_height: float = 1.0e-5
-    # navier_stokes_relative_tolerance: float = 0.01
-    # navier_stokes_order_of_accuracy: int = 1
-    # navier_stokes_linear_solver_max_iterations: int = 25
-    # numerical_dissipation_factor: float = 1.
-    # low_mach_preconditioner: bool = False
-    # adaptive_cfl_min: float = 0.1
-    # adaptive_cfl_max: float = 1.0e6
-    # adaptive_cfl_max_relative_change: float = 50.0
-    # adaptive_cfl_convergence_limiting_factor: float = 1.0
-    # include_aeroacoustic_output: bool = False
+    """time_steps_per_revolution: int = 120
+    parent_case_id: str | None = None
+    physical_steps: int = 600
+    max_pseudo_steps: int = 35
+    rpm: float = 1075.0
+    wall_roughness_height: float = 1.0e-5
+    navier_stokes_relative_tolerance: float = 0.01
+    navier_stokes_order_of_accuracy: int = 1
+    navier_stokes_linear_solver_max_iterations: int = 25
+    numerical_dissipation_factor: float = 1.
+    low_mach_preconditioner: bool = False
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
     # ------
     # step 1
-    # time_steps_per_revolution: int = 120 * 6
-    # physical_steps: int = 3600
-    # max_pseudo_steps: int = 15
-    # rpm: float = 1075.0 * 0.980047894
-    # wall_roughness_height: float = 1.0e-5
-    # navier_stokes_relative_tolerance: float = 0.0175
-    # navier_stokes_order_of_accuracy: int = 2
-    # navier_stokes_linear_solver_max_iterations: int = 25
-    # numerical_dissipation_factor: float = 0.7
-    # low_mach_preconditioner: bool = True
-    # adaptive_cfl_min: float = 0.1
-    # adaptive_cfl_max: float = 1.0e6
-    # adaptive_cfl_max_relative_change: float = 50.0
-    # adaptive_cfl_convergence_limiting_factor: float = 1.0
-    # include_aeroacoustic_output: bool = False
+    """time_steps_per_revolution: int = 120 * 6
+    physical_steps: int = 3600
+    max_pseudo_steps: int = 15
+    rpm: float = 1075.0 * 0.980047894
+    wall_roughness_height: float = 1.0e-5
+    navier_stokes_relative_tolerance: float = 0.0175
+    navier_stokes_order_of_accuracy: int = 2
+    navier_stokes_linear_solver_max_iterations: int = 25
+    numerical_dissipation_factor: float = 0.7
+    low_mach_preconditioner: bool = True
+    adaptive_cfl_min: float = 0.1
+    adaptive_cfl_max: float = 1.0e6
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 1.0
+    include_aeroacoustic_output: bool = False"""
     # ------
     # step 2A
     """time_steps_per_revolution: int = 120 * 16
