@@ -124,24 +124,61 @@ def correlate_points(
     old_points: dict[int, tuple[float, float, float]],
     new_points: dict[int, tuple[float, float, float]],
     tolerance: float,
+    translations: Iterable[tuple[float, float, float]] = (),
 ) -> dict[int, int | None]:
-    candidates: list[tuple[float, int, int]] = []
+    point_map, _ = correlate_points_with_match_modes(
+        old_points,
+        new_points,
+        tolerance,
+        translations,
+    )
+    return point_map
+
+
+def correlate_points_with_match_modes(
+    old_points: dict[int, tuple[float, float, float]],
+    new_points: dict[int, tuple[float, float, float]],
+    tolerance: float,
+    translations: Iterable[tuple[float, float, float]] = (),
+) -> tuple[dict[int, int | None], dict[int, tuple[float, float, float] | None]]:
+    """Match points at their original positions or after a known translation.
+
+    A ``None`` match mode denotes a direct coordinate match.  Every supplied
+    translation maps an old-model coordinate to its expected new-model
+    coordinate.  Direct matches win ties so unchanged shared geometry is not
+    assigned to a translated candidate.
+    """
+    unique_translations = list(dict.fromkeys(tuple(translation) for translation in translations))
+    match_positions = [None, *unique_translations]
+    candidates: list[tuple[float, int, int, int, int]] = []
     for old_id, old_coord in old_points.items():
-        for new_id, new_coord in new_points.items():
-            distance = _distance(old_coord, new_coord)
-            if distance <= tolerance:
-                candidates.append((distance, old_id, new_id))
+        for mode_index, translation in enumerate(match_positions):
+            expected_coord = (
+                old_coord
+                if translation is None
+                else tuple(old_coord[index] + translation[index] for index in range(3))
+            )
+            for new_id, new_coord in new_points.items():
+                distance = _distance(expected_coord, new_coord)
+                if distance <= tolerance:
+                    candidates.append(
+                        (distance, 0 if translation is None else 1, old_id, new_id, mode_index)
+                    )
 
     candidates.sort()
     point_map: dict[int, int | None] = {old_id: None for old_id in old_points}
+    match_modes: dict[int, tuple[float, float, float] | None] = {
+        old_id: None for old_id in old_points
+    }
     used_new_points: set[int] = set()
-    for _, old_id, new_id in candidates:
+    for _, _, old_id, new_id, mode_index in candidates:
         if point_map[old_id] is not None or new_id in used_new_points:
             continue
         point_map[old_id] = new_id
+        match_modes[old_id] = match_positions[mode_index]
         used_new_points.add(new_id)
 
-    return point_map
+    return point_map, match_modes
 
 
 def correlate_curves(
@@ -293,9 +330,39 @@ def _looks_like_transfinite_surface(node: dict[str, Any]) -> bool:
     return "Arrangement" in node or "boundary points" in node
 
 
+def _unidentified_reference_paths(node: Any, path: str = "$") -> list[str]:
+    if isinstance(node, str):
+        return [path] if node.endswith("_unidentified") else []
+    if isinstance(node, list):
+        return [
+            unresolved_path
+            for index, item in enumerate(node)
+            for unresolved_path in _unidentified_reference_paths(item, f"{path}[{index}]")
+        ]
+    if isinstance(node, dict):
+        return [
+            unresolved_path
+            for key, value in node.items()
+            for unresolved_path in _unidentified_reference_paths(value, f"{path}.{key}")
+        ]
+    return []
+
+
 def _count_identified(entity_map: dict[int, int | None]) -> tuple[int, int]:
     identified = sum(mapped_id is not None for mapped_id in entity_map.values())
     return identified, len(entity_map)
+
+
+def _match_mode_counts(
+    point_map: dict[int, int | None],
+    match_modes: dict[int, tuple[float, float, float] | None],
+) -> dict[tuple[float, float, float] | None, int]:
+    counts: dict[tuple[float, float, float] | None, int] = {}
+    for old_id, new_id in point_map.items():
+        if new_id is not None:
+            mode = match_modes[old_id]
+            counts[mode] = counts.get(mode, 0) + 1
+    return counts
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -460,6 +527,18 @@ def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
         help=f"Maximum coordinate distance for point matching. Default: {DEFAULT_POINT_TOLERANCE:g}.",
     )
     parser.add_argument(
+        "--point-translation",
+        action="append",
+        nargs=3,
+        type=float,
+        metavar=("DX", "DY", "DZ"),
+        default=[],
+        help=(
+            "Translation from an old point position to its matching new point position. "
+            "May be supplied multiple times; direct matching remains enabled."
+        ),
+    )
+    parser.add_argument(
         "--surface-point-match-ratio",
         type=float,
         default=DEFAULT_SURFACE_POINT_MATCH_RATIO,
@@ -488,6 +567,11 @@ def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
         action="store_true",
         help="Only write the correlated .geo file; do not rewrite the new mesh JSON.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report correlation results without writing JSON, backups, or .geo files.",
+    )
     return parser.parse_args(list(argv))
 
 
@@ -502,11 +586,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         raise ValueError("--geo-out requires --geo-in.")
     if args.skip_json_update and args.geo_in is None:
         raise ValueError("--skip-json-update requires --geo-in.")
+    if args.dry_run and args.geo_in is not None:
+        raise ValueError("--dry-run cannot be combined with --geo-in.")
 
     old_entities = _load_geometry(old_mesh_def_file)
     new_entities = _load_geometry(new_mesh_def_file)
 
-    point_map = correlate_points(old_entities.points, new_entities.points, args.point_tolerance)
+    point_map, point_match_modes = correlate_points_with_match_modes(
+        old_entities.points,
+        new_entities.points,
+        args.point_tolerance,
+        [tuple(translation) for translation in args.point_translation],
+    )
     curve_map = correlate_curves(old_entities.curves, new_entities.curves, point_map)
     surface_map = correlate_surfaces(
         old_entities.surfaces,
@@ -518,6 +609,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         args.surface_point_match_ratio,
     )
 
+    unresolved_json_references: list[str] = []
     if not args.skip_json_update:
         with old_mesh_def_file.open("r", encoding="utf-8") as file:
             old_mesh_def_json = json.load(file)
@@ -534,15 +626,23 @@ def main(argv: Iterable[str] | None = None) -> int:
             curve_map,
             surface_map,
         )
+        unresolved_json_references = _unidentified_reference_paths(updated_mesh_def)
+        if unresolved_json_references:
+            sample = ", ".join(unresolved_json_references[:10])
+            raise ValueError(
+                "Refusing to write unresolved entity references in the mesh definition: "
+                f"{sample}"
+            )
 
-        if output_file == new_mesh_def_file and not args.no_backup:
+        if not args.dry_run and output_file == new_mesh_def_file and not args.no_backup:
             backup_file = new_mesh_def_file.with_suffix(new_mesh_def_file.suffix + ".bak")
             backup_file.write_text(
                 new_mesh_def_file.read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
 
-        _write_json(output_file, updated_mesh_def)
+        if not args.dry_run:
+            _write_json(output_file, updated_mesh_def)
 
     if args.geo_in is not None:
         geo_in_file = args.geo_in.resolve()
@@ -565,7 +665,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"Point IDs identified: {point_count[0]} / {point_count[1]}")
     print(f"Curve IDs identified: {curve_count[0]} / {curve_count[1]}")
     print(f"Surface IDs identified: {surface_count[0]} / {surface_count[1]}")
-    if not args.skip_json_update:
+    for match_mode, count in _match_mode_counts(point_map, point_match_modes).items():
+        description = "direct" if match_mode is None else f"translation {match_mode}"
+        print(f"Point matches ({description}): {count}")
+    if args.dry_run:
+        print(f"Unresolved JSON references: {len(unresolved_json_references)}")
+        print("Dry run: no files written")
+    elif not args.skip_json_update:
         print(f"Wrote updated mesh definition to {output_file}")
     if args.geo_in is not None:
         print(f"Wrote correlated .geo file to {geo_out_file}")
