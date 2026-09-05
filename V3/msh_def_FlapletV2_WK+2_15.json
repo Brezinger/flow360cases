@@ -35,8 +35,6 @@
     }
   },
   "mesh definition": {
-    "generate_1d_mesh": true,
-    "generate_2d_mesh": true,
     "mesh_zones": [
       {
         "name": "main",

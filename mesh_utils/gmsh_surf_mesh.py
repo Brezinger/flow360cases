@@ -4207,38 +4207,25 @@ def generate_surface_mesh(
         apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
 
-        generate_1d_mesh = bool(mesh_def.get("generate_1d_mesh", True))
-        generate_2d_mesh = bool(mesh_def.get("generate_2d_mesh", True))
         apply_mesh_size_bounds(mesh_def)
-        if generate_2d_mesh and not generate_1d_mesh:
-            raise ValueError(
-                "generate_2d_mesh requires generate_1d_mesh, because Gmsh "
-                "builds surface meshes from curve meshes."
-            )
-        if not generate_1d_mesh and not generate_2d_mesh:
-            if show:
-                show_gmsh()
-            return
 
         mesh_def = expand_mesh_zones(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
-        if generate_2d_mesh:
-            mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
-            complete_surface_boundary_curves(mesh_def, curve_constraints)
-            apply_transfinite_surfaces(mesh_def)
-            apply_surface_meshing_algorithms(mesh_def)
-            if recombine:
-                apply_structured_surface_recombination(mesh_def)
+        mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
+        complete_surface_boundary_curves(mesh_def, curve_constraints)
+        apply_transfinite_surfaces(mesh_def)
+        apply_surface_meshing_algorithms(mesh_def)
+        if recombine:
+            apply_structured_surface_recombination(mesh_def)
 
         if not mesh:
             if show:
                 show_gmsh()
             return
 
-        gmsh.model.mesh.generate(2 if generate_2d_mesh else 1)
+        gmsh.model.mesh.generate(2)
 
-        if generate_2d_mesh:
-            apply_export_surface_names(mesh_def)
+        apply_export_surface_names(mesh_def)
         if output_file is not None:
             gmsh.write(str(output_file))
 
@@ -4306,7 +4293,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-mesh",
         action="store_true",
-        help="Only import and optionally heal the STEP geometry; do not generate a mesh.",
+        help="Configure mesh definitions but do not generate mesh elements.",
     )
     return parser.parse_args()
 
@@ -4328,7 +4315,7 @@ def main() -> None:
     )
 
     if args.no_mesh:
-        print("Imported geometry without generating a mesh.")
+        print("Configured mesh definitions without generating mesh elements.")
     elif output_file is None:
         print("Generated mesh without writing an output file.")
     else:
