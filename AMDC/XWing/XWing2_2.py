@@ -405,7 +405,8 @@ def main():
     os.chdir(working_dir)
 
     #wing_version = "rectangular"
-    wing_version = "rectangular twisted"
+    #wing_version = "rectangular twisted"
+    wing_version = "rectangular shifted"
     #wing_version = "trapezoidal"
 
     if wing_version == "rectangular":
@@ -434,6 +435,19 @@ def main():
         # alpha_deg_range = [10.0]
         U_inf_range = [39.5]
         alpha_deg_range = [-0.0401158012]
+    elif wing_version == "rectangular shifted":
+        project_cgns_file_name = (
+            r"C:/git/flow360cases/AMDC/XWing/2026-06-29_AMDC-simplified-XWingV22+rectangularwings_shifted.cgns"
+        )
+        sim_name = "XWing2_2 rect fully_turbulent_SA"
+        wing_area = 0.2831
+        wing_span = 1.312
+        wing1_TE_file = "TE_XWing2_2_rect_wing1.dat"
+        enable_alpha_controller = True
+        # U_inf_range = [24.5]
+        # alpha_deg_range = [10.0]
+        U_inf_range = [35]
+        alpha_deg_range = [-0.0401158012]
     elif wing_version == "trapezoidal":
         project_cgns_file_name = (
             r"C:/git/flow360cases/AMDC/XWing/2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V2.cgns"
@@ -455,7 +469,7 @@ def main():
     boundary_layer_growth_rate = 1.2
     target_yplus = 0.67
     #n_timesteps = 2000
-    n_timesteps = 600
+    n_timesteps = 1000
 
     study_name = "AMDC XWing2_2"
 

@@ -5,12 +5,17 @@ import copy
 import heapq
 import json
 import math
+import os
 import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 import gmsh
+try:
+    import psutil
+except ImportError:  # pragma: no cover - used only in minimal Python environments
+    psutil = None
 
 
 """DEFAULT_MESH_DEF_FILE = (
@@ -19,6 +24,26 @@ import gmsh
 DEFAULT_MESH_DEF_FILE = (
     Path(__file__).resolve().parent.parent / "V3" / "msh_def_original_WKS.json"
 )
+
+
+def default_gmsh_thread_count() -> int:
+    """Return one fewer than the available physical-core count, at least one."""
+    physical_core_count = psutil.cpu_count(logical=False) if psutil is not None else None
+    cpu_count = physical_core_count or os.cpu_count() or 1
+    return max(1, int(cpu_count) - 1)
+
+
+def apply_default_gmsh_thread_limit() -> int:
+    """Apply the default cap to Gmsh and return the configured thread count."""
+    thread_count = default_gmsh_thread_count()
+    for option_name in (
+        "General.NumThreads",
+        "Mesh.MaxNumThreads1D",
+        "Mesh.MaxNumThreads2D",
+        "Mesh.MaxNumThreads3D",
+    ):
+        gmsh.option.setNumber(option_name, thread_count)
+    return thread_count
 
 class CurveConstraint:
     def __init__(self, n_pts: int, mesh_type: str, coef: float) -> None:
@@ -4195,6 +4220,7 @@ def generate_surface_mesh(
     gmsh.initialize()
     try:
         gmsh.option.setNumber("General.Terminal", 1)
+        apply_default_gmsh_thread_limit()
         gmsh.option.setNumber("Mesh.SaveAll", 1)
         if output_file is not None and output_file.suffix.lower() == ".msh":
             gmsh.option.setNumber(

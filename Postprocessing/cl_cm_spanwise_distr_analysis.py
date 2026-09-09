@@ -1,3 +1,42 @@
+"""Create spanwise lift and rolling-moment distributions from Flow360 surface results.
+
+How to prepare and run the analysis
+-----------------------------------
+1. In Flow360, download the surface-result data into the case result directory and
+   extract the downloaded ``.tar.gz`` archive. The extracted directory must contain
+   ``surfaces.vtu``.
+2. Copy ``Extract_wings_stabs.pvsm`` to that same result directory.
+3. To create the eight PatchID selection CSV files automatically, start ParaView 5.13.1
+   and open ``Tools -> Python Script Editor``. Paste and run the following launcher,
+   replacing ``<result-directory>`` with the directory from steps 1 and 2::
+
+       import runpy
+       import sys
+
+       sys.argv = [
+           "export_wing_stab_patch_ids.py",
+           "--data-dir",
+           r"C:\\path\\to\\<result-directory>",
+       ]
+
+       runpy.run_path(
+           r"C:\\git\\flow360cases\\Postprocessing\\export_wing_stab_patch_ids.py",
+           run_name="__main__",
+       )
+
+   The launcher runs ``export_wing_stab_patch_ids.py`` with ParaView's embedded Python.
+   It loads ``Extract_wings_stabs.pvsm``, reconnects it to ``surfaces.vtu``, and exports
+   ``wing1_data.csv`` through ``wing4_data.csv`` plus ``stab1_data.csv`` through
+   ``stab4_data.csv``. The state file must contain filters named ``Extract wing1`` through
+   ``Extract wing4`` and ``Extract stab1`` through ``Extract stab4``.
+4. Select one result label or a list of result labels below, then run this script.
+   A list overlays the selected cases in every figure and writes the comparison plots
+   to ``<flow360-root>/comparison``.
+
+The script reads aerodynamic cell data from ``surfaces.vtu`` and combines it with the
+eight ``*_data.csv`` PatchID selections to calculate and plot spanwise distributions.
+"""
+
 from __future__ import annotations
 
 import re
@@ -14,58 +53,88 @@ from scipy.spatial import cKDTree
 # -----------------------------
 # User inputs
 # -----------------------------
-#result = "XWing 2.2 trap 24.5"
-#result = "XWing 2.2 trap 39"
-#result = "XWing 2.2 rect 24.5"
-result = "XWing 2.2 rect 39"
-#result = "XWing 2.2 rect 24.5 fine"
+# result = "XWing 2.2 rect 24.5"
+# result = "XWing 2.2 rect 24.5 fine"
+# result = "XWing 2.2 rect 35"
+# result = "XWing 2.2 rect 39"
+# result = "XWing 2.2 rect 39 twisted"
+# result =  "XWing 2.2 trap 24.5"
+# result =  "XWing 2.2 trap 35"
+# result = "XWing 2.2 trap 39"
+result = ["XWing 2.2 rect 39", "XWing 2.2 rect 39 twisted"]
 
 show_plots = True
 mirror_one_sided_spanwise_results = True
 
-if result == "XWing 2.2 rect 24.5":
-    data_dir = Path(
-        "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
-        "rectangular wing/XWing2_2 fully_turbulent_SA U24.5_AOA10"
-    )
-elif result == "XWing 2.2 rect 24.5 fine":
-    data_dir = Path(
-        "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
-        "rectangular wing/XWing2_2 fully_turbulent_SA U24.5_AOA10_fine mesh"
-    )
-elif result == "XWing 2.2 rect 39":
-    data_dir = Path(
-        "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
-        "rectangular wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
-    )
-elif result == "XWing 2.2 trap 24.5":
-    data_dir = Path(
-        "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
-        "trapezoidal wing/XWing2_2 fully_turbulent_SA U24.5_AOA10"
-    )
-elif result == "XWing 2.2 trap 39":
-    data_dir = Path(
-        "C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360/"
-        "trapezoidal wing/XWing2_2 fully_turbulent_SA U39.5_AOA-1.6"
-    )
+FLOW360_ROOT = Path("C:/Nextcloud/Freigaben/XWing2_CAD+structure/XWing2_2/flow360")
+COMPARISON_OUTPUT_DIR = FLOW360_ROOT / "comparison"
+DY = 25.0  # Strip width in model length units.
 
 
-else:
-    raise ValueError(f"Unknown variant {result}")
+@dataclass(frozen=True)
+class ResultConfiguration:
+    label: str
+    data_dir: Path
+    reference_area_mm2: float
+    reference_span_mm: float
 
-if "XWing 2.2" in result and "trap" in result:
-    dy = 25.0                      # strip width in same length unit as Points
-    S_ref = 0.277649 * 1e6  # reference area, set correctly
-    b_ref = 1346                 # reference span for Cmx, for trap wing
-elif "XWing 2.2" in result and "rect" in result:
-    dy = 25.0  # strip width in same length unit as Points
-    S_ref = 0.2831 * 1e6  # reference area, set correctly
-    b_ref = 1312  # reference span for Cmx, for trap wing
 
-i_wing_offset = [2, 3]
+RESULT_CONFIGURATIONS = {
+    "XWing 2.2 rect 24.5": ResultConfiguration(
+        "XWing 2.2 rect 24.5",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U24.5_AOA10",
+        0.2831e6,
+        1312.0,
+    ),
+    "XWing 2.2 rect 24.5 fine": ResultConfiguration(
+        "XWing 2.2 rect 24.5 fine",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U24.5_AOA10_fine mesh",
+        0.2831e6,
+        1312.0,
+    ),
+    "XWing 2.2 rect 35": ResultConfiguration(
+        "XWing 2.2 rect 35",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U35",
+        0.2831e6,
+        1312.0,
+    ),
+    "XWing 2.2 rect 39": ResultConfiguration(
+        "XWing 2.2 rect 39",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U39.5_AOA-1.6",
+        0.2831e6,
+        1312.0,
+    ),
+    "XWing 2.2 rect 39 twisted": ResultConfiguration(
+        "XWing 2.2 rect 39 incidence wing3 +0.5°",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U39.5_twisted",
+        0.2831e6,
+        1312.0,
+    ),
+    "XWing 2.2 trap 24.5": ResultConfiguration(
+        "XWing 2.2 trap 24.5",
+        FLOW360_ROOT / "trapezoidal wing" / "XWing2_2 fully_turbulent_SA U24.5_AOA10",
+        0.277649e6,
+        1346.0,
+    ),
+    "XWing 2.2 trap 35": ResultConfiguration(
+        "XWing 2.2 trap 35",
+        FLOW360_ROOT / "trapezoidal wing" / "XWing2_2_fully_turbulent_SA U35",
+        0.277649e6,
+        1346.0,
+    ),
+    "XWing 2.2 trap 39": ResultConfiguration(
+        "XWing 2.2 trap 39",
+        FLOW360_ROOT / "trapezoidal wing" / "XWing2_2 fully_turbulent_SA U39.5_AOA-1.6",
+        0.277649e6,
+        1346.0,
+    ),
+}
 
-P_mot = 3500    # Motor shaft power
-rpm_mot = 13200 # Motor RPM
+i_wing_offset = [1, 2, 3, 4]
+wing_tipward_angle_deg = 35.0
+
+P_mot = 353.7    # Motor shaft power
+rpm_mot = 7711 # Motor RPM
 motor_torque_sign = 1.0  # +1 means motor torque adds positive Cmx.
 rho_inf_kg_m3 = 1.225
 length_unit_m = 1.0e-3
@@ -75,11 +144,6 @@ surface_names = [
     *(f"wing{index}" for index in range(1, 5)),
     *(f"stab{index}" for index in range(1, 5)),
 ]
-surface_vtu_file = data_dir / "surfaces.vtu"
-surface_patch_id_files = {
-    surface_name: data_dir / f"{surface_name}_data.csv"
-    for surface_name in surface_names
-}
 surface_lift_force_direction_deg = {
     "wing1": 125.0,
     "wing2": 55.0,
@@ -89,6 +153,13 @@ surface_lift_force_direction_deg = {
     "stab2": 55.0,
     "stab3": 125.0,
     "stab4": 55.0,
+}
+
+SURFACE_COLORS = {
+    "wing1": "red", "stab1": "red",
+    "wing2": "green", "stab2": "green",
+    "wing3": "blue", "stab3": "blue",
+    "wing4": "black", "stab4": "black",
 }
 
 # moment reference point
@@ -113,9 +184,21 @@ class WingOffsetResult:
     tipward_offset_m: float
 
 
+@dataclass(frozen=True)
+class AnalysisResult:
+    configuration: ResultConfiguration
+    surface_results: tuple[tuple[str, pd.DataFrame, pd.DataFrame, float], ...]
+    component_sums: dict[str, float]
+    aircraft_cl: float
+    wing_offset: WingOffsetResult
+
+
 def process_surface_dataframe(
     df: pd.DataFrame,
     lift_force_direction_deg: float,
+    reference_area_mm2: float,
+    reference_span_mm: float,
+    force_mirror_spanwise_results: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     area = df["Area"].to_numpy()
     cp = df["Cp"].to_numpy()
@@ -150,13 +233,13 @@ def process_surface_dataframe(
     df["dFz_q"] = dFz_q
     df["dFn_q"] = dFn_q
     df["dMx_q"] = dMx_q
-    df["dCmx"] = dMx_q / (S_ref * b_ref)
+    df["dCmx"] = dMx_q / (reference_area_mm2 * reference_span_mm)
     df["dA_xy"] = area * np.abs(nz)
 
     cmx_total = float(df["dCmx"].sum())
 
     y_min = df["Points:1"].min()
-    df["strip"] = np.floor((df["Points:1"] - y_min) / dy).astype(int)
+    df["strip"] = np.floor((df["Points:1"] - y_min) / DY).astype(int)
 
     strip = (
         df.groupby("strip")
@@ -171,14 +254,17 @@ def process_surface_dataframe(
         .reset_index()
     )
 
-    strip["dCmx_dy"] = strip["Cmx"] / dy
+    strip["dCmx_dy"] = strip["Cmx"] / DY
     strip["cl_local"] = np.where(
         strip["area_xy"] > 0.0,
         strip["Fn_q"] / strip["area_xy"],
         np.nan,
     )
     if mirror_one_sided_spanwise_results:
-        strip = mirror_one_sided_spanwise_distribution(strip)
+        strip = mirror_one_sided_spanwise_distribution(
+            strip,
+            force_mirror=force_mirror_spanwise_results,
+        )
 
     return df, strip, cmx_total
 
@@ -186,22 +272,31 @@ def process_surface_dataframe(
 def mirror_one_sided_spanwise_distribution(
     strip: pd.DataFrame,
     tolerance: float = 1.0e-9,
+    force_mirror: bool = False,
 ) -> pd.DataFrame:
-    """Mirror one-sided y distributions from symmetry-plane simulations."""
-    if strip.empty:
-        return strip
+    """Mirror a spanwise distribution about y=0.
 
-    y_mid = strip["y_mid"].to_numpy()
+    By default, only one-sided distributions are mirrored. Set ``force_mirror`` for
+    surfaces that cross y=0 but still require a symmetric visual representation.
+    """
+    if strip.empty:
+        return strip.assign(is_mirrored=False)
+
+    original = strip.copy()
+    original["is_mirrored"] = False
+
+    y_mid = original["y_mid"].to_numpy()
     has_negative_y = np.any(y_mid < -tolerance)
     has_positive_y = np.any(y_mid > tolerance)
-    if has_negative_y and has_positive_y:
-        return strip
+    if has_negative_y and has_positive_y and not force_mirror:
+        return original
 
-    rows_to_mirror = strip[np.abs(strip["y_mid"]) > tolerance]
+    rows_to_mirror = original[np.abs(original["y_mid"]) > tolerance]
     if rows_to_mirror.empty:
-        return strip
+        return original
 
     mirrored = rows_to_mirror.copy()
+    mirrored["is_mirrored"] = True
     mirrored["y_mid"] = -mirrored["y_mid"]
     mirrored["strip"] = -mirrored["strip"] - 1
     for column in ("Mx_q", "Cmx", "dCmx_dy"):
@@ -209,14 +304,14 @@ def mirror_one_sided_spanwise_distribution(
             mirrored[column] = -mirrored[column]
 
     return (
-        pd.concat([strip, mirrored], ignore_index=True)
+        pd.concat([original, mirrored], ignore_index=True)
         .sort_values("y_mid")
         .reset_index(drop=True)
     )
 
 
 def load_vtu_cell_center_dataframe(filepath: Path) -> pd.DataFrame:
-    mesh = pv.read(str(filepath)).extract_surface()
+    mesh = pv.read(str(filepath)).extract_surface(algorithm="dataset_surface")
     mesh = mesh.compute_normals(
         cell_normals=True,
         point_normals=False,
@@ -256,11 +351,20 @@ def process_vtu_surface(
     vtu_cell_df: pd.DataFrame,
     patch_id_file: Path,
     lift_force_direction_deg: float,
+    reference_area_mm2: float,
+    reference_span_mm: float,
+    force_mirror_spanwise_results: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float]:
     surface_df = select_vtu_cells_from_selection_file(vtu_cell_df, patch_id_file)
     if surface_df.empty:
         raise ValueError(f"No VTU cells matched PatchID values from {patch_id_file}.")
-    return process_surface_dataframe(surface_df, lift_force_direction_deg)
+    return process_surface_dataframe(
+        surface_df,
+        lift_force_direction_deg,
+        reference_area_mm2,
+        reference_span_mm,
+        force_mirror_spanwise_results=force_mirror_spanwise_results,
+    )
 
 
 def select_vtu_cells_from_selection_file(
@@ -338,6 +442,19 @@ def _moment_coefficient_from_torque_nm(
     return torque_nm / denominator
 
 
+def _rolling_moment_nm(
+    cmx: float,
+    freestream_speed_m_s: float,
+    reference_area_mm2: float,
+    reference_span_mm: float,
+) -> float:
+    """Convert aerodynamic Cmx to its signed dimensional rolling moment."""
+    dynamic_pressure_pa = 0.5 * rho_inf_kg_m3 * freestream_speed_m_s**2
+    reference_area_m2 = reference_area_mm2 * length_unit_m**2
+    reference_span_m = reference_span_mm * length_unit_m
+    return cmx * dynamic_pressure_pa * reference_area_m2 * reference_span_m
+
+
 def calculate_required_wing_y_offset(
     surface_results: list[tuple[str, pd.DataFrame, pd.DataFrame, float]],
     wing_indices: list[int],
@@ -347,7 +464,10 @@ def calculate_required_wing_y_offset(
     torque_sign: float,
     rho_kg_m3: float,
     freestream_speed_m_s: float,
+    reference_area_mm2: float,
+    reference_span_mm: float,
     length_unit_to_m: float,
+    wing_tipward_angle_deg: float,
 ) -> WingOffsetResult:
     wing_names = _wing_names_from_indices(wing_indices)
     df_by_surface = {
@@ -377,15 +497,18 @@ def calculate_required_wing_y_offset(
     motor_torque_cmx = _moment_coefficient_from_torque_nm(
         signed_motor_torque_nm,
         q_inf_pa,
-        S_ref,
-        b_ref,
+        reference_area_mm2,
+        reference_span_mm,
         length_unit_to_m,
     )
     target_cmx = aerodynamic_cmx + motor_torque_cmx
     required_delta_cmx = -target_cmx
-    offset_y = required_delta_cmx * S_ref * b_ref / selected_fz_q
+    offset_y = required_delta_cmx * reference_area_mm2 * reference_span_mm / selected_fz_q
     tipward_sign = np.sign(selected_mean_y) if not np.isclose(selected_mean_y, 0.0) else np.nan
-    tipward_offset = offset_y / tipward_sign
+    y_projection = np.cos(np.deg2rad(wing_tipward_angle_deg))
+    if np.isclose(y_projection, 0.0):
+        raise ValueError("wing_tipward_angle_deg must not be 90 degrees modulo 180 degrees.")
+    tipward_offset = offset_y / tipward_sign / y_projection
 
     return WingOffsetResult(
         wing_names=wing_names,
@@ -403,7 +526,7 @@ def calculate_required_wing_y_offset(
     )
 
 
-def main() -> None:
+def _legacy_single_result_main() -> None:
     plt.close("all")
 
     surface_results: list[tuple[str, pd.DataFrame, pd.DataFrame, float]] = []
@@ -426,6 +549,7 @@ def main() -> None:
             vtu_cell_df,
             surface_patch_id_files[surface_name],
             lift_direction,
+            force_mirror_spanwise_results=surface_name.startswith("wing"),
         )
         surface_results.append((surface_name, surface_df, strip, cmx_total))
         print(
@@ -465,6 +589,7 @@ def main() -> None:
         rho_inf_kg_m3,
         freestream_speed_m_s,
         length_unit_m,
+        wing_tipward_angle_deg,
     )
     print(
         "Required wing y-offset to counter aircraft Cmx plus motor torque:\n"
@@ -479,6 +604,7 @@ def main() -> None:
         f"  selected mean y = {wing_offset_result.selected_mean_y:.3f} model units\n"
         f"  required y-offset = {wing_offset_result.offset_y:.3f} model units "
         f"({wing_offset_result.offset_y_m:.6f} m)\n"
+        f"  wing tipward angle = {wing_tipward_angle_deg:.1f} deg\n"
         f"  required tipward offset = {wing_offset_result.tipward_offset:.3f} model units "
         f"({wing_offset_result.tipward_offset_m:.6f} m)"
     )
@@ -491,13 +617,24 @@ def main() -> None:
 
     fig_cmx = plt.figure(figsize=(9.0, 5.5), constrained_layout=True)
     for surface_name, _, strip, _ in surface_results:
+        original_strip = strip[~strip["is_mirrored"]]
+        mirrored_strip = strip[strip["is_mirrored"]]
         plt.plot(
-            strip["y_mid"],
-            strip["dCmx_dy"].abs(),
+            original_strip["y_mid"],
+            original_strip["dCmx_dy"].abs(),
             marker="o",
             label=_surface_label(surface_name),
             color=surface_colors[surface_name],
         )
+        if not mirrored_strip.empty:
+            plt.plot(
+                mirrored_strip["y_mid"],
+                mirrored_strip["dCmx_dy"].abs(),
+                marker="o",
+                color=surface_colors[surface_name],
+                alpha=0.5,
+                label="_nolegend_",
+            )
     plt.xlabel("y")
     plt.ylabel(r"$|dC_{mx}/dy|$")
     plt.title(f"{plot_title} - rolling moment distribution")
@@ -510,13 +647,24 @@ def main() -> None:
     fig_cl = plt.figure(figsize=(9.0, 5.5), constrained_layout=True)
     cl_normalization = aircraft_cl if not np.isclose(aircraft_cl, 0.0) else np.nan
     for surface_name, _, strip, _ in surface_results:
+        original_strip = strip[~strip["is_mirrored"]]
+        mirrored_strip = strip[strip["is_mirrored"]]
         plt.plot(
-            strip["y_mid"],
-            strip["cl_local"] / cl_normalization,
+            original_strip["y_mid"],
+            original_strip["cl_local"] / cl_normalization,
             marker="o",
             label=_surface_label(surface_name),
             color=surface_colors[surface_name],
         )
+        if not mirrored_strip.empty:
+            plt.plot(
+                mirrored_strip["y_mid"],
+                mirrored_strip["cl_local"] / cl_normalization,
+                marker="o",
+                color=surface_colors[surface_name],
+                alpha=0.5,
+                label="_nolegend_",
+            )
     plt.xlabel("y")
     plt.ylabel(r"$c_l / C_L$")
     plt.title(f"{plot_title} - normalized local strip lift coefficient")
@@ -689,6 +837,215 @@ def main() -> None:
     plt.axvline(0.0, color="0.25", linewidth=0.8)
     plt.grid(True, axis="x")
     fig_aircraft_bars.savefig(data_dir / "aircraft_cmx_contributions.png", dpi=300)
+    if show_plots:
+        plt.show()
+    plt.close("all")
+
+
+def _selected_configurations() -> tuple[ResultConfiguration, ...]:
+    labels = [result] if isinstance(result, str) else list(result)
+    if not labels or not all(isinstance(label, str) for label in labels):
+        raise ValueError("result must be a result label or a non-empty list of result labels.")
+    if len(set(labels)) != len(labels):
+        raise ValueError("result must not contain duplicate result labels.")
+    unknown = [label for label in labels if label not in RESULT_CONFIGURATIONS]
+    if unknown:
+        raise ValueError(f"Unknown result labels: {unknown}")
+    return tuple(RESULT_CONFIGURATIONS[label] for label in labels)
+
+
+def _analyse_configuration(configuration: ResultConfiguration) -> AnalysisResult:
+    surface_file = configuration.data_dir / "surfaces.vtu"
+    selection_files = {
+        name: configuration.data_dir / f"{name}_data.csv" for name in surface_names
+    }
+    required_files = [surface_file, *selection_files.values()]
+    missing = [path for path in required_files if not path.is_file()]
+    if missing:
+        formatted = "\n".join(f"  - {path}" for path in missing)
+        raise FileNotFoundError(f"Missing inputs for {configuration.label}:\n{formatted}")
+
+    cells = load_vtu_cell_center_dataframe(surface_file)
+    surface_results = []
+    for name in surface_names:
+        surface_results.append(
+            (
+                name,
+                *process_vtu_surface(
+                    cells,
+                    selection_files[name],
+                    surface_lift_force_direction_deg[name],
+                    configuration.reference_area_mm2,
+                    configuration.reference_span_mm,
+                    force_mirror_spanwise_results=name.startswith("wing"),
+                ),
+            )
+        )
+    component_sums = {
+        prefix: sum(cmx for name, _, _, cmx in surface_results if name.startswith(prefix))
+        for prefix in ("wing", "stab")
+    }
+    aircraft_df, _, aircraft_cmx = process_surface_dataframe(
+        cells.copy(), 0.0, configuration.reference_area_mm2, configuration.reference_span_mm
+    )
+    component_sums["aircraft"] = aircraft_cmx
+    component_sums["fuselage"] = aircraft_cmx - component_sums["wing"] - component_sums["stab"]
+    aircraft_cl = float(aircraft_df["dFz_q"].sum() / configuration.reference_area_mm2)
+    freestream_speed_m_s = _freestream_speed_m_s_from_result(
+        configuration.label, configuration.data_dir
+    )
+    rolling_moment_nm = _rolling_moment_nm(
+        aircraft_cmx,
+        freestream_speed_m_s,
+        configuration.reference_area_mm2,
+        configuration.reference_span_mm,
+    )
+    wing_offset = calculate_required_wing_y_offset(
+        surface_results,
+        i_wing_offset,
+        aircraft_cmx,
+        P_mot,
+        rpm_mot,
+        motor_torque_sign,
+        rho_inf_kg_m3,
+        freestream_speed_m_s,
+        configuration.reference_area_mm2,
+        configuration.reference_span_mm,
+        length_unit_m,
+        wing_tipward_angle_deg,
+    )
+    print(
+        f"{configuration.label}: CL={aircraft_cl:.6f}, Cmx={aircraft_cmx:.6f}, "
+        f"Mx={rolling_moment_nm:.6f} N m, "
+        f"fuselage Cmx={component_sums['fuselage']:.6f}"
+    )
+    return AnalysisResult(configuration, tuple(surface_results), component_sums, aircraft_cl, wing_offset)
+
+
+def _offsets(count: int, spacing: float) -> np.ndarray:
+    return (np.arange(count) - (count - 1) / 2.0) * spacing
+
+
+def _plot_spanwise_results(
+    analyses: tuple[AnalysisResult, ...],
+    output_dir: Path,
+    value_column: str,
+    ylabel: str,
+    title: str,
+    filename: str,
+) -> None:
+    figure, axis = plt.subplots(figsize=(10.0, 6.0), constrained_layout=True)
+    markers = ("o", "s", "^", "D", "P", "X")
+    for result_index, analysis in enumerate(analyses):
+        for surface_name, _, strip, _ in analysis.surface_results:
+            original = strip[~strip["is_mirrored"]]
+            mirrored = strip[strip["is_mirrored"]]
+            values = original[value_column]
+            if value_column == "cl_local":
+                values = values / analysis.aircraft_cl
+            elif value_column == "dCmx_dy":
+                values = values.abs()
+            kwargs = {
+                "color": SURFACE_COLORS[surface_name],
+                "linestyle": "-" if surface_name.startswith("wing") else "--",
+                "marker": markers[result_index % len(markers)],
+            }
+            axis.plot(
+                original["y_mid"], values,
+                label=f"{analysis.configuration.label} - {surface_name}", **kwargs,
+            )
+            if not mirrored.empty:
+                mirrored_values = mirrored[value_column]
+                if value_column == "cl_local":
+                    mirrored_values = mirrored_values / analysis.aircraft_cl
+                elif value_column == "dCmx_dy":
+                    mirrored_values = mirrored_values.abs()
+                axis.plot(mirrored["y_mid"], mirrored_values, alpha=0.45, label="_nolegend_", **kwargs)
+    axis.set_xlabel("y")
+    axis.set_ylabel(ylabel)
+    axis.set_title(title)
+    axis.grid(True)
+    axis.legend(fontsize="x-small", ncols=2)
+    figure.savefig(output_dir / filename, dpi=300)
+
+
+def _plot_bar_results(
+    analyses: tuple[AnalysisResult, ...], output_dir: Path, title: str
+) -> None:
+    row_positions = {"wing1": 5.15, "wing2": 4.85, "wing_sum_1_2": 4.0, "wing_sum_3_4": 3.7, "wing3": 2.85, "wing4": 2.55, "stab1": 1.15, "stab2": 0.85, "stab_sum_1_2": 0.0, "stab_sum_3_4": -0.3, "stab3": -1.15, "stab4": -1.45}
+    hatches = ("", "//", "xx", "..", "++", "\\\\")
+    offsets = _offsets(len(analyses), 0.18)
+    figure, axis = plt.subplots(figsize=(12.0, 8.0), constrained_layout=True)
+    values = []
+    for index, analysis in enumerate(analyses):
+        cmx = {name: value for name, _, _, value in analysis.surface_results}
+        pair_sums = {
+            "wing_sum_1_2": cmx["wing1"] + cmx["wing2"],
+            "wing_sum_3_4": cmx["wing3"] + cmx["wing4"],
+            "stab_sum_1_2": cmx["stab1"] + cmx["stab2"],
+            "stab_sum_3_4": cmx["stab3"] + cmx["stab4"],
+        }
+        values.extend([*cmx.values(), *pair_sums.values()])
+        for name, value in cmx.items():
+            axis.barh(row_positions[name] + offsets[index], abs(value), height=0.15, color=SURFACE_COLORS[name], hatch=hatches[index % len(hatches)], label=f"{analysis.configuration.label} - {name}")
+        for name, value in pair_sums.items():
+            color_name = "wing1" if name.endswith("1_2") else "wing3"
+            axis.barh(row_positions[name] + offsets[index], value, height=0.15, color=SURFACE_COLORS[color_name], hatch=hatches[index % len(hatches)])
+    limit = max((abs(value) for value in values), default=0.01) * 1.1
+    axis.set_yticks([5.0, 3.85, 2.7, 1.0, -0.15, -1.3], ["wings 1 + 2", "wing pair sums", "wings 3 + 4", "stabs 1 + 2", "stab pair sums", "stabs 3 + 4"])
+    axis.set_xlabel(r"$C_{mx}$ pair sum / $|C_{mx}|$ surface magnitude")
+    axis.set_title(f"{title} - surface rolling moment contributions")
+    axis.set_xlim(-limit, limit)
+    axis.axvline(0.0, color="0.25", linewidth=0.8)
+    axis.grid(True, axis="x")
+    axis.legend(fontsize="x-small", ncols=2)
+    figure.savefig(output_dir / "wing_stab_cmx_barchart.png", dpi=300)
+
+
+def _plot_aircraft_bars(
+    analyses: tuple[AnalysisResult, ...], output_dir: Path, title: str
+) -> None:
+    positions = {"aircraft": 3.0, "wing": 2.0, "stab": 1.0, "fuselage": 0.0}
+    colors = {
+        "aircraft": "0.25",
+        "wing": "#1f77b4",
+        "stab": "#9467bd",
+        "fuselage": "0.55",
+    }
+    hatches = ("", "//", "xx", "..", "++", "\\\\")
+    offsets = _offsets(len(analyses), 0.18)
+    figure, axis = plt.subplots(figsize=(10.0, 6.0), constrained_layout=True)
+    values = []
+    for index, analysis in enumerate(analyses):
+        for key, position in positions.items():
+            value = analysis.component_sums[key]
+            values.append(value)
+            axis.barh(position + offsets[index], value, height=0.15, color=colors[key], hatch=hatches[index % len(hatches)], label=f"{analysis.configuration.label} - {key}")
+    limit = max((abs(value) for value in values), default=0.01) * 1.1
+    axis.set_yticks(list(positions.values()), ["aircraft total", "wings", "stabilizer", "fuselage"])
+    axis.set_xlabel(r"$C_{mx}$")
+    axis.set_title(f"{title} - aircraft rolling moment contributions")
+    axis.set_xlim(-limit, limit)
+    axis.axvline(0.0, color="0.25", linewidth=0.8)
+    axis.grid(True, axis="x")
+    axis.legend(fontsize="x-small", ncols=2)
+    figure.savefig(output_dir / "aircraft_cmx_contributions.png", dpi=300)
+
+
+def main() -> None:
+    plt.close("all")
+    analyses = tuple(_analyse_configuration(config) for config in _selected_configurations())
+    output_dir = (
+        analyses[0].configuration.data_dir
+        if len(analyses) == 1
+        else COMPARISON_OUTPUT_DIR
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    title = " / ".join(analysis.configuration.label for analysis in analyses)
+    _plot_spanwise_results(analyses, output_dir, "dCmx_dy", r"$|dC_{mx}/dy|$", f"{title} - rolling moment distribution", "wing_stab_dCmx_dy.png")
+    _plot_spanwise_results(analyses, output_dir, "cl_local", r"$c_l / C_L$", f"{title} - normalized local strip lift coefficient", "wing_stab_cl_local_normalized.png")
+    _plot_bar_results(analyses, output_dir, title)
+    _plot_aircraft_bars(analyses, output_dir, title)
     if show_plots:
         plt.show()
     plt.close("all")
