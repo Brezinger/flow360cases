@@ -404,8 +404,8 @@ def main():
     working_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(working_dir)
 
-    wing_version = "rectangular"
-    #wing_version = "rectangular twisted"
+    #wing_version = "rectangular"
+    wing_version = "rectangular twisted"
     #wing_version = "trapezoidal"
 
     if wing_version == "rectangular":
@@ -419,7 +419,7 @@ def main():
         enable_alpha_controller = True
         # U_inf_range = [24.5]
         # alpha_deg_range = [10.0]
-        U_inf_range = [35]
+        U_inf_range = [39.5]
         alpha_deg_range = [-1.6]
     elif wing_version == "rectangular twisted":
         project_cgns_file_name = (
@@ -432,7 +432,7 @@ def main():
         enable_alpha_controller = False
         # U_inf_range = [24.5]
         # alpha_deg_range = [10.0]
-        U_inf_range = [35]
+        U_inf_range = [39.5]
         alpha_deg_range = [-0.0401158012]
     elif wing_version == "trapezoidal":
         project_cgns_file_name = (
@@ -445,7 +445,7 @@ def main():
         enable_alpha_controller = True
         # U_inf_range = [24.5]
         # alpha_deg_range = [10.0]
-        U_inf_range = [35]
+        U_inf_range = [39.5]
         alpha_deg_range = [-1.6]
 
 
@@ -455,7 +455,7 @@ def main():
     boundary_layer_growth_rate = 1.2
     target_yplus = 0.67
     #n_timesteps = 2000
-    n_timesteps = 1000
+    n_timesteps = 600
 
     study_name = "AMDC XWing2_2"
 
