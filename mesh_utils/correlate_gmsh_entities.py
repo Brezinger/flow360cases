@@ -59,6 +59,19 @@ class GeometryEntities:
     surface_points: dict[int, set[int]]
 
 
+@dataclass(frozen=True)
+class CorrelationPassResult:
+    """Correlation statistics for one ordered translation pass."""
+
+    translation: tuple[float, float, float]
+    point_matches: int
+    curve_matches: int
+    surface_matches: int
+    point_overwrites: int
+    curve_overwrites: int
+    surface_overwrites: int
+
+
 def _distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
     return math.sqrt(sum((a[index] - b[index]) ** 2 for index in range(3)))
 
@@ -141,6 +154,32 @@ def correlate_points(
         point_map[old_id] = new_id
         used_new_points.add(new_id)
 
+    return point_map
+
+
+def correlate_points_at_translation(
+    old_points: dict[int, tuple[float, float, float]],
+    new_points: dict[int, tuple[float, float, float]],
+    tolerance: float,
+    translation: tuple[float, float, float],
+) -> dict[int, int | None]:
+    """Match old points after applying one translation.
+
+    This deliberately makes each pass independent: a new point matched in an
+    earlier pass must not prevent a later pass from replacing that correlation.
+    The closest in-tolerance new point wins for each old point.
+    """
+    point_map: dict[int, int | None] = {}
+    for old_id, old_coord in old_points.items():
+        expected_coord = tuple(
+            old_coord[index] + translation[index] for index in range(3)
+        )
+        candidates = []
+        for new_id, new_coord in new_points.items():
+            distance = _distance(expected_coord, new_coord)
+            if distance <= tolerance:
+                candidates.append((distance, new_id))
+        point_map[old_id] = min(candidates)[1] if candidates else None
     return point_map
 
 
@@ -296,6 +335,95 @@ def _looks_like_transfinite_surface(node: dict[str, Any]) -> bool:
 def _count_identified(entity_map: dict[int, int | None]) -> tuple[int, int]:
     identified = sum(mapped_id is not None for mapped_id in entity_map.values())
     return identified, len(entity_map)
+
+
+def _overwrite_resolved_mappings(
+    cumulative_map: dict[int, int | None],
+    pass_map: dict[int, int | None],
+) -> int:
+    """Apply successful pass mappings and return the number that replaced IDs."""
+    overwrite_count = 0
+    for old_id, new_id in pass_map.items():
+        if new_id is None:
+            continue
+        if cumulative_map.get(old_id) is not None and cumulative_map[old_id] != new_id:
+            overwrite_count += 1
+        cumulative_map[old_id] = new_id
+    return overwrite_count
+
+
+def correlate_entities_sequentially(
+    old_entities: GeometryEntities,
+    new_entities: GeometryEntities,
+    tolerance: float,
+    surface_point_match_ratio: float,
+    translations: Iterable[tuple[float, float, float]],
+) -> tuple[
+    dict[int, int | None],
+    dict[int, int | None],
+    dict[int, int | None],
+    tuple[CorrelationPassResult, ...],
+]:
+    """Correlate entities for every shift, then once at their original location.
+
+    A pass only updates IDs it can identify.  Consequently, later translations
+    take precedence, and the final direct pass takes precedence for stationary
+    components such as the fuselage and tail.
+    """
+    point_map = {old_id: None for old_id in old_entities.points}
+    curve_map = {old_id: None for old_id in old_entities.curves}
+    surface_map = {old_id: None for old_id in old_entities.surfaces}
+    pass_results: list[CorrelationPassResult] = []
+
+    ordered_translations = [
+        tuple(float(value) for value in translation) for translation in translations
+    ]
+    ordered_translations.append((0.0, 0.0, 0.0))
+
+    for translation in ordered_translations:
+        pass_point_map = correlate_points_at_translation(
+            old_entities.points,
+            new_entities.points,
+            tolerance,
+            translation,
+        )
+        pass_curve_map = correlate_curves(
+            old_entities.curves,
+            new_entities.curves,
+            pass_point_map,
+        )
+        pass_surface_map = correlate_surfaces(
+            old_entities.surfaces,
+            old_entities.surface_points,
+            new_entities.surfaces,
+            new_entities.surface_points,
+            pass_point_map,
+            pass_curve_map,
+            surface_point_match_ratio,
+        )
+        pass_results.append(
+            CorrelationPassResult(
+                translation=translation,
+                point_matches=sum(value is not None for value in pass_point_map.values()),
+                curve_matches=sum(value is not None for value in pass_curve_map.values()),
+                surface_matches=sum(value is not None for value in pass_surface_map.values()),
+                point_overwrites=_overwrite_resolved_mappings(point_map, pass_point_map),
+                curve_overwrites=_overwrite_resolved_mappings(curve_map, pass_curve_map),
+                surface_overwrites=_overwrite_resolved_mappings(surface_map, pass_surface_map),
+            )
+        )
+
+    return point_map, curve_map, surface_map, tuple(pass_results)
+
+
+def shift_vector(l_shift: float, theta_shift_deg: float) -> tuple[float, float, float]:
+    """Return the model-coordinate shift vector for one wing or stabilizer."""
+    theta_shift_rad = math.radians(theta_shift_deg)
+    return (
+        0.0,
+        l_shift * math.cos(theta_shift_rad),
+        l_shift * math.sin(theta_shift_rad),
+    )
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -460,6 +588,19 @@ def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
         help=f"Maximum coordinate distance for point matching. Default: {DEFAULT_POINT_TOLERANCE:g}.",
     )
     parser.add_argument(
+        "--entity-shift",
+        action="append",
+        nargs=2,
+        type=float,
+        metavar=("L_SHIFT", "THETA_DEG"),
+        default=[],
+        help=(
+            "Shift applied to old geometry before one correlation pass: "
+            "[0, L_SHIFT*cos(THETA_DEG), L_SHIFT*sin(THETA_DEG)]. "
+            "Repeat once for each shifted wing or stabilizer."
+        ),
+    )
+    parser.add_argument(
         "--surface-point-match-ratio",
         type=float,
         default=DEFAULT_SURFACE_POINT_MATCH_RATIO,
@@ -502,20 +643,24 @@ def main(argv: Iterable[str] | None = None) -> int:
         raise ValueError("--geo-out requires --geo-in.")
     if args.skip_json_update and args.geo_in is None:
         raise ValueError("--skip-json-update requires --geo-in.")
+    if not math.isfinite(args.point_tolerance) or args.point_tolerance < 0.0:
+        raise ValueError("--point-tolerance must be finite and non-negative.")
+    if any(not all(math.isfinite(value) for value in shift) for shift in args.entity_shift):
+        raise ValueError("--entity-shift values must be finite.")
 
     old_entities = _load_geometry(old_mesh_def_file)
     new_entities = _load_geometry(new_mesh_def_file)
 
-    point_map = correlate_points(old_entities.points, new_entities.points, args.point_tolerance)
-    curve_map = correlate_curves(old_entities.curves, new_entities.curves, point_map)
-    surface_map = correlate_surfaces(
-        old_entities.surfaces,
-        old_entities.surface_points,
-        new_entities.surfaces,
-        new_entities.surface_points,
-        point_map,
-        curve_map,
+    translations = [
+        shift_vector(l_shift, theta_shift_deg)
+        for l_shift, theta_shift_deg in args.entity_shift
+    ]
+    point_map, curve_map, surface_map, pass_results = correlate_entities_sequentially(
+        old_entities,
+        new_entities,
+        args.point_tolerance,
         args.surface_point_match_ratio,
+        translations,
     )
 
     if not args.skip_json_update:
@@ -565,6 +710,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"Point IDs identified: {point_count[0]} / {point_count[1]}")
     print(f"Curve IDs identified: {curve_count[0]} / {curve_count[1]}")
     print(f"Surface IDs identified: {surface_count[0]} / {surface_count[1]}")
+    for pass_number, result in enumerate(pass_results, start=1):
+        mode = "unshifted" if result.translation == (0.0, 0.0, 0.0) else "shifted"
+        print(
+            f"Pass {pass_number} ({mode}, translation={result.translation}): "
+            f"points={result.point_matches} (overwrote {result.point_overwrites}), "
+            f"curves={result.curve_matches} (overwrote {result.curve_overwrites}), "
+            f"surfaces={result.surface_matches} (overwrote {result.surface_overwrites})"
+        )
     if not args.skip_json_update:
         print(f"Wrote updated mesh definition to {output_file}")
     if args.geo_in is not None:

@@ -59,9 +59,9 @@ from scipy.spatial import cKDTree
 # result = "XWing 2.2 rect 39"
 # result = "XWing 2.2 rect 39 twisted"
 # result =  "XWing 2.2 trap 24.5"
-# result =  "XWing 2.2 trap 35"
+result =  "XWing 2.2 trap 35"
 # result = "XWing 2.2 trap 39"
-result = ["XWing 2.2 rect 39", "XWing 2.2 rect 39 twisted"]
+#result = ["XWing 2.2 rect 39", "XWing 2.2 rect 39 twisted"]
 
 show_plots = True
 mirror_one_sided_spanwise_results = True
@@ -526,6 +526,32 @@ def calculate_required_wing_y_offset(
     )
 
 
+def print_required_wing_offset(
+    result_label: str,
+    wing_offset: WingOffsetResult,
+    freestream_speed_m_s: float,
+) -> None:
+    """Print the required wing translation that balances roll and motor torque."""
+    print(
+        f"{result_label} - required wing y-offset to counter aircraft Cmx plus motor torque:\n"
+        f"  selected wings = {', '.join(wing_offset.wing_names)}\n"
+        f"  freestream speed = {freestream_speed_m_s:.3f} m/s, "
+        f"rho = {rho_inf_kg_m3:.3f} kg/m^3\n"
+        f"  selected sum(Fz/q) = {wing_offset.selected_fz_q:.6e}\n"
+        f"  aerodynamic Cmx = {wing_offset.aerodynamic_cmx:.6f}\n"
+        f"  motor torque = {wing_offset.motor_torque_nm:.6f} N m\n"
+        f"  motor torque Cmx = {wing_offset.motor_torque_cmx:.6f}\n"
+        f"  target Cmx = {wing_offset.target_cmx:.6f}\n"
+        f"  required delta Cmx = {wing_offset.required_delta_cmx:.6f}\n"
+        f"  selected mean y = {wing_offset.selected_mean_y:.3f} model units\n"
+        f"  required y-offset = {wing_offset.offset_y:.3f} model units "
+        f"({wing_offset.offset_y_m:.6f} m)\n"
+        f"  wing tipward angle = {wing_tipward_angle_deg:.1f} deg\n"
+        f"  required tipward offset = {wing_offset.tipward_offset:.3f} model units "
+        f"({wing_offset.tipward_offset_m:.6f} m)"
+    )
+
+
 def _legacy_single_result_main() -> None:
     plt.close("all")
 
@@ -591,23 +617,7 @@ def _legacy_single_result_main() -> None:
         length_unit_m,
         wing_tipward_angle_deg,
     )
-    print(
-        "Required wing y-offset to counter aircraft Cmx plus motor torque:\n"
-        f"  selected wings = {', '.join(wing_offset_result.wing_names)}\n"
-        f"  freestream speed = {freestream_speed_m_s:.3f} m/s, rho = {rho_inf_kg_m3:.3f} kg/m^3\n"
-        f"  selected sum(Fz/q) = {wing_offset_result.selected_fz_q:.6e}\n"
-        f"  aerodynamic Cmx = {wing_offset_result.aerodynamic_cmx:.6f}\n"
-        f"  motor torque = {wing_offset_result.motor_torque_nm:.6f} N m\n"
-        f"  motor torque Cmx = {wing_offset_result.motor_torque_cmx:.6f}\n"
-        f"  target Cmx = {wing_offset_result.target_cmx:.6f}\n"
-        f"  required delta Cmx = {wing_offset_result.required_delta_cmx:.6f}\n"
-        f"  selected mean y = {wing_offset_result.selected_mean_y:.3f} model units\n"
-        f"  required y-offset = {wing_offset_result.offset_y:.3f} model units "
-        f"({wing_offset_result.offset_y_m:.6f} m)\n"
-        f"  wing tipward angle = {wing_tipward_angle_deg:.1f} deg\n"
-        f"  required tipward offset = {wing_offset_result.tipward_offset:.3f} model units "
-        f"({wing_offset_result.tipward_offset_m:.6f} m)"
-    )
+    print_required_wing_offset(result, wing_offset_result, freestream_speed_m_s)
 
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     surface_colors = {
@@ -919,6 +929,7 @@ def _analyse_configuration(configuration: ResultConfiguration) -> AnalysisResult
         f"Mx={rolling_moment_nm:.6f} N m, "
         f"fuselage Cmx={component_sums['fuselage']:.6f}"
     )
+    print_required_wing_offset(configuration.label, wing_offset, freestream_speed_m_s)
     return AnalysisResult(configuration, tuple(surface_results), component_sums, aircraft_cl, wing_offset)
 
 
