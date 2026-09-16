@@ -16,7 +16,7 @@
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="RUN_TOOL" value="" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/mesh_utils/gmsh_surf_mesh.py" />
-    <option name="PARAMETERS" value="--mesh-def &quot;msh_def_XWing2_2_trap_shifted.json&quot; --no-write" />
+    <option name="PARAMETERS" value="--mesh-def &quot;msh_def_XWing2_2_trap_shifted_4mm.json&quot; --no-write" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

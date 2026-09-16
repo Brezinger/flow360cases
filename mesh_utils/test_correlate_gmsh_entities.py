@@ -2,8 +2,11 @@ import unittest
 
 from correlate_gmsh_entities import (
     GeometryEntities,
+    _ordered_curve_endpoints_from_parametrization,
     _parse_args,
+    correlate_curves_with_orientation,
     correlate_entities_sequentially,
+    correlate_geo_text,
     shift_vector,
 )
 
@@ -26,6 +29,30 @@ def _entities(
 
 
 class SequentialCorrelationTests(unittest.TestCase):
+    def test_parametrization_bounds_determine_curve_endpoint_order(self) -> None:
+        endpoints = _ordered_curve_endpoints_from_parametrization(
+            10,
+            {
+                1: (0.0, 0.0, 0.0),
+                2: (0.0, 10.0, 0.0),
+            },
+            start_coordinate=(0.0, 10.0, 0.0),
+            end_coordinate=(0.0, 0.0, 0.0),
+        )
+        self.assertEqual(endpoints, (2, 1))
+
+    def test_parametrization_bounds_reject_unmatched_endpoint(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not match a boundary endpoint"):
+            _ordered_curve_endpoints_from_parametrization(
+                10,
+                {
+                    1: (0.0, 0.0, 0.0),
+                    2: (0.0, 10.0, 0.0),
+                },
+                start_coordinate=(1.0, 20.0, 0.0),
+                end_coordinate=(0.0, 0.0, 0.0),
+            )
+
     def test_later_shift_overwrites_and_unmatched_entities_are_preserved(self) -> None:
         old = _entities(
             {1: (0.0, 0.0, 0.0), 2: (0.0, 1.0, 0.0), 3: (0.0, 3.0, 0.0), 4: (0.0, 4.0, 0.0)},
@@ -42,7 +69,7 @@ class SequentialCorrelationTests(unittest.TestCase):
             {300: {110}, 301: {111}, 400: {210}},
         )
 
-        point_map, curve_map, surface_map, pass_results = correlate_entities_sequentially(
+        point_map, curve_map, surface_map, curve_reversed, pass_results = correlate_entities_sequentially(
             old,
             new,
             tolerance=1.0e-9,
@@ -52,6 +79,7 @@ class SequentialCorrelationTests(unittest.TestCase):
 
         self.assertEqual(point_map, {1: 201, 2: 202, 3: 103, 4: 104})
         self.assertEqual(curve_map, {10: 210, 11: 111})
+        self.assertEqual(curve_reversed, {10: False, 11: False})
         self.assertEqual(surface_map, {100: 400, 101: 301})
         self.assertEqual(pass_results[1].point_overwrites, 2)
         self.assertEqual(pass_results[1].curve_overwrites, 1)
@@ -72,7 +100,7 @@ class SequentialCorrelationTests(unittest.TestCase):
             {300: {110}, 400: {210}},
         )
 
-        point_map, curve_map, surface_map, pass_results = correlate_entities_sequentially(
+        point_map, curve_map, surface_map, curve_reversed, pass_results = correlate_entities_sequentially(
             old,
             new,
             tolerance=1.0e-9,
@@ -82,6 +110,7 @@ class SequentialCorrelationTests(unittest.TestCase):
 
         self.assertEqual(point_map, {1: 201, 2: 202})
         self.assertEqual(curve_map, {10: 210})
+        self.assertEqual(curve_reversed, {10: True})
         self.assertEqual(surface_map, {100: 400})
         self.assertEqual(pass_results[-1].translation, (0.0, 0.0, 0.0))
         self.assertEqual(pass_results[-1].point_overwrites, 2)
@@ -109,6 +138,50 @@ class SequentialCorrelationTests(unittest.TestCase):
             ]
         )
         self.assertEqual(args.entity_shift, [[12.5, 35.0], [7.0, -20.0]])
+
+    def test_curve_correlation_detects_reversed_endpoint_order(self) -> None:
+        curve_map, curve_reversed = correlate_curves_with_orientation(
+            {10: (1, 2)},
+            {20: (102, 101)},
+            {1: 101, 2: 102},
+        )
+        self.assertEqual(curve_map, {10: 20})
+        self.assertEqual(curve_reversed, {10: True})
+
+    def test_geo_progression_is_inverted_for_a_reversed_curve(self) -> None:
+        statements, skipped_count = correlate_geo_text(
+            "Transfinite Curve {10} = 42 Using Progression 1.25;",
+            point_map={},
+            curve_map={10: 20},
+            surface_map={},
+            curve_reversed={10: True},
+        )
+        self.assertEqual(skipped_count, 0)
+        self.assertEqual(
+            statements,
+            ["Transfinite Curve {20} = 42 Using Progression 0.8"],
+        )
+
+    def test_geo_mixed_curve_directions_are_split_and_bumps_are_unchanged(self) -> None:
+        statements, skipped_count = correlate_geo_text(
+            """
+            Transfinite Curve {10, 11} = 42 Using Progression 1.25;
+            Transfinite Curve {10} = 42 Using Bump 0.3;
+            """,
+            point_map={},
+            curve_map={10: 20, 11: 21},
+            surface_map={},
+            curve_reversed={10: True, 11: False},
+        )
+        self.assertEqual(skipped_count, 0)
+        self.assertEqual(
+            statements,
+            [
+                "Transfinite Curve {20} = 42 Using Progression 0.8",
+                "Transfinite Curve {21} = 42 Using Progression 1.25",
+                "Transfinite Curve {20} = 42 Using Bump 0.3",
+            ],
+        )
 
 
 if __name__ == "__main__":

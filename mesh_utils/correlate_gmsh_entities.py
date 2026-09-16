@@ -27,6 +27,10 @@ _TRANSFINITE_CURVE_RE = re.compile(
     r"^\s*Transfinite\s+(?P<kind>Curve|Line)\s*\{(?P<curves>[^}]*)\}(?P<tail>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
+_PROGRESSION_VALUE_RE = re.compile(
+    r"(?P<prefix>\bUsing\s+Progression\s+)"
+    r"(?P<value>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+)
 _TRANSFINITE_SURFACE_RE = re.compile(
     r"""
     ^\s*Transfinite\s+Surface\s*
@@ -116,11 +120,99 @@ def _load_geometry(mesh_def_file: Path) -> GeometryEntities:
 
 
 def _curve_endpoints(curve_id: int) -> tuple[int, int]:
-    boundary = gmsh.model.getBoundary([(1, curve_id)], oriented=False, recursive=False)
-    endpoints = sorted(tag for dim, tag in boundary if dim == 0)
-    if len(endpoints) != 2:
-        raise ValueError(f"Curve {curve_id} has {len(endpoints)} endpoints, expected 2.")
-    return endpoints[0], endpoints[1]
+    boundary = gmsh.model.getBoundary(
+        [(1, curve_id)], combined=False, oriented=False, recursive=False
+    )
+    endpoint_ids = [tag for dim, tag in boundary if dim == 0]
+    if len(endpoint_ids) != 2 or len(set(endpoint_ids)) != 2:
+        raise ValueError(
+            f"Curve {curve_id} has boundary endpoints {endpoint_ids}, expected two distinct points."
+        )
+
+    parameter_min, parameter_max = gmsh.model.getParametrizationBounds(1, curve_id)
+    if len(parameter_min) != 1 or len(parameter_max) != 1:
+        raise ValueError(
+            f"Curve {curve_id} has parametrization bounds {parameter_min}, {parameter_max}; "
+            "expected one parameter value at each bound."
+        )
+    start_coordinate = tuple(
+        float(value)
+        for value in gmsh.model.getValue(1, curve_id, [parameter_min[0]])
+    )
+    end_coordinate = tuple(
+        float(value)
+        for value in gmsh.model.getValue(1, curve_id, [parameter_max[0]])
+    )
+    endpoint_coordinates = {
+        endpoint_id: tuple(
+            float(value) for value in gmsh.model.getValue(0, endpoint_id, [])
+        )
+        for endpoint_id in endpoint_ids
+    }
+    return _ordered_curve_endpoints_from_parametrization(
+        curve_id,
+        endpoint_coordinates,
+        start_coordinate,
+        end_coordinate,
+    )
+
+
+def _ordered_curve_endpoints_from_parametrization(
+    curve_id: int,
+    endpoint_coordinates: dict[int, tuple[float, float, float]],
+    start_coordinate: tuple[float, float, float],
+    end_coordinate: tuple[float, float, float],
+) -> tuple[int, int]:
+    """Identify start/end point IDs from a curve's parameter-bound coordinates."""
+    if len(endpoint_coordinates) != 2:
+        raise ValueError(
+            f"Curve {curve_id} has {len(endpoint_coordinates)} endpoint coordinates, expected two."
+        )
+
+    # Healing can move the curve parametrization endpoint very slightly away
+    # from the corresponding topological point. Reuse the established model
+    # correlation tolerance rather than requiring floating-point coincidence.
+    coordinate_tolerance = DEFAULT_POINT_TOLERANCE
+    start_id = _nearest_endpoint_id(
+        curve_id,
+        "start",
+        start_coordinate,
+        endpoint_coordinates,
+        coordinate_tolerance,
+    )
+    end_id = _nearest_endpoint_id(
+        curve_id,
+        "end",
+        end_coordinate,
+        endpoint_coordinates,
+        coordinate_tolerance,
+    )
+    if start_id == end_id:
+        raise ValueError(
+            f"Curve {curve_id} has the same boundary point {start_id} at both parameter bounds."
+        )
+    return start_id, end_id
+
+
+def _nearest_endpoint_id(
+    curve_id: int,
+    bound_name: str,
+    coordinate: tuple[float, float, float],
+    endpoint_coordinates: dict[int, tuple[float, float, float]],
+    tolerance: float,
+) -> int:
+    distances = sorted(
+        (_distance(coordinate, endpoint_coordinate), endpoint_id)
+        for endpoint_id, endpoint_coordinate in endpoint_coordinates.items()
+    )
+    nearest_distance, nearest_id = distances[0]
+    if nearest_distance > tolerance:
+        raise ValueError(
+            f"Curve {curve_id} parameter {bound_name} coordinate {coordinate} does not match "
+            f"a boundary endpoint within {tolerance:g}; nearest point {nearest_id} is "
+            f"{nearest_distance:g} away."
+        )
+    return nearest_id
 
 
 def _surface_boundary_curves(surface_id: int) -> set[int]:
@@ -188,21 +280,54 @@ def correlate_curves(
     new_curves: dict[int, tuple[int, int]],
     point_map: dict[int, int | None],
 ) -> dict[int, int | None]:
+    curve_map, _ = correlate_curves_with_orientation(
+        old_curves,
+        new_curves,
+        point_map,
+    )
+    return curve_map
+
+
+def correlate_curves_with_orientation(
+    old_curves: dict[int, tuple[int, int]],
+    new_curves: dict[int, tuple[int, int]],
+    point_map: dict[int, int | None],
+) -> tuple[dict[int, int | None], dict[int, bool | None]]:
+    """Match curves and identify whether their parameter directions are reversed."""
     new_by_endpoints: dict[frozenset[int], list[int]] = {}
     for new_curve_id, endpoints in new_curves.items():
         new_by_endpoints.setdefault(frozenset(endpoints), []).append(new_curve_id)
 
     curve_map: dict[int, int | None] = {}
+    curve_reversed: dict[int, bool | None] = {}
     for old_curve_id, endpoints in old_curves.items():
         mapped_endpoints = [point_map.get(point_id) for point_id in endpoints]
         if any(point_id is None for point_id in mapped_endpoints):
             curve_map[old_curve_id] = None
+            curve_reversed[old_curve_id] = None
             continue
 
-        matches = new_by_endpoints.get(frozenset(int(point_id) for point_id in mapped_endpoints), [])
-        curve_map[old_curve_id] = matches[0] if len(matches) == 1 else None
+        mapped_endpoint_pair = tuple(int(point_id) for point_id in mapped_endpoints)
+        matches = new_by_endpoints.get(frozenset(mapped_endpoint_pair), [])
+        if len(matches) != 1:
+            curve_map[old_curve_id] = None
+            curve_reversed[old_curve_id] = None
+            continue
 
-    return curve_map
+        new_curve_id = matches[0]
+        new_endpoints = new_curves[new_curve_id]
+        curve_map[old_curve_id] = new_curve_id
+        if mapped_endpoint_pair == new_endpoints:
+            curve_reversed[old_curve_id] = False
+        elif mapped_endpoint_pair == tuple(reversed(new_endpoints)):
+            curve_reversed[old_curve_id] = True
+        else:
+            raise ValueError(
+                f"Matched curve {old_curve_id} to {new_curve_id}, but their "
+                f"endpoint order is inconsistent: {mapped_endpoint_pair} vs {new_endpoints}."
+            )
+
+    return curve_map, curve_reversed
 
 
 def correlate_surfaces(
@@ -362,6 +487,7 @@ def correlate_entities_sequentially(
     dict[int, int | None],
     dict[int, int | None],
     dict[int, int | None],
+    dict[int, bool | None],
     tuple[CorrelationPassResult, ...],
 ]:
     """Correlate entities for every shift, then once at their original location.
@@ -373,6 +499,7 @@ def correlate_entities_sequentially(
     point_map = {old_id: None for old_id in old_entities.points}
     curve_map = {old_id: None for old_id in old_entities.curves}
     surface_map = {old_id: None for old_id in old_entities.surfaces}
+    curve_reversed = {old_id: None for old_id in old_entities.curves}
     pass_results: list[CorrelationPassResult] = []
 
     ordered_translations = [
@@ -387,7 +514,7 @@ def correlate_entities_sequentially(
             tolerance,
             translation,
         )
-        pass_curve_map = correlate_curves(
+        pass_curve_map, pass_curve_reversed = correlate_curves_with_orientation(
             old_entities.curves,
             new_entities.curves,
             pass_point_map,
@@ -412,8 +539,11 @@ def correlate_entities_sequentially(
                 surface_overwrites=_overwrite_resolved_mappings(surface_map, pass_surface_map),
             )
         )
+        for old_curve_id, is_reversed in pass_curve_reversed.items():
+            if is_reversed is not None:
+                curve_reversed[old_curve_id] = is_reversed
 
-    return point_map, curve_map, surface_map, tuple(pass_results)
+    return point_map, curve_map, surface_map, curve_reversed, tuple(pass_results)
 
 
 def shift_vector(l_shift: float, theta_shift_deg: float) -> tuple[float, float, float]:
@@ -438,12 +568,14 @@ def write_correlated_geo_file(
     point_map: dict[int, int | None],
     curve_map: dict[int, int | None],
     surface_map: dict[int, int | None],
+    curve_reversed: dict[int, bool | None],
 ) -> tuple[int, int]:
     translated_statements, skipped_count = correlate_geo_text(
         old_geo_file.read_text(encoding="utf-8"),
         point_map,
         curve_map,
         surface_map,
+        curve_reversed,
     )
     with new_geo_file.open("w", encoding="utf-8") as file:
         for statement in translated_statements:
@@ -458,20 +590,22 @@ def correlate_geo_text(
     point_map: dict[int, int | None],
     curve_map: dict[int, int | None],
     surface_map: dict[int, int | None],
+    curve_reversed: dict[int, bool | None],
 ) -> tuple[list[str], int]:
     translated_statements: list[str] = []
     skipped_count = 0
     for statement in _geo_statements(geo_text):
-        translated_statement = _correlate_geo_statement(
+        translated_statements_for_input = _correlate_geo_statement(
             statement,
             point_map,
             curve_map,
             surface_map,
+            curve_reversed,
         )
-        if translated_statement is None:
+        if translated_statements_for_input is None:
             skipped_count += 1
             continue
-        translated_statements.append(translated_statement)
+        translated_statements.extend(translated_statements_for_input)
     return translated_statements, skipped_count
 
 
@@ -480,15 +614,10 @@ def _correlate_geo_statement(
     point_map: dict[int, int | None],
     curve_map: dict[int, int | None],
     surface_map: dict[int, int | None],
-) -> str | None:
+    curve_reversed: dict[int, bool | None],
+) -> list[str] | None:
     if match := _TRANSFINITE_CURVE_RE.match(statement):
-        mapped_curves = _mapped_geo_id_list(match.group("curves"), curve_map)
-        if mapped_curves is None:
-            return None
-        return (
-            f"Transfinite {match.group('kind').capitalize()} "
-            f"{{{_format_geo_id_list(mapped_curves)}}}{match.group('tail')}"
-        )
+        return _correlate_transfinite_curve_statement(match, curve_map, curve_reversed)
 
     if match := _TRANSFINITE_SURFACE_RE.match(statement):
         mapped_surfaces = _mapped_geo_id_list(match.group("surfaces"), surface_map)
@@ -504,27 +633,75 @@ def _correlate_geo_statement(
                 return None
             point_clause = f" = {{{_format_geo_id_list(mapped_points)}}}"
 
-        return (
+        return [
             f"Transfinite Surface {{{_format_geo_id_list(mapped_surfaces)}}}"
             f"{point_clause}{match.group('tail')}"
-        )
+        ]
 
     if match := _RECOMBINE_SURFACE_RE.match(statement):
         mapped_surfaces = _mapped_geo_id_list(match.group("surfaces"), surface_map)
         if mapped_surfaces is None:
             return None
-        return f"Recombine Surface {{{_format_geo_id_list(mapped_surfaces)}}}{match.group('tail')}"
+        return [f"Recombine Surface {{{_format_geo_id_list(mapped_surfaces)}}}{match.group('tail')}"]
 
     if match := _MESH_ALGORITHM_SURFACE_RE.match(statement):
         mapped_surfaces = _mapped_geo_id_list(match.group("surfaces"), surface_map)
         if mapped_surfaces is None:
             return None
-        return (
+        return [
             f"{match.group('prefix')}{{{_format_geo_id_list(mapped_surfaces)}}}"
             f"{match.group('tail')}"
-        )
+        ]
 
     return None
+
+
+def _correlate_transfinite_curve_statement(
+    match: re.Match[str],
+    curve_map: dict[int, int | None],
+    curve_reversed: dict[int, bool | None],
+) -> list[str] | None:
+    old_curve_ids = _parse_geo_int_list(match.group("curves"))
+    mapped_curves = _mapped_geo_id_list(match.group("curves"), curve_map)
+    if mapped_curves is None:
+        return None
+
+    tail = match.group("tail")
+    reversed_flags = [curve_reversed.get(abs(curve_id), False) is True for curve_id in old_curve_ids]
+    translated_tails = [_tail_with_inverted_progression(tail, is_reversed) for is_reversed in reversed_flags]
+    kind = match.group("kind").capitalize()
+    if len(set(translated_tails)) == 1:
+        return [
+            f"Transfinite {kind} {{{_format_geo_id_list(mapped_curves)}}}"
+            f"{translated_tails[0]}"
+        ]
+
+    return [
+        f"Transfinite {kind} {{{mapped_curve}}}{translated_tail}"
+        for mapped_curve, translated_tail in zip(mapped_curves, translated_tails)
+    ]
+
+
+def _tail_with_inverted_progression(tail: str, is_reversed: bool) -> str:
+    """Invert a transfinite progression only when its curve direction flipped."""
+    if not is_reversed:
+        return tail
+
+    progression_match = _PROGRESSION_VALUE_RE.search(tail)
+    if progression_match is None:
+        return tail
+
+    progression = float(progression_match.group("value"))
+    if not math.isfinite(progression) or math.isclose(progression, 0.0):
+        raise ValueError(
+            "Cannot invert a non-finite or zero transfinite progression: "
+            f"{progression_match.group('value')}"
+        )
+    inverted = format(1.0 / progression, ".12g")
+    return (
+        f"{tail[:progression_match.start('value')]}{inverted}"
+        f"{tail[progression_match.end('value'):]}"
+    )
 
 
 def _geo_statements(geo_text: str) -> list[str]:
@@ -655,7 +832,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         shift_vector(l_shift, theta_shift_deg)
         for l_shift, theta_shift_deg in args.entity_shift
     ]
-    point_map, curve_map, surface_map, pass_results = correlate_entities_sequentially(
+    point_map, curve_map, surface_map, curve_reversed, pass_results = correlate_entities_sequentially(
         old_entities,
         new_entities,
         args.point_tolerance,
@@ -702,13 +879,16 @@ def main(argv: Iterable[str] | None = None) -> int:
             point_map,
             curve_map,
             surface_map,
+            curve_reversed,
         )
 
     point_count = _count_identified(point_map)
     curve_count = _count_identified(curve_map)
     surface_count = _count_identified(surface_map)
+    reversed_curve_count = sum(is_reversed is True for is_reversed in curve_reversed.values())
     print(f"Point IDs identified: {point_count[0]} / {point_count[1]}")
     print(f"Curve IDs identified: {curve_count[0]} / {curve_count[1]}")
+    print(f"Curve directions reversed: {reversed_curve_count}")
     print(f"Surface IDs identified: {surface_count[0]} / {surface_count[1]}")
     for pass_number, result in enumerate(pass_results, start=1):
         mode = "unshifted" if result.translation == (0.0, 0.0, 0.0) else "shifted"

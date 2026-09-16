@@ -55,13 +55,18 @@ from scipy.spatial import cKDTree
 # -----------------------------
 # result = "XWing 2.2 rect 24.5"
 # result = "XWing 2.2 rect 24.5 fine"
-# result = "XWing 2.2 rect 35"
+#result = "XWing 2.2 rect 35"
 # result = "XWing 2.2 rect 39"
-# result = "XWing 2.2 rect 39 twisted"
+#result = "XWing 2.2 rect 39 twisted"
+# result = "XWing 2.2 rect 35 shifted"
 # result =  "XWing 2.2 trap 24.5"
-result =  "XWing 2.2 trap 35"
+#result =  "XWing 2.2 trap 35"
+#result =  "XWing 2.2 trap 35 shifted L4mm"
 # result = "XWing 2.2 trap 39"
 #result = ["XWing 2.2 rect 39", "XWing 2.2 rect 39 twisted"]
+#result =  ["XWing 2.2 rect 35", "XWing 2.2 trap 35"]
+#result =  ["XWing 2.2 rect 35", "XWing 2.2 rect 35 shifted"]
+result =  ["XWing 2.2 trap 35", "XWing 2.2 trap 35 shifted L4mm"]
 
 show_plots = True
 mirror_one_sided_spanwise_results = True
@@ -98,6 +103,12 @@ RESULT_CONFIGURATIONS = {
         0.2831e6,
         1312.0,
     ),
+    "XWing 2.2 rect 35 shifted": ResultConfiguration(
+        "XWing 2.2 rect 35",
+        FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U35_shifted_3_8mm",
+        0.2831e6,
+        1312.0,
+    ),
     "XWing 2.2 rect 39": ResultConfiguration(
         "XWing 2.2 rect 39",
         FLOW360_ROOT / "rectangular wing" / "XWing2_2 fully_turbulent_SA U39.5_AOA-1.6",
@@ -125,6 +136,12 @@ RESULT_CONFIGURATIONS = {
     "XWing 2.2 trap 39": ResultConfiguration(
         "XWing 2.2 trap 39",
         FLOW360_ROOT / "trapezoidal wing" / "XWing2_2 fully_turbulent_SA U39.5_AOA-1.6",
+        0.277649e6,
+        1346.0,
+    ),
+    "XWing 2.2 trap 35 shifted L4mm": ResultConfiguration(
+        "XWing 2.2 trap 35 shifted L4mm",
+        FLOW360_ROOT / "trapezoidal wing" / "XWing2_2_fully_turbulent_SA U35_shiftedL4mm",
         0.277649e6,
         1346.0,
     ),
@@ -983,27 +1000,63 @@ def _plot_spanwise_results(
 def _plot_bar_results(
     analyses: tuple[AnalysisResult, ...], output_dir: Path, title: str
 ) -> None:
-    row_positions = {"wing1": 5.15, "wing2": 4.85, "wing_sum_1_2": 4.0, "wing_sum_3_4": 3.7, "wing3": 2.85, "wing4": 2.55, "stab1": 1.15, "stab2": 0.85, "stab_sum_1_2": 0.0, "stab_sum_3_4": -0.3, "stab3": -1.15, "stab4": -1.45}
+    row_positions = {
+        "wing1": 5.15,
+        "wing3": 4.85,
+        "wing_sum_1_3": 4.0,
+        "wing_sum_2_4": 3.7,
+        "wing2": 2.85,
+        "wing4": 2.55,
+        "stab1": 1.15,
+        "stab3": 0.85,
+        "stab_sum_1_3": 0.0,
+        "stab_sum_2_4": -0.3,
+        "stab2": -1.15,
+        "stab4": -1.45,
+    }
     hatches = ("", "//", "xx", "..", "++", "\\\\")
+    pair_sum_colors = {
+        "wing_sum_1_3": "wing1",
+        "wing_sum_2_4": "wing2",
+        "stab_sum_1_3": "stab1",
+        "stab_sum_2_4": "stab2",
+    }
     offsets = _offsets(len(analyses), 0.18)
     figure, axis = plt.subplots(figsize=(12.0, 8.0), constrained_layout=True)
     values = []
     for index, analysis in enumerate(analyses):
         cmx = {name: value for name, _, _, value in analysis.surface_results}
         pair_sums = {
-            "wing_sum_1_2": cmx["wing1"] + cmx["wing2"],
-            "wing_sum_3_4": cmx["wing3"] + cmx["wing4"],
-            "stab_sum_1_2": cmx["stab1"] + cmx["stab2"],
-            "stab_sum_3_4": cmx["stab3"] + cmx["stab4"],
+            "wing_sum_1_3": cmx["wing1"] + cmx["wing3"],
+            "wing_sum_2_4": cmx["wing2"] + cmx["wing4"],
+            "stab_sum_1_3": cmx["stab1"] + cmx["stab3"],
+            "stab_sum_2_4": cmx["stab2"] + cmx["stab4"],
         }
         values.extend([*cmx.values(), *pair_sums.values()])
         for name, value in cmx.items():
-            axis.barh(row_positions[name] + offsets[index], abs(value), height=0.15, color=SURFACE_COLORS[name], hatch=hatches[index % len(hatches)], label=f"{analysis.configuration.label} - {name}")
+            hatch = hatches[index % len(hatches)]
+            bar_options = {}
+            if len(analyses) > 1 and hatch and name in {"wing4", "stab4"}:
+                bar_options["edgecolor"] = "white"
+            axis.barh(
+                row_positions[name] + offsets[index],
+                abs(value),
+                height=0.15,
+                color=SURFACE_COLORS[name],
+                hatch=hatch,
+                label=f"{analysis.configuration.label} - {name}",
+                **bar_options,
+            )
         for name, value in pair_sums.items():
-            color_name = "wing1" if name.endswith("1_2") else "wing3"
-            axis.barh(row_positions[name] + offsets[index], value, height=0.15, color=SURFACE_COLORS[color_name], hatch=hatches[index % len(hatches)])
+            axis.barh(
+                row_positions[name] + offsets[index],
+                value,
+                height=0.15,
+                color=SURFACE_COLORS[pair_sum_colors[name]],
+                hatch=hatches[index % len(hatches)],
+            )
     limit = max((abs(value) for value in values), default=0.01) * 1.1
-    axis.set_yticks([5.0, 3.85, 2.7, 1.0, -0.15, -1.3], ["wings 1 + 2", "wing pair sums", "wings 3 + 4", "stabs 1 + 2", "stab pair sums", "stabs 3 + 4"])
+    axis.set_yticks([5.0, 3.85, 2.7, 1.0, -0.15, -1.3], ["wings 1 + 3", "wing pair sums", "wings 2 + 4", "stabs 1 + 3", "stab pair sums", "stabs 2 + 4"])
     axis.set_xlabel(r"$C_{mx}$ pair sum / $|C_{mx}|$ surface magnitude")
     axis.set_title(f"{title} - surface rolling moment contributions")
     axis.set_xlim(-limit, limit)

@@ -29,6 +29,8 @@ FLOW360_ROOT = Path(
 OUTPUT_DIR = FLOW360_ROOT / "cmx_vs_airspeed"
 SHOW_PLOT = True
 PLOT_COMPONENT_CMX = True
+AIR_DENSITY_KG_M3 = 1.225
+MOTOR_ROLL_MOMENT_N_M = 0.438
 
 WING_SELECTION_FILENAMES = tuple(f"wing{index}_data.csv" for index in range(1, 5))
 STABILIZER_SELECTION_FILENAMES = tuple(
@@ -200,6 +202,25 @@ def main() -> None:
     results.to_csv(OUTPUT_DIR / "xwing_cmx_vs_airspeed.csv", index=False)
 
     figure, axis = plt.subplots(figsize=(8.0, 5.0), constrained_layout=True)
+    rectangular_case = next(case for case in CASES if case.wing_type == "Rectangular wing")
+    rectangular_reference_area_m2 = rectangular_case.reference_area_mm2 * 1e-6
+    rectangular_reference_span_m = rectangular_case.reference_span_mm * 1e-3
+    motor_speeds = np.linspace(results["airspeed_m_s"].min(), results["airspeed_m_s"].max(), 200)
+    motor_cmx = MOTOR_ROLL_MOMENT_N_M / (
+        0.5
+        * AIR_DENSITY_KG_M3
+        * motor_speeds**2
+        * rectangular_reference_area_m2
+        * rectangular_reference_span_m
+    )
+    axis.plot(
+        motor_speeds,
+        motor_cmx,
+        color="black",
+        linestyle="-",
+        linewidth=1.8,
+        label="cmx motor (Mx=0.438 Nm)",
+    )
     component_styles = {
         "wings": "--",
         "stabilizer": ":",
@@ -235,7 +256,7 @@ def main() -> None:
     )
     axis.axhline(0.0, color="0.25", linewidth=0.8)
     axis.grid(True)
-    axis.legend()
+    axis.legend(loc="upper left")
     figure.savefig(OUTPUT_DIR / "xwing_cmx_vs_airspeed.png", dpi=300)
     if SHOW_PLOT and "agg" not in plt.get_backend().lower():
         plt.show()

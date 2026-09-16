@@ -1,9 +1,28 @@
 """Export XWing wing and stabilizer PatchID selections from a ParaView state file.
 
-Run this script with ParaView's Python interpreter (Tools->Python Script Editor), not with a regular Python
-installation:
+Run this script with ParaView's Python interpreter, not with a regular Python
+installation. From PowerShell:
 
     pvpython export_wing_stab_patch_ids.py --data-dir "C:/path/to/result"
+
+To run it from ParaView's Tools -> Python Script Editor, do not paste this
+script unchanged: it requires the ``--data-dir`` command-line argument.
+Paste and run this launcher instead, updating the result-directory path:
+
+    import sys
+
+    sys.argv = [
+        "export_wing_stab_patch_ids.py",
+        "--data-dir",
+        r"C:\\path\\to\\result",
+    ]
+    exec(
+        open(
+            r"C:\\git\\flow360cases\\Postprocessing\\export_wing_stab_patch_ids.py",
+            encoding="utf-8",
+        ).read(),
+        {"__name__": "__main__"},
+    )
 
 The result directory must contain ``surfaces.vtu`` and
 ``Extract_wings_stabs.pvsm``. The state file must register its eight

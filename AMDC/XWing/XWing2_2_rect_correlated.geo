@@ -237,13 +237,13 @@ Transfinite Curve {272, 184, 276, 186, 370, 256, 177, 746, 573, 427, 429, 568, 4
 //+
 Transfinite Curve {993, 995, 989, 991} = 8 Using Progression 1;
 //+
-Transfinite Curve {1288, 1173, 1343} = 21 Using Progression 1.1;
+Transfinite Curve {1173, 1343, 1231, 1289} = 21 Using Progression 0.9;
 //+
-Transfinite Curve {1342, 1231, 1172, 1289} = 21 Using Progression 0.9;
+Transfinite Curve {1288, 1342, 1172} = 21 Using Progression 1.1;
 //+
-Transfinite Curve {1291, 1337, 1167} = 13 Using Progression 1.1;
+Transfinite Curve {1279, 1167, 1337} = 13 Using Progression 0.9;
 //+
-Transfinite Curve {1175, 1345, 1279} = 13 Using Progression 0.9;
+Transfinite Curve {1291, 1175, 1345} = 13 Using Progression 1.1;
 //+
 Transfinite Curve {1170, 1340} = 90 Using Progression 1;
 //+

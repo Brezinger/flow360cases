@@ -1,6 +1,6 @@
 {
   "geometry definition": {
-    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\20_AMDC_XWing2\\05_CAD\\2026-05-12_AMDC-simplified-XWingV22_2Fluegel4mmLinksVerschoben.stp",
+    "step_file": "C:\\OneDrive\\OneDrive - Achleitner Aerospace GmbH\\Achleitner Aerospace GmbH Allgemein - General\\01_Projekte\\20_AMDC_XWing2\\05_CAD\\42026-05-12_AMDC-simplified-XWingV22_4Fluegel17_4mmLinksVerschoben.stp",
     "geometry_preprocessing": {
       "enabled": true,
       "origin": [
@@ -42,7 +42,7 @@
         "name": "wing fuselage connection 1",
         "algorithm": "quasi-structured quad",
         "surfaces": [
-          191
+          593
         ]
       }
     ],
@@ -54,10 +54,10 @@
           {
             "name": "fuse nose",
             "curve_ids": [
-              1277,
-              1275,
-              1225,
-              1226
+              610,
+              609,
+              633,
+              642
             ],
             "type": "Progression",
             "mesh size mode": "npts",
@@ -67,39 +67,39 @@
         ],
         "transfinite_surfaces": [
           {
-            "id": 465,
+            "id": 216,
             "Arrangement": "Left",
             "boundary points": [
-              795,
-              678,
-              822
+              414,
+              425,
+              313
             ]
           },
           {
-            "id": 482,
+            "id": 206,
             "Arrangement": "Left",
             "boundary points": [
-              795,
-              822,
-              801
+              414,
+              313,
+              306
             ]
           },
           {
-            "id": 464,
+            "id": 219,
             "Arrangement": "Left",
             "boundary points": [
-              795,
-              801,
-              675
+              414,
+              306,
+              430
             ]
           },
           {
-            "id": 441,
+            "id": 292,
             "Arrangement": "Left",
             "boundary points": [
-              795,
-              678,
-              675
+              414,
+              425,
+              430
             ]
           }
         ]
@@ -111,14 +111,14 @@
           {
             "name": "manual progression curves",
             "curve_ids": [
-              17,
-              18,
-              1510,
-              1511,
-              151,
-              152,
-              338,
-              339
+              869,
+              870,
+              483,
+              484,
+              196,
+              197,
+              58,
+              59
             ],
             "type": "Progression",
             "mesh size mode": "npts",
@@ -134,18 +134,18 @@
           {
             "name": "manual progression curves 61 pts",
             "curve_ids": [
-              1389,
-              1373,
-              1374,
-              920,
-              904,
-              905,
-              1103,
-              1104,
-              1119,
-              568,
-              569,
-              570
+              698,
+              696,
+              697,
+              1351,
+              1335,
+              1336,
+              1154,
+              1155,
+              1170,
+              18,
+              1,
+              2
             ],
             "type": "Progression",
             "mesh size mode": "npts",
@@ -157,7 +157,7 @@
       {
         "name": "fuselage section 1",
         "curve_definition": "automatic",
-        "start_pt": 678,
+        "start_pt": 425,
         "circumferential_direction": [
           0.0,
           0.0,
@@ -299,7 +299,7 @@
         "name": "fuse section Q1-2b",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 677,
+        "start_pt": 427,
         "circumferential_direction": [
           0.0,
           0.0,
@@ -370,7 +370,7 @@
         "name": "fuse section Q1-2c",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 791,
+        "start_pt": 411,
         "circumferential_direction": [
           0.0,
           0.8191520442889918,
@@ -443,7 +443,7 @@
         "name": "fuse section Q2-2c",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 843,
+        "start_pt": 314,
         "circumferential_direction": [
           0.0,
           -0.8191520442889918,
@@ -516,7 +516,7 @@
         "name": "fuse section Q3-2c",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 89,
+        "start_pt": 304,
         "circumferential_direction": [
           0.0,
           -0.8191520442889918,
@@ -589,7 +589,7 @@
         "name": "fuse section Q4-2c",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 538,
+        "start_pt": 633,
         "circumferential_direction": [
           0.0,
           -0.8191520442889918,
@@ -662,7 +662,7 @@
         "name": "fuse section Q2-2b",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 950,
+        "start_pt": 397,
         "circumferential_direction": [
           0.0,
           1.0,
@@ -733,7 +733,7 @@
         "name": "fuse section Q3-2b",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 87,
+        "start_pt": 302,
         "circumferential_direction": [
           0.0,
           0.0,
@@ -804,7 +804,7 @@
         "name": "fuse section Q4-2b",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 539,
+        "start_pt": 634,
         "circumferential_direction": [
           0.0,
           -1.0,
@@ -875,7 +875,7 @@
         "name": "fuse section Q1-2d",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 798,
+        "start_pt": 308,
         "circumferential_direction": [
           0.0,
           0.8191520442889918,
@@ -946,7 +946,7 @@
         "name": "fuse section Q2-2d",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 843,
+        "start_pt": 314,
         "circumferential_direction": [
           0.0,
           0.8191520442889918,
@@ -1017,7 +1017,7 @@
         "name": "fuse section Q3-2d",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 91,
+        "start_pt": 415,
         "circumferential_direction": [
           0.0,
           -0.8191520442889918,
@@ -1088,7 +1088,7 @@
         "name": "fuse section Q4-2d",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 537,
+        "start_pt": 551,
         "circumferential_direction": [
           0.0,
           -0.8191520442889918,
@@ -1159,7 +1159,7 @@
         "name": "fuse section Q3-2a span2",
         "curve_definition": "automatic",
         "closed_circumferential_loop": false,
-        "start_pt": 499,
+        "start_pt": 690,
         "circumferential_direction": [
           0.0,
           0.0,
@@ -1205,7 +1205,7 @@
       {
         "name": "wing 1",
         "curve_definition": "automatic",
-        "start_pt": 976,
+        "start_pt": 354,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1290,7 +1290,7 @@
       {
         "name": "wing 2",
         "curve_definition": "automatic",
-        "start_pt": 121,
+        "start_pt": 153,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1375,7 +1375,7 @@
       {
         "name": "wing 3",
         "curve_definition": "automatic",
-        "start_pt": 251,
+        "start_pt": 57,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1460,7 +1460,7 @@
       {
         "name": "wing 4",
         "curve_definition": "automatic",
-        "start_pt": 28,
+        "start_pt": 589,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1545,7 +1545,7 @@
       {
         "name": "stabilizer 1",
         "curve_definition": "automatic",
-        "start_pt": 888,
+        "start_pt": 469,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1622,7 +1622,7 @@
       {
         "name": "stabilizer 2",
         "curve_definition": "automatic",
-        "start_pt": 730,
+        "start_pt": 747,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1699,7 +1699,7 @@
       {
         "name": "stabilizer 3",
         "curve_definition": "automatic",
-        "start_pt": 401,
+        "start_pt": 2,
         "circumferential_direction": [
           -1.0,
           0.0,
@@ -1776,7 +1776,7 @@
       {
         "name": "stabilizer 4",
         "curve_definition": "automatic",
-        "start_pt": 605,
+        "start_pt": 864,
         "circumferential_direction": [
           -1.0,
           0.0,

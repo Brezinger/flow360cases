@@ -64,8 +64,18 @@ def _write_te_points(points: pd.DataFrame, path: Path) -> None:
     points.to_csv(path, sep=" ", index=False, float_format="%.10g")
 
 
-def prepare_trailing_edge_files(working_dir: Path, wing1_file="TE_XWing2_2_wing1.dat", wing5_file="TE_XWing2_2_wing5.dat") -> list[str]:
-    """Create wing 2-4 and 6-8 TE coordinate files from the measured source files."""
+def prepare_trailing_edge_files(
+    working_dir: Path,
+    wing1_file="TE_XWing2_2_wing1.dat",
+    wing5_file="TE_XWing2_2_wing5.dat",
+    spanwise_shifts_mm_by_wing: dict[int, tuple[float, float]] | None = None,
+) -> list[str]:
+    """Create TE coordinate files, optionally translating individual wings in the Y-Z plane.
+
+    ``spanwise_shifts_mm_by_wing`` maps a wing index to
+    ``(shift_magnitude_mm, direction_deg)``, where direction is measured from
+    positive Y toward positive Z about the X axis.
+    """
     source_wing1 = _resolve_input_file(wing1_file, working_dir)
     source_wing5 = _resolve_input_file(wing5_file, working_dir)
 
@@ -94,6 +104,11 @@ def prepare_trailing_edge_files(working_dir: Path, wing1_file="TE_XWing2_2_wing1
             if angle_deg == 0.0
             else _rotate_points_about_x(source_points, angle_deg)
         )
+        if spanwise_shifts_mm_by_wing and wing_index in spanwise_shifts_mm_by_wing:
+            shift_magnitude_mm, shift_direction_deg = spanwise_shifts_mm_by_wing[wing_index]
+            shift_direction_rad = np.deg2rad(shift_direction_deg)
+            points["Y"] += shift_magnitude_mm * np.cos(shift_direction_rad)
+            points["Z"] += shift_magnitude_mm * np.sin(shift_direction_rad)
         output_path = generated_dir / f"TE_XWing2_2_wing{wing_index}.dat"
         _write_te_points(points, output_path)
         te_files.append(str(output_path))
@@ -171,6 +186,15 @@ def define_and_run(
     winglet_tip_refinement_initial_diameter = 20
     winglet_tip_refinement_growth_angle_deg = 5
     winglet_tip_refinement_cylinder_overlap = 5
+    # Start each tip-vortex cylinder sequence at the radius previously reached
+    # by its fifth cylinder; the existing growth then enlarges every successor.
+    winglet_tip_refinement_tip_initial_diameter = (
+        winglet_tip_refinement_initial_diameter
+        + 4
+        * 2
+        * (winglet_tip_refinement_length / winglet_tip_refinement_n_cylinders)
+        * np.tan(np.deg2rad(winglet_tip_refinement_growth_angle_deg))
+    )
     winglet_tip_refinement_initial_spacing = surf_mesh_refine_factor * 30 * 3 ** (1 / 2)
     winglet_tip_refinement_spacing_growth_rate = 1.2
     winglet_tip_refinement_max_spacing = None
@@ -255,7 +279,11 @@ def define_and_run(
                     axis=winglet_tip_refinement_axis,
                     total_length=winglet_tip_refinement_length,
                     n_cylinders=winglet_tip_refinement_n_cylinders,
-                    initial_diameter=winglet_tip_refinement_initial_diameter,
+                    initial_diameter=(
+                        winglet_tip_refinement_tip_initial_diameter
+                        if vertex_kind == "tip"
+                        else winglet_tip_refinement_initial_diameter
+                    ),
                     growth_angle_deg=winglet_tip_refinement_growth_angle_deg,
                     cylinder_overlap=winglet_tip_refinement_cylinder_overlap,
                 )
@@ -406,8 +434,11 @@ def main():
 
     #wing_version = "rectangular"
     #wing_version = "rectangular twisted"
-    wing_version = "rectangular shifted"
-    #wing_version = "trapezoidal"
+    #wing_version = "rectangular shifted"
+    # wing_version = "trapezoidal"
+    #wing_version = "trapezoidal_shifted"
+    wing_version = "trapezoidal_shifted_L4mm"
+    te_spanwise_shifts_mm_by_wing = None
 
     sim_name = "XWing2_2"
 
@@ -457,8 +488,47 @@ def main():
         enable_alpha_controller = True
         # U_inf_range = [24.5]
         # alpha_deg_range = [10.0]
-        U_inf_range = [39.5]
-        alpha_deg_range = [-1.6]
+        U_inf_range = [35]
+        alpha_deg_range = [1.5]
+    elif wing_version == "trapezoidal_shifted":
+        project_cgns_file_name = (
+            r"C:/git/flow360cases/AMDC/XWing/2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V2_shifted.cgns"
+        )
+        wing_area = 0.277649964016683
+        wing_span = 1.346
+        wing1_TE_file = "TE_XWing2_2_wing1.dat"
+        enable_alpha_controller = True
+        # U_inf_range = [24.5]
+        # alpha_deg_range = [10.0]
+        U_inf_range = [35]
+        alpha_deg_range = [1.5]
+        # Shift only the four wings toward 180 +/- 35 degrees. Stabilizers
+        # (5-8) intentionally retain their original refinement locations.
+        te_spanwise_shifts_mm_by_wing = {
+            1: (4.0, 145.0),
+            2: (4.0, 215.0),
+            3: (17.0, 145.0),
+            4: (17.0, 215.0),
+        }
+    elif wing_version == "trapezoidal_shifted_L4mm":
+        project_cgns_file_name = (
+            r"C:/git/flow360cases/AMDC/XWing/2026-05-12_AMDC-simplified-XWingV22_getrennt_manual_V2_shifted_4mm.cgns"
+        )
+        wing_area = 0.277649964016683
+        wing_span = 1.346
+        wing1_TE_file = "TE_XWing2_2_wing1.dat"
+        enable_alpha_controller = True
+        # U_inf_range = [24.5]
+        # alpha_deg_range = [10.0]
+        U_inf_range = [35]
+        alpha_deg_range = [1.5]
+        # Shift only the four wings toward 180 +/- 35 degrees. Stabilizers
+        # (5-8) intentionally retain their original refinement locations.
+        te_spanwise_shifts_mm_by_wing = {
+            1: (4.0, 145.0),
+            2: (4.0, 215.0),
+        }
+
 
     sim_name += " " + wing_version
 
@@ -475,7 +545,11 @@ def main():
     half_model = False
     aircraft_mass = 13.6
 
-    wake_refinement_files = prepare_trailing_edge_files(working_dir, wing1_file=wing1_TE_file)
+    wake_refinement_files = prepare_trailing_edge_files(
+        working_dir,
+        wing1_file=wing1_TE_file,
+        spanwise_shifts_mm_by_wing=te_spanwise_shifts_mm_by_wing,
+    )
 
     operating_points = []
     standard_atmosphere_density = calculate_standard_atmosphere_density(0)
