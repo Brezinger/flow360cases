@@ -45,6 +45,25 @@ def apply_default_gmsh_thread_limit() -> int:
         gmsh.option.setNumber(option_name, thread_count)
     return thread_count
 
+
+def apply_gmsh_thread_overrides(mesh_def: dict[str, Any]) -> None:
+    """Apply optional per-dimension Gmsh thread limits."""
+    thread_count_2d = mesh_def.get("max_num_threads_2d")
+    if thread_count_2d is None:
+        return
+    if isinstance(thread_count_2d, bool) or not isinstance(thread_count_2d, int):
+        raise TypeError("'max_num_threads_2d' must be a positive integer.")
+    if thread_count_2d <= 0:
+        raise ValueError("'max_num_threads_2d' must be a positive integer.")
+    gmsh.option.setNumber("Mesh.MaxNumThreads2D", thread_count_2d)
+
+
+def configure_gmsh_point_display() -> None:
+    """Configure geometry vertices for clear inspection in the Gmsh GUI."""
+    gmsh.option.setNumber("Geometry.PointType", 1)
+    gmsh.option.setNumber("Geometry.PointSize", 6)
+
+
 class CurveConstraint:
     def __init__(self, n_pts: int, mesh_type: str, coef: float) -> None:
         self.n_pts = n_pts
@@ -3179,6 +3198,77 @@ def _curve_endpoints(curve_id: int) -> tuple[int, int]:
     return points[0], points[1]
 
 
+def _degree_two_curve_chains() -> list[list[int]]:
+    """Return maximal curve chains connected through degree-two vertices."""
+    curve_endpoints = {
+        curve_id: _curve_endpoints(curve_id)
+        for _, curve_id in gmsh.model.getEntities(1)
+    }
+    point_to_curves: dict[int, set[int]] = {}
+    for curve_id, endpoints in curve_endpoints.items():
+        for point_id in set(endpoints):
+            point_to_curves.setdefault(point_id, set()).add(curve_id)
+
+    def trace_chain(start_curve: int, start_point: int) -> list[int]:
+        chain = []
+        current_curve = start_curve
+        previous_point = start_point
+        while current_curve not in chain:
+            chain.append(current_curve)
+            first_point, second_point = curve_endpoints[current_curve]
+            current_point = (
+                second_point if first_point == previous_point else first_point
+            )
+            adjacent_curves = point_to_curves[current_point]
+            if len(adjacent_curves) != 2:
+                break
+            next_curve = next(
+                curve_id for curve_id in adjacent_curves if curve_id != current_curve
+            )
+            previous_point = current_point
+            current_curve = next_curve
+        return chain
+
+    chains = []
+    assigned_curves = set()
+    for point_id, adjacent_curves in sorted(point_to_curves.items()):
+        if len(adjacent_curves) == 2:
+            continue
+        for curve_id in sorted(adjacent_curves):
+            if curve_id in assigned_curves:
+                continue
+            chain = trace_chain(curve_id, point_id)
+            assigned_curves.update(chain)
+            if len(chain) > 1:
+                chains.append(chain)
+
+    for curve_id, endpoints in sorted(curve_endpoints.items()):
+        if curve_id in assigned_curves:
+            continue
+        chain = trace_chain(curve_id, endpoints[0])
+        assigned_curves.update(chain)
+        if len(chain) > 1:
+            chains.append(chain)
+
+    return chains
+
+
+def apply_degree_two_curve_compounds(mesh_def: dict[str, Any]) -> None:
+    """Apply compound meshing constraints for curves joined at degree-two vertices."""
+    enabled = mesh_def.get("compound_curves_at_degree_2_vertices", False)
+    if not isinstance(enabled, bool):
+        raise TypeError("'compound_curves_at_degree_2_vertices' must be a boolean.")
+    if not enabled:
+        return
+
+    chains = _degree_two_curve_chains()
+    for chain in chains:
+        gmsh.model.mesh.setCompound(1, chain)
+    print(
+        f"Configured {len(chains)} compound curve chains through degree-two vertices."
+    )
+
+
 def _surface_boundary_curves(surface_id: int) -> list[int]:
     boundary = gmsh.model.getBoundary([(2, surface_id)], oriented=False)
     return [tag for dim, tag in boundary if dim == 1]
@@ -3885,6 +3975,212 @@ def apply_mesh_size_bounds(mesh_def: dict[str, Any]) -> None:
         gmsh.option.setNumber("Mesh.MeshSizeMax", float(max_size))
 
 
+def apply_surface_size_limits(mesh_def: dict[str, Any]) -> None:
+    """Apply optional maximum element sizes to selected surfaces."""
+    entries = mesh_def.get("surface_size_limits", [])
+    if not entries:
+        return
+    if not isinstance(entries, list):
+        raise TypeError("'surface_size_limits' must be a list.")
+
+    available_surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    surface_size_limits: dict[int, float] = {}
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            raise TypeError(f"Surface size limit {index} must be an object.")
+
+        surface_ids = entry.get("surfaces")
+        if not isinstance(surface_ids, list) or not surface_ids:
+            raise ValueError(
+                f"Surface size limit {index} must define a non-empty 'surfaces' list."
+            )
+        surface_ids = [int(surface_id) for surface_id in surface_ids]
+        unknown_surface_ids = sorted(set(surface_ids) - available_surface_ids)
+        if unknown_surface_ids:
+            raise ValueError(
+                f"Surface size limit {index} references unknown surfaces "
+                f"{unknown_surface_ids}."
+            )
+
+        max_size = float(entry["max_element_size"])
+        if max_size <= 0.0:
+            raise ValueError(
+                f"Surface size limit {index} max_element_size must be positive."
+            )
+
+        for surface_id in surface_ids:
+            previous_max_size = surface_size_limits.get(surface_id)
+            surface_size_limits[surface_id] = (
+                max_size
+                if previous_max_size is None
+                else min(previous_max_size, max_size)
+            )
+
+    def limit_surface_size(
+        dim: int, tag: int, _x: float, _y: float, _z: float, lc: float
+    ) -> float:
+        if dim != 2:
+            return lc
+        return min(lc, surface_size_limits.get(tag, lc))
+
+    gmsh.model.mesh.setSizeCallback(limit_surface_size)
+
+
+def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
+    """Configure one AttractorAnisoCurve background mesh field."""
+    refinement = mesh_def.get("anisotropic_curve_refinement")
+    if refinement is None:
+        return
+    if not isinstance(refinement, dict):
+        raise TypeError("'anisotropic_curve_refinement' must be an object.")
+
+    curve_ids = refinement.get("curves")
+    if not isinstance(curve_ids, list) or not curve_ids:
+        raise ValueError(
+            "'anisotropic_curve_refinement' must define a non-empty 'curves' list."
+        )
+    curve_ids = [int(curve_id) for curve_id in curve_ids]
+    available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
+    unknown_curve_ids = sorted(set(curve_ids) - available_curve_ids)
+    if unknown_curve_ids:
+        raise ValueError(
+            "anisotropic_curve_refinement references unknown curves "
+            f"{unknown_curve_ids}."
+        )
+
+    sampling = refinement.get("sampling")
+    if isinstance(sampling, bool) or not isinstance(sampling, int) or sampling <= 0:
+        raise ValueError(
+            "anisotropic_curve_refinement sampling must be a positive integer."
+        )
+
+    option_names = {
+        "size_min_normal": "SizeMinNormal",
+        "size_min_tangent": "SizeMinTangent",
+        "size_max_normal": "SizeMaxNormal",
+        "size_max_tangent": "SizeMaxTangent",
+        "dist_min": "DistMin",
+        "dist_max": "DistMax",
+    }
+    option_values = {}
+    for config_name, gmsh_name in option_names.items():
+        try:
+            value = float(refinement[config_name])
+        except KeyError as error:
+            raise ValueError(
+                f"anisotropic_curve_refinement must define {config_name!r}."
+            ) from error
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"anisotropic_curve_refinement {config_name!r} must be numeric."
+            ) from error
+        if value <= 0.0:
+            raise ValueError(
+                f"anisotropic_curve_refinement {config_name!r} must be positive."
+            )
+        option_values[gmsh_name] = value
+
+    if option_values["DistMax"] < option_values["DistMin"]:
+        raise ValueError(
+            "anisotropic_curve_refinement dist_max must be greater than or equal "
+            "to dist_min."
+        )
+
+    field_id = gmsh.model.mesh.field.add("AttractorAnisoCurve")
+    gmsh.model.mesh.field.setNumbers(field_id, "CurvesList", curve_ids)
+    gmsh.model.mesh.field.setNumber(field_id, "Sampling", sampling)
+    for option_name, value in option_values.items():
+        gmsh.model.mesh.field.setNumber(field_id, option_name, value)
+    gmsh.model.mesh.field.setAsBackgroundMesh(field_id)
+
+
+def apply_boundary_layers(mesh_def: dict[str, Any]) -> None:
+    """Configure Gmsh boundary-layer fields from the mesh definition."""
+    entries = mesh_def.get("boundary_layers", [])
+    if not entries:
+        return
+    if not isinstance(entries, list):
+        raise TypeError("'boundary_layers' must be a list.")
+
+    available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
+    available_surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            raise TypeError(f"Boundary layer {index} must be an object.")
+
+        curve_ids = entry.get("curves")
+        if not isinstance(curve_ids, list) or not curve_ids:
+            raise ValueError(
+                f"Boundary layer {index} must define a non-empty 'curves' list."
+            )
+        curve_ids = [int(curve_id) for curve_id in curve_ids]
+        unknown_curve_ids = sorted(set(curve_ids) - available_curve_ids)
+        if unknown_curve_ids:
+            raise ValueError(
+                f"Boundary layer {index} references unknown curves "
+                f"{unknown_curve_ids}."
+            )
+
+        surface_ids = entry.get("surfaces")
+        if not isinstance(surface_ids, list) or not surface_ids:
+            raise ValueError(
+                f"Boundary layer {index} must define a non-empty 'surfaces' list."
+            )
+        surface_ids = [int(surface_id) for surface_id in surface_ids]
+        unknown_surface_ids = sorted(set(surface_ids) - available_surface_ids)
+        if unknown_surface_ids:
+            raise ValueError(
+                f"Boundary layer {index} references unknown surfaces "
+                f"{unknown_surface_ids}."
+            )
+
+        curve_to_surfaces = {
+            curve_id: {int(surface_id) for surface_id in gmsh.model.getAdjacencies(1, curve_id)[0]}
+            for curve_id in curve_ids
+        }
+        for surface_id in surface_ids:
+            surface_curve_ids = [
+                curve_id
+                for curve_id in curve_ids
+                if surface_id in curve_to_surfaces[curve_id]
+            ]
+            if not surface_curve_ids:
+                raise ValueError(
+                    f"Boundary layer {index} surface {surface_id} is not adjacent "
+                    f"to any configured curve."
+                )
+
+            excluded_surface_ids = sorted(
+                set().union(
+                    *(curve_to_surfaces[curve_id] for curve_id in surface_curve_ids)
+                )
+                - {surface_id}
+            )
+            field_id = gmsh.model.mesh.field.add("BoundaryLayer")
+            gmsh.model.mesh.field.setNumbers(
+                field_id, "CurvesList", surface_curve_ids
+            )
+            if excluded_surface_ids:
+                gmsh.model.mesh.field.setNumbers(
+                    field_id, "ExcludedSurfacesList", excluded_surface_ids
+                )
+            gmsh.model.mesh.field.setNumber(field_id, "Size", float(entry["size"]))
+            gmsh.model.mesh.field.setNumber(
+                field_id, "Thickness", float(entry["thickness"])
+            )
+            gmsh.model.mesh.field.setNumber(
+                field_id, "NbLayers", int(entry["n_layers"])
+            )
+            gmsh.model.mesh.field.setNumber(field_id, "Ratio", float(entry["ratio"]))
+            gmsh.model.mesh.field.setNumber(
+                field_id, "Quads", int(bool(entry.get("quads", False)))
+            )
+            gmsh.model.mesh.field.setNumber(
+                field_id, "SizeFar", float(entry["size_far"])
+            )
+            gmsh.model.mesh.field.setAsBoundaryLayer(field_id)
+
+
 def _surface_meshing_algorithm_code(algorithm: Any) -> int:
     if isinstance(algorithm, int):
         return algorithm
@@ -3911,6 +4207,14 @@ def _surface_meshing_algorithm_code(algorithm: Any) -> int:
             f"Supported names: {sorted(algorithm_map)}."
         )
     return algorithm_map[algorithm_name]
+
+
+def apply_global_surface_meshing_algorithm(mesh_def: dict[str, Any]) -> None:
+    """Set the default 2D meshing algorithm when requested."""
+    algorithm = mesh_def.get("surface_meshing_algorithm")
+    if algorithm is None:
+        return
+    gmsh.option.setNumber("Mesh.Algorithm", _surface_meshing_algorithm_code(algorithm))
 
 
 def apply_surface_meshing_algorithms(mesh_def: dict[str, Any]) -> None:
@@ -4148,10 +4452,13 @@ def load_mesh_def(mesh_def_file: Path) -> dict[str, Any]:
 
 def normalize_mesh_def(mesh_def: dict[str, Any]) -> dict[str, Any]:
     expected_sections = {"geometry definition", "mesh definition"}
+    optional_top_level_keys = {"compound_curves_at_degree_2_vertices"}
     actual_sections = set(mesh_def)
-    if actual_sections != expected_sections:
+    if actual_sections - optional_top_level_keys != expected_sections:
         missing_sections = sorted(expected_sections - actual_sections)
-        extra_sections = sorted(actual_sections - expected_sections)
+        extra_sections = sorted(
+            actual_sections - expected_sections - optional_top_level_keys
+        )
         details = []
         if missing_sections:
             details.append(f"missing {missing_sections}")
@@ -4174,6 +4481,10 @@ def normalize_mesh_def(mesh_def: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     normalized.update(copy.deepcopy(geometry_def))
     normalized.update(copy.deepcopy(mesh_settings))
+    if "compound_curves_at_degree_2_vertices" in mesh_def:
+        normalized["compound_curves_at_degree_2_vertices"] = copy.deepcopy(
+            mesh_def["compound_curves_at_degree_2_vertices"]
+        )
 
     top_level_curve_sequence_keys = {
         "automatic_curve_sequences",
@@ -4220,7 +4531,9 @@ def generate_surface_mesh(
     gmsh.initialize()
     try:
         gmsh.option.setNumber("General.Terminal", 1)
+        configure_gmsh_point_display()
         apply_default_gmsh_thread_limit()
+        apply_gmsh_thread_overrides(mesh_def)
         gmsh.option.setNumber("Mesh.SaveAll", 1)
         if output_file is not None and output_file.suffix.lower() == ".msh":
             gmsh.option.setNumber(
@@ -4232,17 +4545,22 @@ def generate_surface_mesh(
         apply_geometry_preprocessing(mesh_def, imported_entities)
         apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
+        apply_degree_two_curve_compounds(mesh_def)
 
         apply_mesh_size_bounds(mesh_def)
+        apply_surface_size_limits(mesh_def)
+        apply_anisotropic_curve_refinement(mesh_def)
 
         mesh_def = expand_mesh_zones(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
         mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
         complete_surface_boundary_curves(mesh_def, curve_constraints)
         apply_transfinite_surfaces(mesh_def)
+        apply_global_surface_meshing_algorithm(mesh_def)
         apply_surface_meshing_algorithms(mesh_def)
         if recombine:
             apply_structured_surface_recombination(mesh_def)
+        apply_boundary_layers(mesh_def)
 
         if not mesh:
             if show:
