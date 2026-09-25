@@ -53,7 +53,7 @@
           420
         ],
         "sampling": 1000,
-        "size_min_normal": 0.1,
+        "size_min_normal": 0.3,
         "size_min_tangent": 1.0,
         "size_max_normal": 0.3,
         "size_max_tangent": 1.0,
