@@ -82,10 +82,9 @@ mesh options are optional:
 | --- | --- |
 | `min element size` / `min_element_size` | Global Gmsh minimum element size. |
 | `max element size` / `max_element_size` | Global Gmsh maximum element size. |
-| `max_num_threads_2d` | Optional positive-integer override for `Mesh.MaxNumThreads2D`. |
 | `surface_meshing_algorithm` | Optional global 2D meshing algorithm. |
 | `surface_size_limits` | Per-surface maximum sizes. |
-| `anisotropic_curve_refinement` | One `AttractorAnisoCurve` background sizing field. |
+| `anisotropic_curve_refinements` | One or more `AttractorAnisoCurve` background sizing fields. |
 | `boundary_layers` | Boundary-layer fields applied along selected curves and surfaces. |
 | `surface_meshing_algorithms` | Per-surface unstructured meshing algorithm. |
 | `unstructured_surfaces` | Surface tags deliberately excluded from transfinite/recombined meshing. |
@@ -111,30 +110,49 @@ POC2, all other surfaces are still subject to the global `max_element_size` of
 
 #### Anisotropic curve refinement
 
-`anisotropic_curve_refinement` creates a Gmsh `AttractorAnisoCurve` background
-field.  It refines independently normal and tangent to the nearest listed curve;
+`anisotropic_curve_refinements` creates one Gmsh `AttractorAnisoCurve` field per
+entry.  Each field refines independently normal and tangent to the nearest listed curve;
 the normal and tangent sizes transition from their minimum values at `dist_min` to
 their maximum values at `dist_max`.
 
 ```json
 {
-  "anisotropic_curve_refinement": {
-    "curves": [407, 416, 420],
-    "sampling": 1000,
-    "size_min_normal": 0.1,
-    "size_min_tangent": 3.0,
-    "size_max_normal": 3.0,
-    "size_max_tangent": 3.0,
-    "dist_min": 1.0,
-    "dist_max": 20.0
-  }
+  "anisotropic_curve_refinements": [
+    {
+      "curves": [407, 416, 420],
+      "sampling": 1000,
+      "size_min_normal": 0.1,
+      "size_min_tangent": 1.0,
+      "size_max_normal": 0.3,
+      "size_max_tangent": 1.0,
+      "dist_min": 1.0,
+      "dist_max": 5.0
+    },
+    {
+      "curves": [429, 108, 110, 428, 96, 792, 218, 427, 171, 106, 105],
+      "sampling": 1000,
+      "size_min_normal": 1.0,
+      "size_min_tangent": 3.0,
+      "size_max_normal": 3.0,
+      "size_max_tangent": 3.0,
+      "dist_min": 1.0,
+      "dist_max": 20.0
+    }
+  ]
 }
 ```
 
 All listed curves must exist in the imported model.  `sampling` must be a positive
 integer; every size and distance must be positive; and `dist_max` must be at least
-`dist_min`.  A mesh definition supports one background field.  Per-surface size
-limits run afterward and can further reduce the size returned by this field.
+`dist_min`.  Multiple refinements are combined with a Gmsh `MinAniso` field.  It
+intersects their directional metrics, preserving normal and tangential sizing where
+their regions overlap.  Per-surface size limits run afterward and can further reduce
+that size.  The script generates the curve mesh before installing these fields, so
+an unconstrained refinement curve receives uniform transfinite spacing from
+`size_min_tangent`; explicit transfinite definitions take precedence.  The
+anisotropic fields then control the surface mesh.  The earlier singular
+`anisotropic_curve_refinement` key remains supported for one field, but it cannot
+be used together with the plural key.
 
 #### Boundary layers
 
@@ -187,8 +205,10 @@ provides the same exclusion without selecting a specific algorithm.
 
 Set `surface_meshing_algorithm` to one of the same algorithm names (or its Gmsh
 numeric code) to select the global default.  A `surface_meshing_algorithms` entry
-overrides that default for its listed surfaces.  `max_num_threads_2d` sets only the
-2D thread cap and therefore overrides the script's normal automatic 2D limit.
+overrides that default for its listed surfaces.  The script normally uses one
+fewer than the available physical cores for meshing.  When BAMG is selected globally
+or on any surface, the script retains that limit for general, 1D, and 3D meshing but
+limits 2D meshing to one thread.
 
 ## Structured mesh zones
 
@@ -281,16 +301,10 @@ Duplicate physical names receive numeric suffixes.
 
 ## Relation to `POC2.geo`
 
-The POC2 JSON now reproduces the `.geo` field behavior with an
-`AttractorAnisoCurve` background field on curves `407`, `416`, and `420`: sampling
-`1000`, normal sizes `0.1` to `3.0`, tangent size `3.0`, and transition distances
-`1.0` to `20.0`.  It also sets Frontal-Delaunay globally, BAMG on surface `95`, and
-a 2D thread cap of `1`.
-
-The existing POC2 boundary layer on curves `429` and `108` remains independent of
-the anisotropic background field.  It creates layered elements near those curves;
-the background field provides distance-based anisotropic sizing around its own
-curves.
+When a definition uses BAMG, the script automatically applies the one-thread 2D
+safeguard while retaining the normal core-count-minus-one limit for 1D meshing.
+The POC2 example combines its two anisotropic refinements with BAMG on surface `95`;
+it does not use a boundary layer.
 
 ## Practical workflow
 

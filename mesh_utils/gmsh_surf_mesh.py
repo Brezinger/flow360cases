@@ -46,16 +46,29 @@ def apply_default_gmsh_thread_limit() -> int:
     return thread_count
 
 
-def apply_gmsh_thread_overrides(mesh_def: dict[str, Any]) -> None:
-    """Apply optional per-dimension Gmsh thread limits."""
-    thread_count_2d = mesh_def.get("max_num_threads_2d")
-    if thread_count_2d is None:
-        return
-    if isinstance(thread_count_2d, bool) or not isinstance(thread_count_2d, int):
-        raise TypeError("'max_num_threads_2d' must be a positive integer.")
-    if thread_count_2d <= 0:
-        raise ValueError("'max_num_threads_2d' must be a positive integer.")
-    gmsh.option.setNumber("Mesh.MaxNumThreads2D", thread_count_2d)
+def _is_bamg_algorithm(algorithm: Any) -> bool:
+    return algorithm == 7 or (
+        isinstance(algorithm, str) and algorithm.strip().lower() == "bamg"
+    )
+
+
+def _uses_bamg(mesh_def: dict[str, Any]) -> bool:
+    if _is_bamg_algorithm(mesh_def.get("surface_meshing_algorithm")):
+        return True
+
+    entries = mesh_def.get("surface_meshing_algorithms", [])
+    return isinstance(entries, list) and any(
+        isinstance(entry, dict) and _is_bamg_algorithm(entry.get("algorithm"))
+        for entry in entries
+    )
+
+
+def apply_gmsh_thread_limit(mesh_def: dict[str, Any]) -> int:
+    """Apply default limits, serializing BAMG surface meshing."""
+    thread_count = apply_default_gmsh_thread_limit()
+    if _uses_bamg(mesh_def):
+        gmsh.option.setNumber("Mesh.MaxNumThreads2D", 1)
+    return thread_count
 
 
 def configure_gmsh_point_display() -> None:
@@ -4026,34 +4039,80 @@ def apply_surface_size_limits(mesh_def: dict[str, Any]) -> None:
     gmsh.model.mesh.setSizeCallback(limit_surface_size)
 
 
-def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
-    """Configure one AttractorAnisoCurve background mesh field."""
-    refinement = mesh_def.get("anisotropic_curve_refinement")
-    if refinement is None:
+def _anisotropic_curve_refinement_entries(
+    mesh_def: dict[str, Any],
+) -> list[dict[str, Any]]:
+    singular_refinement = mesh_def.get("anisotropic_curve_refinement")
+    plural_refinements = mesh_def.get("anisotropic_curve_refinements")
+    if singular_refinement is not None and plural_refinements is not None:
+        raise ValueError(
+            "Define either 'anisotropic_curve_refinement' or "
+            "'anisotropic_curve_refinements', not both."
+        )
+    if singular_refinement is not None:
+        if not isinstance(singular_refinement, dict):
+            raise TypeError("'anisotropic_curve_refinement' must be an object.")
+        return [singular_refinement]
+    if plural_refinements is None:
+        return []
+    if not isinstance(plural_refinements, list) or not plural_refinements:
+        raise ValueError(
+            "'anisotropic_curve_refinements' must be a non-empty list."
+        )
+    if not all(isinstance(refinement, dict) for refinement in plural_refinements):
+        raise TypeError(
+            "Each 'anisotropic_curve_refinements' entry must be an object."
+        )
+    return plural_refinements
+
+
+def apply_anisotropic_curve_tangential_constraints(
+    mesh_def: dict[str, Any],
+    constraints: dict[int, CurveConstraint],
+) -> None:
+    """Set 1D spacing from anisotropic tangent sizes where no constraint exists."""
+    refinements = _anisotropic_curve_refinement_entries(mesh_def)
+    if not refinements:
         return
-    if not isinstance(refinement, dict):
-        raise TypeError("'anisotropic_curve_refinement' must be an object.")
 
-    curve_ids = refinement.get("curves")
-    if not isinstance(curve_ids, list) or not curve_ids:
-        raise ValueError(
-            "'anisotropic_curve_refinement' must define a non-empty 'curves' list."
-        )
-    curve_ids = [int(curve_id) for curve_id in curve_ids]
     available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
-    unknown_curve_ids = sorted(set(curve_ids) - available_curve_ids)
-    if unknown_curve_ids:
-        raise ValueError(
-            "anisotropic_curve_refinement references unknown curves "
-            f"{unknown_curve_ids}."
-        )
+    for refinement_index, refinement in enumerate(refinements, start=1):
+        label = f"anisotropic curve refinement {refinement_index}"
+        curve_ids = refinement.get("curves")
+        if not isinstance(curve_ids, list) or not curve_ids:
+            raise ValueError(f"{label} must define a non-empty 'curves' list.")
+        curve_ids = [int(curve_id) for curve_id in curve_ids]
+        unknown_curve_ids = sorted(set(curve_ids) - available_curve_ids)
+        if unknown_curve_ids:
+            raise ValueError(f"{label} references unknown curves {unknown_curve_ids}.")
 
-    sampling = refinement.get("sampling")
-    if isinstance(sampling, bool) or not isinstance(sampling, int) or sampling <= 0:
-        raise ValueError(
-            "anisotropic_curve_refinement sampling must be a positive integer."
-        )
+        try:
+            tangent_size = float(refinement["size_min_tangent"])
+        except KeyError as error:
+            raise ValueError(f"{label} must define 'size_min_tangent'.") from error
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{label} 'size_min_tangent' must be numeric.") from error
+        if tangent_size <= 0.0:
+            raise ValueError(f"{label} 'size_min_tangent' must be positive.")
 
+        for curve_id in curve_ids:
+            if curve_id in constraints:
+                continue
+            n_pts = max(2, math.ceil(_curve_length(curve_id) / tangent_size) + 1)
+            _set_curve_constraint(
+                curve_id,
+                CurveConstraint(n_pts, "Progression", 1.0),
+                constraints,
+            )
+
+
+def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
+    """Configure anisotropic curve fields and their shared background field."""
+    refinements = _anisotropic_curve_refinement_entries(mesh_def)
+    if not refinements:
+        return
+
+    available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
     option_names = {
         "size_min_normal": "SizeMinNormal",
         "size_min_tangent": "SizeMinTangent",
@@ -4062,36 +4121,48 @@ def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
         "dist_min": "DistMin",
         "dist_max": "DistMax",
     }
-    option_values = {}
-    for config_name, gmsh_name in option_names.items():
-        try:
-            value = float(refinement[config_name])
-        except KeyError as error:
-            raise ValueError(
-                f"anisotropic_curve_refinement must define {config_name!r}."
-            ) from error
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                f"anisotropic_curve_refinement {config_name!r} must be numeric."
-            ) from error
-        if value <= 0.0:
-            raise ValueError(
-                f"anisotropic_curve_refinement {config_name!r} must be positive."
-            )
-        option_values[gmsh_name] = value
+    field_ids = []
+    for refinement_index, refinement in enumerate(refinements, start=1):
+        label = f"anisotropic curve refinement {refinement_index}"
+        curve_ids = refinement.get("curves")
+        if not isinstance(curve_ids, list) or not curve_ids:
+            raise ValueError(f"{label} must define a non-empty 'curves' list.")
+        curve_ids = [int(curve_id) for curve_id in curve_ids]
+        unknown_curve_ids = sorted(set(curve_ids) - available_curve_ids)
+        if unknown_curve_ids:
+            raise ValueError(f"{label} references unknown curves {unknown_curve_ids}.")
 
-    if option_values["DistMax"] < option_values["DistMin"]:
-        raise ValueError(
-            "anisotropic_curve_refinement dist_max must be greater than or equal "
-            "to dist_min."
-        )
+        sampling = refinement.get("sampling")
+        if isinstance(sampling, bool) or not isinstance(sampling, int) or sampling <= 0:
+            raise ValueError(f"{label} sampling must be a positive integer.")
 
-    field_id = gmsh.model.mesh.field.add("AttractorAnisoCurve")
-    gmsh.model.mesh.field.setNumbers(field_id, "CurvesList", curve_ids)
-    gmsh.model.mesh.field.setNumber(field_id, "Sampling", sampling)
-    for option_name, value in option_values.items():
-        gmsh.model.mesh.field.setNumber(field_id, option_name, value)
-    gmsh.model.mesh.field.setAsBackgroundMesh(field_id)
+        option_values = {}
+        for config_name, gmsh_name in option_names.items():
+            try:
+                value = float(refinement[config_name])
+            except KeyError as error:
+                raise ValueError(f"{label} must define {config_name!r}.") from error
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{label} {config_name!r} must be numeric.") from error
+            if value <= 0.0:
+                raise ValueError(f"{label} {config_name!r} must be positive.")
+            option_values[gmsh_name] = value
+
+        if option_values["DistMax"] < option_values["DistMin"]:
+            raise ValueError(f"{label} dist_max must be greater than or equal to dist_min.")
+
+        field_id = gmsh.model.mesh.field.add("AttractorAnisoCurve")
+        field_ids.append(field_id)
+        gmsh.model.mesh.field.setNumbers(field_id, "CurvesList", curve_ids)
+        gmsh.model.mesh.field.setNumber(field_id, "Sampling", sampling)
+        for option_name, value in option_values.items():
+            gmsh.model.mesh.field.setNumber(field_id, option_name, value)
+
+    background_field_id = field_ids[0]
+    if len(field_ids) > 1:
+        background_field_id = gmsh.model.mesh.field.add("MinAniso")
+        gmsh.model.mesh.field.setNumbers(background_field_id, "FieldsList", field_ids)
+    gmsh.model.mesh.field.setAsBackgroundMesh(background_field_id)
 
 
 def apply_boundary_layers(mesh_def: dict[str, Any]) -> None:
@@ -4532,8 +4603,7 @@ def generate_surface_mesh(
     try:
         gmsh.option.setNumber("General.Terminal", 1)
         configure_gmsh_point_display()
-        apply_default_gmsh_thread_limit()
-        apply_gmsh_thread_overrides(mesh_def)
+        apply_gmsh_thread_limit(mesh_def)
         gmsh.option.setNumber("Mesh.SaveAll", 1)
         if output_file is not None and output_file.suffix.lower() == ".msh":
             gmsh.option.setNumber(
@@ -4549,10 +4619,10 @@ def generate_surface_mesh(
 
         apply_mesh_size_bounds(mesh_def)
         apply_surface_size_limits(mesh_def)
-        apply_anisotropic_curve_refinement(mesh_def)
 
         mesh_def = expand_mesh_zones(mesh_def)
         curve_constraints = apply_transfinite_curves(mesh_def)
+        apply_anisotropic_curve_tangential_constraints(mesh_def, curve_constraints)
         mesh_def = apply_automatic_transfinite_surfaces(mesh_def)
         complete_surface_boundary_curves(mesh_def, curve_constraints)
         apply_transfinite_surfaces(mesh_def)
@@ -4567,6 +4637,10 @@ def generate_surface_mesh(
                 show_gmsh()
             return
 
+        # Mesh CAD curves before installing anisotropic fields: evaluating these
+        # fields while Gmsh parametrizes unrelated complex B-splines can stall.
+        gmsh.model.mesh.generate(1)
+        apply_anisotropic_curve_refinement(mesh_def)
         gmsh.model.mesh.generate(2)
 
         apply_export_surface_names(mesh_def)

@@ -36,45 +36,29 @@
     }
   },
   "mesh definition": {
-    "max_num_threads_2d": 1,
     "surface_meshing_algorithm": "frontal-delaunay",
     "surface_meshing_algorithms": [
       {
         "surfaces": [
-          95
+          83, 89, 93, 90, 87, 92
         ],
         "algorithm": "bamg"
       }
     ],
-    "anisotropic_curve_refinement": {
-      "curves": [
-        407,
-        416,
-        420
-      ],
-      "sampling": 1000,
-      "size_min_normal": 0.1,
-      "size_min_tangent": 3.0,
-      "size_max_normal": 3.0,
-      "size_max_tangent": 3.0,
-      "dist_min": 1.0,
-      "dist_max": 20.0
-    },
-    "boundary_layers": [
+    "anisotropic_curve_refinements": [
       {
         "curves": [
-          429,
-          108
+          407,
+          416,
+          420
         ],
-        "surfaces": [
-          8
-        ],
-        "size": 1.0,
-        "thickness": 20.0,
-        "n_layers": 10,
-        "ratio": 1.2,
-        "quads": true,
-        "size_far": 3.0
+        "sampling": 1000,
+        "size_min_normal": 0.1,
+        "size_min_tangent": 1.0,
+        "size_max_normal": 0.3,
+        "size_max_tangent": 1.0,
+        "dist_min": 1.0,
+        "dist_max": 5.0
       }
     ],
     "max_element_size": 10.0,
