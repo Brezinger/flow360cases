@@ -28,19 +28,14 @@ if str(MESH_UTILS_DIR) not in sys.path:
 from ugrid_to_cgns import write_surface_cgns
 
 
-GEOMETRY_STEP_FILE = Path(__file__).resolve().with_name(
-    "EM_002_DS_12_02-EVE100_CCW_LIFTER4B_ID20025v2_tmc50p_h60wide_20260708_w_spacer.STEP"
-)
-GEOMETRY_CSM_FILE = GEOMETRY_STEP_FILE.with_suffix(".csm")
-GEOMETRY_FILE = GEOMETRY_STEP_FILE.with_suffix(".egads")
+GEOMETRY_STEP_FILE = None
+GEOMETRY_CSM_FILE = None
+GEOMETRY_FILE = None
 AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
     "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
 )
 LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_assets"
-DEFAULT_SURFACE_MESH_FILE = (
-    LEGACY_SURFACE_MESH_ASSETS_DIR
-    / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_surfaceMesh.lb8.ugrid"
-)
+DEFAULT_SURFACE_MESH_FILE = Path(__file__).resolve().with_name("POC2.cgns")
 DEFAULT_STL_SURFACE_MESH_FILE = (
     LEGACY_SURFACE_MESH_ASSETS_DIR
     / "sm-9efca25c-8a34-4df3-ad5e-ba7088e1a0a8_surfaceAll.stl"
@@ -78,9 +73,9 @@ class BladeVortexBoxRefinementSpec:
 class CaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
-    name: str = "DUC_EVE_4blade_noise_from_geometry"
+    name: str = "DUC POC2"
     geometry_length_unit: str = "mm"
-    flow360_folder_path: tuple[str, ...] = ("DUC", "EVE Lifter 4 blade prop")
+    flow360_folder_path: tuple[str, ...] = ("DUC", "POC2")
 
     propeller_radius: float = 1.4
 
@@ -94,7 +89,7 @@ class CaseSetup:
     temperature_offset_deg_c: float = 20.0
 
     rotation_axis: tuple[float, float, float] = (0.0, 0.0, 1.0)
-    rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0184375)
 
     # ---------------------------------------
     # consecutive refined time stepping setup
@@ -104,7 +99,8 @@ class CaseSetup:
     parent_case_id: str | None = None
     physical_steps: int = 600
     max_pseudo_steps: int = 35
-    rpm: float = 1075.0
+    rpm: float = 1000.0
+    rotation_direction: int = -1
     wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.01
     navier_stokes_order_of_accuracy: int = 1
@@ -121,7 +117,8 @@ class CaseSetup:
     """time_steps_per_revolution: int = 120 * 6
     physical_steps: int = 3600
     max_pseudo_steps: int = 15
-    rpm: float = 1075.0 * 0.980047894
+    rpm: float = 1000.0
+    rotation_direction: int = -1
     wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
@@ -134,12 +131,13 @@ class CaseSetup:
     adaptive_cfl_convergence_limiting_factor: float = 1.0
     include_aeroacoustic_output: bool = False"""
     # ------
-    # step 2A
+    # step 2
     """time_steps_per_revolution: int = 120 * 16
     num_revolutions: int = 2
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
-    rpm: float = 1075.0 * 0.980047894 * 0.988510721
+    rpm: float = 1000.0
+    rotation_direction: int = -1
     wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
@@ -151,64 +149,6 @@ class CaseSetup:
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
     include_aeroacoustic_output: bool = False"""
-    # ------
-    # step 2B
-    """time_steps_per_revolution: int = 120 * 16
-    num_revolutions: int = 1
-    physical_steps: int = num_revolutions * time_steps_per_revolution
-    max_pseudo_steps: int = 12
-    rpm: float = 1076.228
-    wall_roughness_height: float = 1.0e-5
-    navier_stokes_relative_tolerance: float = 0.0175
-    navier_stokes_order_of_accuracy: int = 2
-    navier_stokes_linear_solver_max_iterations: int = 25
-    numerical_dissipation_factor: float = 0.5
-    low_mach_preconditioner: bool = True
-    adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 1.0e6
-    adaptive_cfl_max_relative_change: float = 50.0
-    adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False"""
-    # ------
-    # step 2C
-    """parent_case_id: str | None = "case-a5d80787-d004-44d8-9892-3d1844516cb0"
-    time_steps_per_revolution: int = 120 * 16
-    num_revolutions: int = 1
-    physical_steps: int = num_revolutions * time_steps_per_revolution
-    max_pseudo_steps: int = 12
-    rpm: float = 1070.902
-    wall_roughness_height: float = 1.0e-5
-    navier_stokes_relative_tolerance: float = 0.0175
-    navier_stokes_order_of_accuracy: int = 2
-    navier_stokes_linear_solver_max_iterations: int = 25
-    numerical_dissipation_factor: float = 0.5
-    low_mach_preconditioner: bool = True
-    adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 1.0e6
-    adaptive_cfl_max_relative_change: float = 50.0
-    adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False"""
-    # ------
-    # step 2D
-    """parent_case_id: str | None = "case-209d1630-20f5-4cba-928b-760d27e3939c"
-    time_steps_per_revolution: int = 120 * 16
-    num_revolutions: int = 1
-    physical_steps: int = num_revolutions * time_steps_per_revolution
-    max_pseudo_steps: int = 12
-    rpm: float = 1063.677
-    wall_roughness_height: float = 1.0e-5
-    navier_stokes_relative_tolerance: float = 0.0175
-    navier_stokes_order_of_accuracy: int = 2
-    navier_stokes_linear_solver_max_iterations: int = 25
-    numerical_dissipation_factor: float = 0.5
-    low_mach_preconditioner: bool = True
-    adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 1.0e6
-    adaptive_cfl_max_relative_change: float = 50.0
-    adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False
-    aeroacoustic_solver_start_time_s: float = 0.0
-    aeroacoustic_force_clean_start: bool = False"""
     # ------
     # step 3
     """parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
@@ -216,7 +156,8 @@ class CaseSetup:
     num_revolutions: int = 2 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 8
-    rpm: float = 1063.677
+    rpm: float = 1000.0
+    rotation_direction: int = -1
     wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
@@ -237,7 +178,8 @@ class CaseSetup:
     num_revolutions: int = 3 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 10
-    rpm: float = 1063.677
+    rpm: float = 1000.0
+    rotation_direction: int = -1
     wall_roughness_height: float = 0.
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
@@ -258,7 +200,7 @@ class CaseSetup:
     # supplied volume mesh, so it does not define these. Keep these conservative
     # until the CAD import tags and generated mesh are checked.
     rotation_volume_radius: float = 1.5
-    rotation_volume_height: float = 0.38625
+    rotation_volume_height: float = 0.423125
     octree_base_spacing: float = 0.00295898 * 1.234
     rotation_volume_spacing: float = octree_base_spacing * 2
     farfield_relative_size: float = 50
@@ -281,13 +223,17 @@ class CaseSetup:
     # surface normal flip. Use if surface mesh is generated with the legacy mesher and volume mesh with the beta mesher
     flip_uploaded_surface_mesh_normals: bool = True
 
+    def __post_init__(self) -> None:
+        if type(self.rotation_direction) is not int or self.rotation_direction not in (-1, 1):
+            raise ValueError("rotation_direction must be +1 or -1")
+
     @property
     def ref_area(self) -> float:
         return math.pi * self.propeller_radius**2
 
     @property
     def omega_rad_s(self) -> float:
-        return 2.0 * math.pi * self.rpm / 60.0
+        return self.rotation_direction * 2.0 * math.pi * self.rpm / 60.0
 
     @property
     def tip_speed_m_s(self) -> float:
@@ -313,9 +259,9 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
     ),
     VolumeCylinderRefinementSpec(
         name="intermediate_annulus",
-        center_z=-3.0944839,
+        center_z=-3.016105,
         z_min=-6.26221,
-        z_max=0.0732422,
+        z_max=0.23,
         inner_radius=1.06201,
         outer_radius=1.9043,
         spacing=CONFIG.octree_base_spacing * 2**3,
@@ -371,7 +317,7 @@ VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
 BLADE_VORTEX_REFINEMENTS: tuple[BladeVortexBoxRefinementSpec, ...] = (
     BladeVortexBoxRefinementSpec(
         name="Blade1+3Refinement",
-        center=(0.0, 0.0, 0.1),
+        center=(0.0, 0.0, 0.13),
         axes=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
         length=2.97,
         tangential_width=0.34,
@@ -1703,7 +1649,7 @@ def define_and_run_from_surface_mesh(
         if submit_draft_only and not generate_volume_mesh and not run_case:
             draft = project.run_case(
                 params=params,
-                name="DUC_EVE_4blade_noise_setup",
+                name="DUC_POC2_noise_setup",
                 use_beta_mesher=True,
                 use_geometry_AI=False,
                 fork_from=fork_from,
@@ -1727,7 +1673,7 @@ def define_and_run_from_surface_mesh(
             return project.id
         project.run_case(
             params=params,
-            name="DUC_EVE_4blade_noise_case",
+            name="DUC_POC2_noise_case",
             use_beta_mesher=True,
             use_geometry_AI=False,
             fork_from=fork_from,
@@ -1798,7 +1744,7 @@ def define_and_run(
         if submit_draft_only and not generate_volume_mesh and not run_case:
             draft = project.run_case(
                 params=params,
-                name="DUC_EVE_4blade_noise_setup",
+                name="DUC_POC2_noise_setup",
                 use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
                 fork_from=fork_from,
@@ -1850,17 +1796,17 @@ def define_and_run(
 def main():
 
     # surface mesh path
-    use_beta_mesher = False
+    """use_beta_mesher = False
     surface_mesh_file = None
     generate_volume_mesh = False
-    run_case = False
+    run_case = False"""
 
     # volume mesh path from the legacy surface mesh.
     # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
-    """surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
+    surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
-    run_case = False"""
+    run_case = False
 
     # fork case path
     """surface_mesh_file = None
@@ -1885,6 +1831,7 @@ def main():
         f"  Dynamic pressure: {dynamic_pressure.to('Pa').value:.2f} Pa "
         f"({dynamic_pressure.to('kPa').value:.3f} kPa)\n"
         f"  RPM: {CONFIG.rpm:.3f}\n"
+        f"  Rotation direction: {CONFIG.rotation_direction:+d}\n"
         f"  Omega: {CONFIG.omega_rad_s:.6f} rad/s\n"
         f"  Physical steps: {CONFIG.physical_steps}\n"
         f"  Time step size: {CONFIG.time_step_size_s:.9f} s\n"

@@ -1835,17 +1835,17 @@ def define_and_run(
 def main():
 
     # surface mesh path
-    use_beta_mesher = False
+    """use_beta_mesher = False
     surface_mesh_file = None
     generate_volume_mesh = False
-    run_case = False
+    run_case = False"""
 
     # volume mesh path from the legacy surface mesh.
     # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
-    """surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
+    surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
-    run_case = False"""
+    run_case = False
 
     # fork case path
     """surface_mesh_file = None
