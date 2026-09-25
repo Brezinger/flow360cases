@@ -56,6 +56,9 @@ def _uses_bamg(mesh_def: dict[str, Any]) -> bool:
     if _is_bamg_algorithm(mesh_def.get("surface_meshing_algorithm")):
         return True
 
+    if _anisotropic_refinement_surface_ids(mesh_def):
+        return True
+
     entries = mesh_def.get("surface_meshing_algorithms", [])
     return isinstance(entries, list) and any(
         isinstance(entry, dict) and _is_bamg_algorithm(entry.get("algorithm"))
@@ -2937,12 +2940,10 @@ def _automatic_zone_curve_entries(
 
 def _surface_meshing_algorithm_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
     entries = mesh_def.get("surface_meshing_algorithms", [])
-    if not entries:
-        return set()
-    if not isinstance(entries, list):
+    if entries and not isinstance(entries, list):
         raise TypeError("surface_meshing_algorithms must be a list.")
 
-    surface_ids = set()
+    surface_ids = _anisotropic_refinement_surface_ids(mesh_def)
     for entry in entries:
         if not isinstance(entry, dict):
             raise TypeError(
@@ -3129,7 +3130,10 @@ def _iter_curve_specs(
                 )
             )
         else:
-            group_invert_direction = _group_invert_direction(spec_invert_direction)
+            # Manual entries use invert_direction for the local CAD curve only.
+            # Automatic tracing supplies _group_invert_direction when it needs to
+            # reverse a virtual compound-curve distribution.
+            group_invert_direction = False
         n_pts, mesh_type, coef = _curve_spec_discretization(
             entry, spec_index, spec_count, spec_curve_ids
         )
@@ -3996,7 +4000,9 @@ def apply_surface_size_limits(mesh_def: dict[str, Any]) -> None:
     if not isinstance(entries, list):
         raise TypeError("'surface_size_limits' must be a list.")
 
-    available_surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    available_surface_ids = {
+        surface_id for _, surface_id in gmsh.model.getEntities(2)
+    }
     surface_size_limits: dict[int, float] = {}
     for index, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict):
@@ -4066,6 +4072,70 @@ def _anisotropic_curve_refinement_entries(
     return plural_refinements
 
 
+def _anisotropic_curve_refinement_surfaces(
+    refinement: dict[str, Any], label: str
+) -> list[int]:
+    surfaces = refinement.get("surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        raise ValueError(f"{label} must define a non-empty 'surfaces' list.")
+    return [int(surface_id) for surface_id in surfaces]
+
+
+def _anisotropic_curve_refinement_label(
+    refinement: dict[str, Any], refinement_index: int
+) -> str:
+    name = refinement.get("name")
+    if name is None:
+        return f"anisotropic curve refinement {refinement_index}"
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(
+            f"anisotropic curve refinement {refinement_index} name must be a non-empty string."
+        )
+    return f"anisotropic curve refinement {name!r}"
+
+
+def _anisotropic_refinement_surface_ids(mesh_def: dict[str, Any]) -> set[int]:
+    surface_ids = set()
+    for refinement_index, refinement in enumerate(
+        _anisotropic_curve_refinement_entries(mesh_def), start=1
+    ):
+        label = _anisotropic_curve_refinement_label(refinement, refinement_index)
+        surface_ids.update(_anisotropic_curve_refinement_surfaces(refinement, label))
+    return surface_ids
+
+
+def _anisotropic_refinement_surface_groups(
+    mesh_def: dict[str, Any],
+) -> list[tuple[list[tuple[int, dict[str, Any]]], set[int]]]:
+    """Group refinements whose target surfaces overlap."""
+    groups: list[tuple[list[tuple[int, dict[str, Any]]], set[int]]] = []
+    for refinement_index, refinement in enumerate(
+        _anisotropic_curve_refinement_entries(mesh_def), start=1
+    ):
+        label = _anisotropic_curve_refinement_label(refinement, refinement_index)
+        surface_ids = set(_anisotropic_curve_refinement_surfaces(refinement, label))
+        overlapping_group_indexes = [
+            group_index
+            for group_index, (_, group_surface_ids) in enumerate(groups)
+            if group_surface_ids.intersection(surface_ids)
+        ]
+        if not overlapping_group_indexes:
+            groups.append(([(refinement_index, refinement)], surface_ids))
+            continue
+
+        first_group_index = overlapping_group_indexes[0]
+        group_entries, group_surface_ids = groups[first_group_index]
+        group_entries.append((refinement_index, refinement))
+        group_surface_ids.update(surface_ids)
+        for group_index in reversed(overlapping_group_indexes[1:]):
+            merged_entries, merged_surface_ids = groups.pop(group_index)
+            group_entries.extend(merged_entries)
+            group_surface_ids.update(merged_surface_ids)
+        group_entries.sort(key=lambda entry: entry[0])
+
+    return groups
+
+
 def apply_anisotropic_curve_tangential_constraints(
     mesh_def: dict[str, Any],
     constraints: dict[int, CurveConstraint],
@@ -4077,7 +4147,8 @@ def apply_anisotropic_curve_tangential_constraints(
 
     available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
     for refinement_index, refinement in enumerate(refinements, start=1):
-        label = f"anisotropic curve refinement {refinement_index}"
+        label = _anisotropic_curve_refinement_label(refinement, refinement_index)
+        _anisotropic_curve_refinement_surfaces(refinement, label)
         curve_ids = refinement.get("curves")
         if not isinstance(curve_ids, list) or not curve_ids:
             raise ValueError(f"{label} must define a non-empty 'curves' list.")
@@ -4106,13 +4177,14 @@ def apply_anisotropic_curve_tangential_constraints(
             )
 
 
-def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
-    """Configure anisotropic curve fields and their shared background field."""
-    refinements = _anisotropic_curve_refinement_entries(mesh_def)
-    if not refinements:
-        return
-
+def _configure_anisotropic_curve_refinement_fields(
+    refinements: list[tuple[int, dict[str, Any]]],
+) -> int:
+    """Configure one background field for a connected refinement surface group."""
     available_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
+    available_surface_ids = {
+        surface_id for _, surface_id in gmsh.model.getEntities(2)
+    }
     option_names = {
         "size_min_normal": "SizeMinNormal",
         "size_min_tangent": "SizeMinTangent",
@@ -4121,9 +4193,15 @@ def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
         "dist_min": "DistMin",
         "dist_max": "DistMax",
     }
-    field_ids = []
-    for refinement_index, refinement in enumerate(refinements, start=1):
-        label = f"anisotropic curve refinement {refinement_index}"
+    attractor_field_ids = []
+    for refinement_index, refinement in refinements:
+        label = _anisotropic_curve_refinement_label(refinement, refinement_index)
+        surface_ids = _anisotropic_curve_refinement_surfaces(refinement, label)
+        unknown_surface_ids = sorted(set(surface_ids) - available_surface_ids)
+        if unknown_surface_ids:
+            raise ValueError(
+                f"{label} references unknown surfaces {unknown_surface_ids}."
+            )
         curve_ids = refinement.get("curves")
         if not isinstance(curve_ids, list) or not curve_ids:
             raise ValueError(f"{label} must define a non-empty 'curves' list.")
@@ -4152,17 +4230,64 @@ def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
             raise ValueError(f"{label} dist_max must be greater than or equal to dist_min.")
 
         field_id = gmsh.model.mesh.field.add("AttractorAnisoCurve")
-        field_ids.append(field_id)
         gmsh.model.mesh.field.setNumbers(field_id, "CurvesList", curve_ids)
         gmsh.model.mesh.field.setNumber(field_id, "Sampling", sampling)
         for option_name, value in option_values.items():
             gmsh.model.mesh.field.setNumber(field_id, option_name, value)
+        attractor_field_ids.append(field_id)
 
-    background_field_id = field_ids[0]
-    if len(field_ids) > 1:
-        background_field_id = gmsh.model.mesh.field.add("MinAniso")
-        gmsh.model.mesh.field.setNumbers(background_field_id, "FieldsList", field_ids)
-    gmsh.model.mesh.field.setAsBackgroundMesh(background_field_id)
+    merged_field_id = attractor_field_ids[0]
+    if len(attractor_field_ids) > 1:
+        merged_field_id = gmsh.model.mesh.field.add("MinAniso")
+        gmsh.model.mesh.field.setNumbers(
+            merged_field_id, "FieldsList", attractor_field_ids
+        )
+
+    gmsh.model.mesh.field.setAsBackgroundMesh(merged_field_id)
+    return merged_field_id
+
+
+def apply_anisotropic_curve_refinement(mesh_def: dict[str, Any]) -> None:
+    """Configure all anisotropic curve fields as one background field."""
+    refinements = _anisotropic_curve_refinement_entries(mesh_def)
+    if refinements:
+        _configure_anisotropic_curve_refinement_fields(
+            list(enumerate(refinements, start=1))
+        )
+
+
+def generate_anisotropic_surface_mesh(mesh_def: dict[str, Any]) -> None:
+    """Mesh anisotropic surfaces first, then mesh all remaining surfaces normally."""
+    refinement_groups = _anisotropic_refinement_surface_groups(mesh_def)
+    if not refinement_groups:
+        gmsh.model.mesh.generate(2)
+        return
+
+    all_surface_dim_tags = gmsh.model.getEntities(2)
+    visibility = {
+        surface_id: gmsh.model.getVisibility(2, surface_id)
+        for _, surface_id in all_surface_dim_tags
+    }
+    try:
+        for refinement_entries, surface_ids in refinement_groups:
+            _configure_anisotropic_curve_refinement_fields(refinement_entries)
+            target_dim_tags = [(2, surface_id) for surface_id in sorted(surface_ids)]
+            gmsh.model.setVisibility(all_surface_dim_tags, 0)
+            gmsh.model.setVisibility(target_dim_tags, 1)
+            gmsh.option.setNumber("Mesh.MeshOnlyVisible", 1)
+            gmsh.option.setNumber("Mesh.MeshOnlyEmpty", 1)
+            gmsh.model.mesh.generate(2)
+            gmsh.model.mesh.field.setAsBackgroundMesh(0)
+
+        gmsh.model.setVisibility(all_surface_dim_tags, 1)
+        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
+        gmsh.option.setNumber("Mesh.MeshOnlyEmpty", 1)
+        gmsh.model.mesh.generate(2)
+    finally:
+        gmsh.option.setNumber("Mesh.MeshOnlyVisible", 0)
+        gmsh.option.setNumber("Mesh.MeshOnlyEmpty", 0)
+        for surface_id, is_visible in visibility.items():
+            gmsh.model.setVisibility([(2, surface_id)], is_visible)
 
 
 def apply_boundary_layers(mesh_def: dict[str, Any]) -> None:
@@ -4290,12 +4415,19 @@ def apply_global_surface_meshing_algorithm(mesh_def: dict[str, Any]) -> None:
 
 def apply_surface_meshing_algorithms(mesh_def: dict[str, Any]) -> None:
     entries = mesh_def.get("surface_meshing_algorithms", [])
-    if not entries:
-        return
-    if not isinstance(entries, list):
+    if entries and not isinstance(entries, list):
         raise TypeError("surface_meshing_algorithms must be a list.")
 
     surface_ids = {surface_id for _, surface_id in gmsh.model.getEntities(2)}
+    anisotropic_surface_ids = _anisotropic_refinement_surface_ids(mesh_def)
+    unknown_anisotropic_surfaces = sorted(anisotropic_surface_ids - surface_ids)
+    if unknown_anisotropic_surfaces:
+        raise ValueError(
+            "anisotropic_curve_refinements references unknown surfaces "
+            f"{unknown_anisotropic_surfaces}."
+        )
+
+    explicitly_configured_surfaces = set()
     for entry in entries:
         if not isinstance(entry, dict):
             raise TypeError(
@@ -4317,7 +4449,20 @@ def apply_surface_meshing_algorithms(mesh_def: dict[str, Any]) -> None:
 
         algorithm_code = _surface_meshing_algorithm_code(entry["algorithm"])
         for surface_id in target_surfaces:
+            if surface_id in anisotropic_surface_ids and not _is_bamg_algorithm(
+                entry["algorithm"]
+            ):
+                raise ValueError(
+                    "anisotropic_curve_refinements surfaces must use BAMG; "
+                    f"surface {surface_id} is configured with {entry['algorithm']!r}."
+                )
             gmsh.model.mesh.setAlgorithm(2, surface_id, algorithm_code)
+            explicitly_configured_surfaces.add(surface_id)
+
+    for surface_id in sorted(anisotropic_surface_ids - explicitly_configured_surfaces):
+        gmsh.model.mesh.setAlgorithm(
+            2, surface_id, _surface_meshing_algorithm_code("bamg")
+        )
 
 
 def apply_structured_surface_recombination(mesh_def: dict[str, Any]) -> None:
@@ -4640,8 +4785,7 @@ def generate_surface_mesh(
         # Mesh CAD curves before installing anisotropic fields: evaluating these
         # fields while Gmsh parametrizes unrelated complex B-splines can stall.
         gmsh.model.mesh.generate(1)
-        apply_anisotropic_curve_refinement(mesh_def)
-        gmsh.model.mesh.generate(2)
+        generate_anisotropic_surface_mesh(mesh_def)
 
         apply_export_surface_names(mesh_def)
         if output_file is not None:

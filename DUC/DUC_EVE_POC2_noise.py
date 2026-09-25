@@ -1101,7 +1101,7 @@ def build_params(
 
     with fl.SI_unit_system:
         params_kwargs = {
-            "version": "25.11.1",
+            "version": "25.10.6",
             "unit_system": fl.SI_unit_system,
             "reference_geometry": fl.ReferenceGeometry(
                 moment_center=cfg.moment_center * u.m,

@@ -37,28 +37,169 @@
   },
   "mesh definition": {
     "surface_meshing_algorithm": "frontal-delaunay",
-    "surface_meshing_algorithms": [
-      {
-        "surfaces": [
-          83, 89, 93, 90, 87, 92
-        ],
-        "algorithm": "bamg"
-      }
-    ],
     "anisotropic_curve_refinements": [
       {
+        "name": "blade 1 tip surfaces",
+        "curves": [
+          692,
+          690,
+          697
+        ],
+        "surfaces": [
+          177, 178, 175, 172, 174, 173
+        ],
+        "sampling": 1000,
+        "size_min_normal": 0.1,
+        "size_min_tangent": 1.0,
+        "size_max_normal": 0.5,
+        "size_max_tangent": 1.0,
+        "dist_min": 1.0,
+        "dist_max": 5.0
+      },
+      {
+        "name": "blade 2 tip surfaces",
+        "curves": [
+          951,
+          949,
+          956
+        ],
+        "surfaces": [
+          260, 261, 258, 255, 256, 257
+        ],
+        "sampling": 1000,
+        "size_min_normal": 0.1,
+        "size_min_tangent": 1.0,
+        "size_max_normal": 0.5,
+        "size_max_tangent": 1.0,
+        "dist_min": 1.0,
+        "dist_max": 5.0
+      },
+      {
+        "name": "blade 3 tip surfaces",
         "curves": [
           407,
           416,
           420
         ],
+        "surfaces": [
+          83, 89, 93, 90, 87, 92
+        ],
         "sampling": 1000,
-        "size_min_normal": 0.3,
+        "size_min_normal": 0.1,
         "size_min_tangent": 1.0,
-        "size_max_normal": 0.3,
+        "size_max_normal": 0.5,
         "size_max_tangent": 1.0,
         "dist_min": 1.0,
         "dist_max": 5.0
+      },
+      {
+        "name": "blade 4 tip surfaces",
+        "curves": [
+          1217,
+          1208,
+          1221
+        ],
+        "surfaces": [
+          338, 334, 340, 344, 341, 343
+        ],
+        "sampling": 1000,
+        "size_min_normal": 0.1,
+        "size_min_tangent": 1.0,
+        "size_max_normal": 0.5,
+        "size_max_tangent": 1.0,
+        "dist_min": 1.0,
+        "dist_max": 5.0
+      },
+      {
+        "name": "hub",
+        "curves": [
+          108,
+          429,
+          171,
+          106,
+          105,
+          218,
+          104,
+          111,
+          110,
+          428,
+          96,
+          217,
+          170,
+          169,
+          152,
+          135,
+          173,
+          140,
+          182,
+          152,
+          237,
+          236,
+          174,
+          138,
+          136,
+          135,
+          134,
+          133,
+          132,
+          131,
+          130,
+          103,
+          262,
+          225,
+          224,
+          223,
+          222,
+          221,
+          220,
+          219,
+          226,
+          227,
+          228,
+          229,
+          230,
+          231,
+          232,
+          233,
+          234,
+          235,
+          236,
+          237,
+          101,
+          240,
+          269,
+          261,
+          263,
+          215
+        ],
+        "surfaces": [
+          95,
+          8,
+          94,
+          32,
+          21,
+          13,
+          10,
+          11,
+          14,
+          22,
+          15,
+          23,
+          24,
+          170,
+          27,
+          16,
+          34,
+          33,
+          20
+        ],
+        "sampling": 1000,
+        "size_min_normal": 1.0,
+        "size_min_tangent": 3.0,
+        "size_max_normal": 6.0,
+        "size_max_tangent": 6.0,
+        "dist_min": 1.0,
+        "dist_max": 20.0
       }
     ],
     "max_element_size": 10.0,
@@ -79,6 +220,63 @@
       }
     ],
     "mesh_zones": [
+      {
+        "name": "tip_curve_constraints",
+        "curve_definition": "manual",
+        "explicit_curve_sequences": [
+          {
+            "curve_ids": [
+              408,
+              421,
+              952,
+              948,
+              1209,
+              1222,
+              693,
+              689
+            ],
+            "type": "Progression",
+            "mesh size mode": "ele size",
+            "target ele size 1": 0.3,
+            "target ele size 2": 0.1,
+            "invert_direction": [
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true
+            ]
+          },
+          {
+            "curve_ids": [
+              409,
+              422,
+              953,
+              950,
+              1210,
+              1223,
+              694,
+              691
+            ],
+            "mesh size mode": "ele size",
+            "target ele size 1": 0.3,
+            "target ele size 2": 0.1,
+            "invert_direction": [
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true
+            ]
+          }
+        ]
+      },
       {
         "name": "blade1",
         "curve_definition": "automatic",

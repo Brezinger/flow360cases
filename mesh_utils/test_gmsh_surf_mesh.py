@@ -6,6 +6,14 @@ from unittest.mock import patch
 import gmsh_surf_mesh
 
 
+def _anisotropic_refinement_entities(dimension: int):
+    if dimension == 1:
+        return [(1, 96), (1, 407), (1, 416), (1, 420)]
+    if dimension == 2:
+        return [(2, 83), (2, 90), (2, 92)]
+    return []
+
+
 class DefaultGmshThreadCountTests(unittest.TestCase):
     @patch("gmsh_surf_mesh.psutil.cpu_count", return_value=16)
     def test_uses_one_less_than_physical_core_count(self, _cpu_count) -> None:
@@ -50,6 +58,18 @@ class GmshOptionTests(unittest.TestCase):
                 (("Mesh.MaxNumThreads2D", 1),),
             ],
         )
+
+    @patch("gmsh_surf_mesh.gmsh.option.setNumber")
+    @patch("gmsh_surf_mesh.default_gmsh_thread_count", return_value=15)
+    def test_serializes_anisotropic_refinement_meshing(
+        self, _default_thread_count, set_number
+    ) -> None:
+        gmsh_surf_mesh.apply_gmsh_thread_limit(
+            {"anisotropic_curve_refinement": {"surfaces": [83]}}
+        )
+
+        set_number.assert_any_call("Mesh.MaxNumThreads1D", 15)
+        set_number.assert_any_call("Mesh.MaxNumThreads2D", 1)
 
     @patch("gmsh_surf_mesh.gmsh.option.setNumber")
     @patch("gmsh_surf_mesh.default_gmsh_thread_count", return_value=15)
@@ -110,7 +130,7 @@ class SurfaceMeshGenerationTests(unittest.TestCase):
             patch("gmsh_surf_mesh.apply_surface_meshing_algorithms"),
             patch("gmsh_surf_mesh.apply_boundary_layers"),
             patch(
-                "gmsh_surf_mesh.apply_anisotropic_curve_refinement",
+                "gmsh_surf_mesh.generate_anisotropic_surface_mesh",
                 side_effect=lambda _mesh_def: events.append("anisotropic fields"),
             ),
         ):
@@ -125,7 +145,72 @@ class SurfaceMeshGenerationTests(unittest.TestCase):
 
         self.assertEqual(
             events,
-            ["generate(1)", "anisotropic fields", "generate(2)"],
+            ["generate(1)", "anisotropic fields"],
+        )
+
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.field.setAsBackgroundMesh")
+    @patch("gmsh_surf_mesh._configure_anisotropic_curve_refinement_fields")
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.generate")
+    @patch("gmsh_surf_mesh.gmsh.option.setNumber")
+    @patch("gmsh_surf_mesh.gmsh.model.setVisibility")
+    @patch("gmsh_surf_mesh.gmsh.model.getVisibility", side_effect=[1, 0, 1])
+    @patch(
+        "gmsh_surf_mesh.gmsh.model.getEntities",
+        return_value=[(2, 83), (2, 90), (2, 92)],
+    )
+    def test_meshes_anisotropic_surfaces_before_remaining_empty_surfaces(
+        self,
+        _get_entities,
+        get_visibility,
+        set_visibility,
+        set_number,
+        generate,
+        configure_fields,
+        set_background,
+    ) -> None:
+        gmsh_surf_mesh.generate_anisotropic_surface_mesh(
+            {"anisotropic_curve_refinement": {"surfaces": [83, 92]}}
+        )
+
+        self.assertEqual(generate.call_args_list, [((2,),), ((2,),)])
+        configure_fields.assert_called_once()
+        set_background.assert_called_once_with(0)
+        self.assertEqual(
+            [call.args for call in set_number.call_args_list],
+            [
+                ("Mesh.MeshOnlyVisible", 1),
+                ("Mesh.MeshOnlyEmpty", 1),
+                ("Mesh.MeshOnlyVisible", 0),
+                ("Mesh.MeshOnlyEmpty", 1),
+                ("Mesh.MeshOnlyVisible", 0),
+                ("Mesh.MeshOnlyEmpty", 0),
+            ],
+        )
+        self.assertEqual(
+            set_visibility.call_args_list,
+            [
+                (([(2, 83), (2, 90), (2, 92)], 0),),
+                (([(2, 83), (2, 92)], 1),),
+                (([(2, 83), (2, 90), (2, 92)], 1),),
+                (([(2, 83)], 1),),
+                (([(2, 90)], 0),),
+                (([(2, 92)], 1),),
+            ],
+        )
+        self.assertEqual(get_visibility.call_count, 3)
+
+    def test_groups_overlapping_refinement_surfaces(self) -> None:
+        first = {"surfaces": [83, 90]}
+        second = {"surfaces": [90, 92]}
+        third = {"surfaces": [95]}
+
+        groups = gmsh_surf_mesh._anisotropic_refinement_surface_groups(
+            {"anisotropic_curve_refinements": [first, second, third]}
+        )
+
+        self.assertEqual(
+            [(len(entries), surfaces) for entries, surfaces in groups],
+            [(2, {83, 90, 92}), (1, {95})],
         )
 
 
@@ -133,6 +218,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
     def _refinement(self) -> dict[str, object]:
         return {
             "curves": [407, 416, 420],
+            "surfaces": [83, 90],
             "sampling": 1000,
             "size_min_normal": 0.1,
             "size_min_tangent": 3.0,
@@ -145,7 +231,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
     @patch("gmsh_surf_mesh.gmsh.model.mesh.field")
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_configures_anisotropic_background_field(self, _get_entities, field) -> None:
         field.add.return_value = 12
@@ -154,8 +240,11 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
             {"anisotropic_curve_refinement": self._refinement()}
         )
 
-        field.add.assert_called_once_with("AttractorAnisoCurve")
-        field.setNumbers.assert_called_once_with(12, "CurvesList", [407, 416, 420])
+        self.assertEqual(
+            field.add.call_args_list,
+            [(('AttractorAnisoCurve',),)],
+        )
+        field.setNumbers.assert_any_call(12, "CurvesList", [407, 416, 420])
         field.setNumber.assert_any_call(12, "Sampling", 1000)
         field.setNumber.assert_any_call(12, "SizeMinNormal", 0.1)
         field.setNumber.assert_any_call(12, "SizeMaxTangent", 3.0)
@@ -167,7 +256,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
     @patch("gmsh_surf_mesh.gmsh.model.mesh.setTransfiniteCurve")
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_sets_tangential_constraints_for_unconstrained_refinement_curves(
         self, _get_entities, set_transfinite_curve, _curve_length
@@ -204,7 +293,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
     @patch("gmsh_surf_mesh.gmsh.model.mesh.setTransfiniteCurve")
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_preserves_existing_tangential_constraint(
         self, _get_entities, set_transfinite_curve, _curve_length
@@ -225,13 +314,14 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
     @patch("gmsh_surf_mesh.gmsh.model.mesh.field")
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 96), (1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_combines_multiple_anisotropic_background_fields(
         self, _get_entities, field
     ) -> None:
         second_refinement = self._refinement()
         second_refinement["curves"] = [96]
+        second_refinement["surfaces"] = [92]
         field.add.side_effect = [12, 13, 14]
 
         gmsh_surf_mesh.apply_anisotropic_curve_refinement(
@@ -245,7 +335,11 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
 
         self.assertEqual(
             field.add.call_args_list,
-            [(('AttractorAnisoCurve',),), (('AttractorAnisoCurve',),), (('MinAniso',),)],
+            [
+                (('AttractorAnisoCurve',),),
+                (('AttractorAnisoCurve',),),
+                (('MinAniso',),),
+            ],
         )
         field.setNumbers.assert_any_call(12, "CurvesList", [407, 416, 420])
         field.setNumbers.assert_any_call(13, "CurvesList", [96])
@@ -269,7 +363,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
 
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_rejects_inverted_distance_range(self, _get_entities) -> None:
         refinement = self._refinement()
@@ -283,7 +377,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
 
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_rejects_unknown_refinement_curve(self, _get_entities) -> None:
         refinement = self._refinement()
@@ -296,7 +390,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
 
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_rejects_invalid_sampling(self, _get_entities) -> None:
         refinement = self._refinement()
@@ -309,7 +403,7 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
 
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
-        return_value=[(1, 407), (1, 416), (1, 420)],
+        side_effect=_anisotropic_refinement_entities,
     )
     def test_rejects_non_positive_field_size(self, _get_entities) -> None:
         refinement = self._refinement()
@@ -320,6 +414,127 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
                 {"anisotropic_curve_refinement": refinement}
             )
 
+    def test_requires_refinement_surfaces(self) -> None:
+        refinement = self._refinement()
+        del refinement["surfaces"]
+
+        with self.assertRaisesRegex(ValueError, "non-empty 'surfaces'"):
+            gmsh_surf_mesh._anisotropic_refinement_surface_ids(
+                {"anisotropic_curve_refinement": refinement}
+            )
+
+    def test_rejects_invalid_refinement_name(self) -> None:
+        refinement = self._refinement()
+        refinement["name"] = " "
+
+        with self.assertRaisesRegex(ValueError, "name must be a non-empty string"):
+            gmsh_surf_mesh._anisotropic_refinement_surface_ids(
+                {"anisotropic_curve_refinement": refinement}
+            )
+
+    @patch(
+        "gmsh_surf_mesh.gmsh.model.getEntities",
+        side_effect=_anisotropic_refinement_entities,
+    )
+    def test_uses_refinement_name_in_validation_errors(self, _get_entities) -> None:
+        refinement = self._refinement()
+        refinement["name"] = "tip surfaces"
+        refinement["curves"] = [999]
+
+        with self.assertRaisesRegex(ValueError, "anisotropic curve refinement 'tip surfaces'"):
+            gmsh_surf_mesh.apply_anisotropic_curve_refinement(
+                {"anisotropic_curve_refinement": refinement}
+            )
+
+    @patch(
+        "gmsh_surf_mesh.gmsh.model.getEntities",
+        side_effect=_anisotropic_refinement_entities,
+    )
+    def test_rejects_unknown_refinement_surface(self, _get_entities) -> None:
+        refinement = self._refinement()
+        refinement["surfaces"] = [999]
+
+        with self.assertRaisesRegex(ValueError, "unknown surfaces"):
+            gmsh_surf_mesh.apply_anisotropic_curve_refinement(
+                {"anisotropic_curve_refinement": refinement}
+            )
+
+
+class AnisotropicSurfaceAlgorithmTests(unittest.TestCase):
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.setAlgorithm")
+    @patch("gmsh_surf_mesh.gmsh.model.getEntities", return_value=[(2, 83), (2, 90)])
+    def test_selects_bamg_for_refinement_surfaces(
+        self, _get_entities, set_algorithm
+    ) -> None:
+        mesh_def = {"anisotropic_curve_refinement": {"surfaces": [90, 83]}}
+
+        gmsh_surf_mesh.apply_surface_meshing_algorithms(mesh_def)
+
+        self.assertEqual(
+            set_algorithm.call_args_list,
+            [((2, 83, 7),), ((2, 90, 7),)],
+        )
+        self.assertEqual(
+            gmsh_surf_mesh._surface_meshing_algorithm_surface_ids(mesh_def), {83, 90}
+        )
+
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.setAlgorithm")
+    @patch("gmsh_surf_mesh.gmsh.model.getEntities", return_value=[(2, 83)])
+    def test_rejects_non_bamg_algorithm_on_refinement_surface(
+        self, _get_entities, _set_algorithm
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "must use BAMG"):
+            gmsh_surf_mesh.apply_surface_meshing_algorithms(
+                {
+                    "anisotropic_curve_refinement": {"surfaces": [83]},
+                    "surface_meshing_algorithms": [
+                        {"surfaces": [83], "algorithm": "frontal-delaunay"}
+                    ],
+                }
+            )
+
+
+class ManualCurveInversionTests(unittest.TestCase):
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.setTransfiniteCurve")
+    def test_inverts_manual_curve_progression_once(self, set_transfinite_curve) -> None:
+        gmsh_surf_mesh.apply_transfinite_curves(
+            {
+                "explicit_curve_sequences": [
+                    {
+                        "curve_ids": [408, 421],
+                        "type": "Progression",
+                        "n_pts": 10,
+                        "Parameter": 2.0,
+                        "invert_direction": [False, True],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(
+            set_transfinite_curve.call_args_list,
+            [
+                ((408, 10, "Progression", 2.0),),
+                ((421, 10, "Progression", 0.5),),
+            ],
+        )
+
+    def test_preserves_explicit_group_inversion(self) -> None:
+        specs = list(
+            gmsh_surf_mesh._iter_curve_specs(
+                {
+                    "curve_ids": [408],
+                    "type": "Progression",
+                    "n_pts": 10,
+                    "Parameter": 2.0,
+                    "invert_direction": [False],
+                    "_group_invert_direction": [True],
+                }
+            )
+        )
+
+        self.assertTrue(specs[0].group_invert_direction)
+
 
 class Poc2ConfigurationTests(unittest.TestCase):
     def test_configures_anisotropic_tip_refinement_without_boundary_layers(self) -> None:
@@ -328,27 +543,54 @@ class Poc2ConfigurationTests(unittest.TestCase):
             mesh_def = json.load(file)["mesh definition"]
 
         self.assertEqual(mesh_def["surface_meshing_algorithm"], "frontal-delaunay")
-        self.assertEqual(
-            mesh_def["surface_meshing_algorithms"],
-            [{"surfaces": [83, 89, 93, 90, 87, 92], "algorithm": "bamg"}],
-        )
+        self.assertNotIn("surface_meshing_algorithms", mesh_def)
         self.assertNotIn("max_num_threads_2d", mesh_def)
         self.assertNotIn("anisotropic_curve_refinement", mesh_def)
         self.assertNotIn("boundary_layers", mesh_def)
+        refinements = mesh_def["anisotropic_curve_refinements"]
+        self.assertTrue(
+            all(
+                isinstance(refinement.get("name"), str) and refinement["name"].strip()
+                for refinement in refinements
+            )
+        )
+        self.assertTrue(
+            all(
+                isinstance(refinement.get("curves"), list)
+                and refinement["curves"]
+                and isinstance(refinement.get("surfaces"), list)
+                and refinement["surfaces"]
+                for refinement in refinements
+            )
+        )
+        manual_zone = next(
+            zone
+            for zone in mesh_def["mesh_zones"]
+            if zone["name"] == "tip_curve_constraints"
+        )
         self.assertEqual(
-            mesh_def["anisotropic_curve_refinements"],
-            [
-                {
-                    "curves": [407, 416, 420],
-                    "sampling": 1000,
-                    "size_min_normal": 0.1,
-                    "size_min_tangent": 1.0,
-                    "size_max_normal": 0.3,
-                    "size_max_tangent": 1.0,
-                    "dist_min": 1.0,
-                    "dist_max": 5.0,
-                }
-            ],
+            manual_zone,
+            {
+                "name": "tip_curve_constraints",
+                "curve_definition": "manual",
+                "explicit_curve_sequences": [
+                    {
+                        "curve_ids": [408, 421, 952, 948, 1209, 1222, 693, 689],
+                        "type": "Progression",
+                        "mesh size mode": "ele size",
+                        "target ele size 1": 0.3,
+                        "target ele size 2": 0.1,
+                        "invert_direction": [False, True, False, True, False, True, False, True],
+                    },
+                    {
+                        "curve_ids": [409, 422, 953, 950, 1210, 1223, 694, 691],
+                        "mesh size mode": "ele size",
+                        "target ele size 1": 0.3,
+                        "target ele size 2": 0.1,
+                        "invert_direction": [False, True, False, True, False, True, False, True],
+                    }
+                ],
+            },
         )
 
 

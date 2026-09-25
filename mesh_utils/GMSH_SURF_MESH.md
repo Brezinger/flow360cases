@@ -84,7 +84,7 @@ mesh options are optional:
 | `max element size` / `max_element_size` | Global Gmsh maximum element size. |
 | `surface_meshing_algorithm` | Optional global 2D meshing algorithm. |
 | `surface_size_limits` | Per-surface maximum sizes. |
-| `anisotropic_curve_refinements` | One or more `AttractorAnisoCurve` background sizing fields. |
+| `anisotropic_curve_refinements` | Surface-scoped anisotropic curve sizing fields; their surfaces use BAMG automatically. |
 | `boundary_layers` | Boundary-layer fields applied along selected curves and surfaces. |
 | `surface_meshing_algorithms` | Per-surface unstructured meshing algorithm. |
 | `unstructured_surfaces` | Surface tags deliberately excluded from transfinite/recombined meshing. |
@@ -111,7 +111,9 @@ POC2, all other surfaces are still subject to the global `max_element_size` of
 #### Anisotropic curve refinement
 
 `anisotropic_curve_refinements` creates one Gmsh `AttractorAnisoCurve` field per
-entry.  Each field refines independently normal and tangent to the nearest listed curve;
+entry. Each entry must list target surfaces. The script combines all attractor fields
+with `MinAniso` and passes the resulting anisotropic metric directly to BAMG. Each
+field refines independently normal and tangent to the nearest listed curve;
 the normal and tangent sizes transition from their minimum values at `dist_min` to
 their maximum values at `dist_max`.
 
@@ -119,7 +121,9 @@ their maximum values at `dist_max`.
 {
   "anisotropic_curve_refinements": [
     {
+      "name": "tip_surfaces_83_89_93_90_87_92",
       "curves": [407, 416, 420],
+      "surfaces": [83, 89, 93, 90, 87, 92],
       "sampling": 1000,
       "size_min_normal": 0.1,
       "size_min_tangent": 1.0,
@@ -130,6 +134,7 @@ their maximum values at `dist_max`.
     },
     {
       "curves": [429, 108, 110, 428, 96, 792, 218, 427, 171, 106, 105],
+      "surfaces": [95],
       "sampling": 1000,
       "size_min_normal": 1.0,
       "size_min_tangent": 3.0,
@@ -142,12 +147,19 @@ their maximum values at `dist_max`.
 }
 ```
 
-All listed curves must exist in the imported model.  `sampling` must be a positive
-integer; every size and distance must be positive; and `dist_max` must be at least
-`dist_min`.  Multiple refinements are combined with a Gmsh `MinAniso` field.  It
-intersects their directional metrics, preserving normal and tangential sizing where
-their regions overlap.  Per-surface size limits run afterward and can further reduce
-that size.  The script generates the curve mesh before installing these fields, so
+`name` is optional metadata for identifying a refinement in configuration and
+validation messages; it does not change the generated mesh. All listed curves and
+surfaces must exist in the imported model. `sampling` must be
+a positive integer; every size and distance must be positive; and `dist_max` must be
+at least `dist_min`. Refinements with overlapping target surfaces are combined with a
+Gmsh `MinAniso` field and meshed together. Refinements with disjoint targets are
+meshed in separate BAMG passes, so their far-field metrics do not constrain each
+other. The script then clears the background field and meshes every remaining empty
+surface using the global size limits. Those target surfaces automatically use BAMG and
+are excluded from transfinite constraints and structured recombination; do not repeat
+them in `surface_meshing_algorithms`. Shared curves retain their 1D mesh so adjacent
+surfaces remain conformal. The script generates the curve mesh before installing these
+fields, so
 an unconstrained refinement curve receives uniform transfinite spacing from
 `size_min_tangent`; explicit transfinite definitions take precedence.  The
 anisotropic fields then control the surface mesh.  The earlier singular
@@ -199,9 +211,11 @@ Use `surface_meshing_algorithms` to select an algorithm on a surface:
 Accepted names are `meshadapt`, `automatic`, `initialmeshonly`, `delaunay`,
 `frontal-delaunay`, `bamg`, `frontal-delaunay for quads`, `packing of
 parallelograms`, and `quasi-structured quad`; their numeric Gmsh codes are also
-accepted.  These surfaces are treated as unstructured, so they are not given
-transfinite constraints or structured recombination.  `unstructured_surfaces`
-provides the same exclusion without selecting a specific algorithm.
+accepted. These surfaces are treated as unstructured, so they are not given
+transfinite constraints or structured recombination. `unstructured_surfaces`
+provides the same exclusion without selecting a specific algorithm. Surfaces listed
+by `anisotropic_curve_refinements` already select BAMG automatically. An explicit
+algorithm for one of those surfaces must also be BAMG.
 
 Set `surface_meshing_algorithm` to one of the same algorithm names (or its Gmsh
 numeric code) to select the global default.  A `surface_meshing_algorithms` entry
@@ -276,7 +290,8 @@ Manual zones place `circumferential_curve_sequences`,
 `transfinite_surfaces` inside the zone.  Curve-sequence entries use `curve_ids`,
 `invert_direction`, and the same distribution fields described above.  A
 `curve_ids` item may be one curve tag or a list of contiguous curve tags treated
-as one compound edge.
+as one compound edge.  For manual entries, `invert_direction` reverses the local
+Progression distribution of each listed curve.
 
 Manual `transfinite_surfaces` entries identify an `id`, optionally an
 `Arrangement` (default `Left`), and optional four `boundary points` that set the
@@ -303,8 +318,9 @@ Duplicate physical names receive numeric suffixes.
 
 When a definition uses BAMG, the script automatically applies the one-thread 2D
 safeguard while retaining the normal core-count-minus-one limit for 1D meshing.
-The POC2 example combines its two anisotropic refinements with BAMG on surface `95`;
-it does not use a boundary layer.
+The POC2 example defines independently scoped anisotropic refinements for each blade
+tip and the hub; BAMG is selected automatically for their target surfaces. It does
+not use a boundary layer.
 
 ## Practical workflow
 
