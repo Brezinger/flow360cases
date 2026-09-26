@@ -89,7 +89,6 @@ class CaseSetup:
 
     alpha_deg: float = -90.0
     beta_deg: float = 0.0
-    mach: float = 0.451443
     altitude_ft: float = 2460.0
     temperature_offset_deg_c: float = 20.0
 

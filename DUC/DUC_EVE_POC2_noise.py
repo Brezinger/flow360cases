@@ -84,7 +84,6 @@ class CaseSetup:
 
     alpha_deg: float = -90.0
     beta_deg: float = 0.0
-    mach: float = 0.451443
     altitude_ft: float = 2460.0
     temperature_offset_deg_c: float = 20.0
 
@@ -95,6 +94,7 @@ class CaseSetup:
     # consecutive refined time stepping setup
     # ---------------------------------------
     # step 0
+    """case_step: int = 0
     time_steps_per_revolution: int = 120
     parent_case_id: str | None = None
     physical_steps: int = 600
@@ -111,10 +111,12 @@ class CaseSetup:
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False
+    include_aeroacoustic_output: bool = False"""
     # ------
     # step 1
-    """time_steps_per_revolution: int = 120 * 6
+    case_step: int = 1
+    parent_case_id: str | None = "case-8ab2e55e-63c6-4167-9679-1b77eac32325"
+    time_steps_per_revolution: int = 120 * 6
     physical_steps: int = 3600
     max_pseudo_steps: int = 15
     rpm: float = 1000.0
@@ -129,10 +131,11 @@ class CaseSetup:
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False"""
+    include_aeroacoustic_output: bool = False
     # ------
     # step 2
-    """time_steps_per_revolution: int = 120 * 16
+    """case_step: int = 2
+    time_steps_per_revolution: int = 120 * 16
     num_revolutions: int = 2
     physical_steps: int = num_revolutions * time_steps_per_revolution
     max_pseudo_steps: int = 12
@@ -151,7 +154,8 @@ class CaseSetup:
     include_aeroacoustic_output: bool = False"""
     # ------
     # step 3
-    """parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
+    """case_step: int = 3
+    parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
     time_steps_per_revolution: int = 120 * 32
     num_revolutions: int = 2 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
@@ -173,7 +177,8 @@ class CaseSetup:
     aeroacoustic_force_clean_start: bool = False"""
     # ------
     # step 4
-    """parent_case_id: str | None = "case-6fd80ded-eef0-42e4-9c59-8e835383ce16"
+    """case_step: int = 4
+    parent_case_id: str | None = "case-6fd80ded-eef0-42e4-9c59-8e835383ce16"
     time_steps_per_revolution: int = int(120 * 32 * 25 / 12)
     num_revolutions: int = 3 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
@@ -1589,6 +1594,12 @@ def _fork_from_case(cfg: CaseSetup):
     return case
 
 
+def _case_run_name(cfg: CaseSetup, fallback: str) -> str:
+    if cfg.parent_case_id and cfg.case_step in (1, 2, 3, 4):
+        return f"DUC_POC2_noise_step{cfg.case_step}"
+    return fallback
+
+
 def _parent_case_full_id(cfg: CaseSetup) -> str:
     if not cfg.parent_case_id:
         raise ValueError("Cannot resolve a parent case id without cfg.parent_case_id.")
@@ -1649,7 +1660,7 @@ def define_and_run_from_surface_mesh(
         if submit_draft_only and not generate_volume_mesh and not run_case:
             draft = project.run_case(
                 params=params,
-                name="DUC_POC2_noise_setup",
+                name=_case_run_name(cfg, "DUC_POC2_noise_setup"),
                 use_beta_mesher=True,
                 use_geometry_AI=False,
                 fork_from=fork_from,
@@ -1673,7 +1684,7 @@ def define_and_run_from_surface_mesh(
             return project.id
         project.run_case(
             params=params,
-            name="DUC_POC2_noise_case",
+            name=_case_run_name(cfg, "DUC_POC2_noise_case"),
             use_beta_mesher=True,
             use_geometry_AI=False,
             fork_from=fork_from,
@@ -1744,7 +1755,7 @@ def define_and_run(
         if submit_draft_only and not generate_volume_mesh and not run_case:
             draft = project.run_case(
                 params=params,
-                name="DUC_POC2_noise_setup",
+                name=_case_run_name(cfg, "DUC_POC2_noise_setup"),
                 use_beta_mesher=use_beta_mesher,
                 use_geometry_AI=False,
                 fork_from=fork_from,
@@ -1768,7 +1779,7 @@ def define_and_run(
             return project.id
         project.run_case(
             params=params,
-            name="DUC_EVE_4blade_noise_case",
+            name=_case_run_name(cfg, "DUC_EVE_4blade_noise_case"),
             use_beta_mesher=use_beta_mesher,
             use_geometry_AI=False,
             fork_from=fork_from,
@@ -1803,16 +1814,16 @@ def main():
 
     # volume mesh path from the legacy surface mesh.
     # UGRID inputs are welded, converted to Flow360-style CGNS, then uploaded.
-    surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
+    """surface_mesh_file = DEFAULT_SURFACE_MESH_FILE
     use_beta_mesher = True
     generate_volume_mesh = True
-    run_case = False
+    run_case = False"""
 
     # fork case path
-    """surface_mesh_file = None
+    surface_mesh_file = None
     use_beta_mesher = True
     generate_volume_mesh = False
-    run_case = False"""
+    run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
 
