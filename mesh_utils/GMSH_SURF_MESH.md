@@ -158,11 +158,12 @@ other. The script then clears the background field and meshes every remaining em
 surface using the global size limits. Those target surfaces automatically use BAMG and
 are excluded from transfinite constraints and structured recombination; do not repeat
 them in `surface_meshing_algorithms`. Shared curves retain their 1D mesh so adjacent
-surfaces remain conformal. The script generates the curve mesh before installing these
-fields, so
-an unconstrained refinement curve receives uniform transfinite spacing from
-`size_min_tangent`; explicit transfinite definitions take precedence.  The
-anisotropic fields then control the surface mesh.  The earlier singular
+surfaces remain conformal. Before the 2D passes, a scalar distance/threshold field
+uses each refinement's tangent sizes and distance limits to size the boundary curves
+of its target surfaces. These 1D fields are restricted to those curves and combined
+with `Min`, leaving unrelated curves at their ordinary sizes. Explicit transfinite
+curve definitions still take precedence. The scalar field is cleared after the 1D
+pass; the anisotropic fields then control the surface mesh. The earlier singular
 `anisotropic_curve_refinement` key remains supported for one field, but it cannot
 be used together with the plural key.
 

@@ -441,32 +441,6 @@
           },
           {
             "curve_ids": [
-              408,
-              421,
-              952,
-              948,
-              1209,
-              1222,
-              693,
-              689
-            ],
-            "type": "Progression",
-            "mesh size mode": "ele size",
-            "target ele size 1": 0.3,
-            "target ele size 2": 0.1,
-            "invert_direction": [
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true
-            ]
-          },
-          {
-            "curve_ids": [
               409,
               422,
               953,

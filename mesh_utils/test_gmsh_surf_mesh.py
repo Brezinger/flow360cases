@@ -108,7 +108,7 @@ class GmshOptionTests(unittest.TestCase):
 
 
 class SurfaceMeshGenerationTests(unittest.TestCase):
-    def test_generates_curves_before_installing_anisotropic_fields(self) -> None:
+    def test_generates_curves_with_tangent_field_before_anisotropic_fields(self) -> None:
         events = []
         mesh_def = {"mesh_zones": [{"curve_definition": "manual"}]}
 
@@ -130,12 +130,19 @@ class SurfaceMeshGenerationTests(unittest.TestCase):
             patch("gmsh_surf_mesh.apply_surface_meshing_algorithms"),
             patch("gmsh_surf_mesh.apply_boundary_layers"),
             patch(
+                "gmsh_surf_mesh.configure_anisotropic_curve_tangential_field",
+                side_effect=lambda _mesh_def: events.append("tangent field") or 42,
+            ),
+            patch(
                 "gmsh_surf_mesh.generate_anisotropic_surface_mesh",
                 side_effect=lambda _mesh_def: events.append("anisotropic fields"),
             ),
         ):
             gmsh.model.mesh.generate.side_effect = lambda dimension: events.append(
                 f"generate({dimension})"
+            )
+            gmsh.model.mesh.field.setAsBackgroundMesh.side_effect = (
+                lambda field_id: events.append(f"background({field_id})")
             )
             gmsh.model.occ.importShapes.return_value = []
 
@@ -145,7 +152,7 @@ class SurfaceMeshGenerationTests(unittest.TestCase):
 
         self.assertEqual(
             events,
-            ["generate(1)", "anisotropic fields"],
+            ["tangent field", "generate(1)", "background(0)", "anisotropic fields"],
         )
 
     @patch("gmsh_surf_mesh.gmsh.model.mesh.field.setAsBackgroundMesh")
@@ -252,64 +259,61 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
         field.setNumber.assert_any_call(12, "DistMax", 20.0)
         field.setAsBackgroundMesh.assert_called_once_with(12)
 
-    @patch("gmsh_surf_mesh._curve_length", side_effect=[92.265, 5.0])
-    @patch("gmsh_surf_mesh.gmsh.model.mesh.setTransfiniteCurve")
+    @patch("gmsh_surf_mesh._surface_boundary_curves", side_effect=[[407, 416], [420]])
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.field")
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",
         side_effect=_anisotropic_refinement_entities,
     )
-    def test_sets_tangential_constraints_for_unconstrained_refinement_curves(
-        self, _get_entities, set_transfinite_curve, _curve_length
+    def test_configures_tangent_field_on_target_boundary_curves(
+        self, _get_entities, field, _boundary_curves
     ) -> None:
-        first_refinement = self._refinement()
-        first_refinement["curves"] = [407]
-        first_refinement["size_min_tangent"] = 1.0
-        second_refinement = self._refinement()
-        second_refinement["curves"] = [416]
-        second_refinement["size_min_tangent"] = 2.0
-        constraints = {}
-
-        gmsh_surf_mesh.apply_anisotropic_curve_tangential_constraints(
-            {
-                "anisotropic_curve_refinements": [
-                    first_refinement,
-                    second_refinement,
-                ]
-            },
-            constraints,
-        )
-
-        self.assertEqual(
-            set_transfinite_curve.call_args_list,
-            [
-                ((407, 94, "Progression", 1.0),),
-                ((416, 4, "Progression", 1.0),),
-            ],
-        )
-        self.assertEqual(constraints[407].n_pts, 94)
-        self.assertEqual(constraints[416].n_pts, 4)
-
-    @patch("gmsh_surf_mesh._curve_length")
-    @patch("gmsh_surf_mesh.gmsh.model.mesh.setTransfiniteCurve")
-    @patch(
-        "gmsh_surf_mesh.gmsh.model.getEntities",
-        side_effect=_anisotropic_refinement_entities,
-    )
-    def test_preserves_existing_tangential_constraint(
-        self, _get_entities, set_transfinite_curve, _curve_length
-    ) -> None:
-        existing_constraint = gmsh_surf_mesh.CurveConstraint(10, "Progression", 1.2)
-        constraints = {407: existing_constraint}
+        field.add.side_effect = [11, 12, 13]
         refinement = self._refinement()
-        refinement["curves"] = [407]
+        refinement["size_min_tangent"] = 0.3
+        refinement["size_max_tangent"] = 1.0
 
-        gmsh_surf_mesh.apply_anisotropic_curve_tangential_constraints(
-            {"anisotropic_curve_refinement": refinement}, constraints
+        field_id = gmsh_surf_mesh.configure_anisotropic_curve_tangential_field(
+            {"anisotropic_curve_refinement": refinement}
         )
 
-        set_transfinite_curve.assert_not_called()
-        _curve_length.assert_not_called()
-        self.assertIs(constraints[407], existing_constraint)
+        self.assertEqual(field_id, 13)
+        self.assertEqual(
+            [call.args for call in field.add.call_args_list],
+            [("Distance",), ("Threshold",), ("Restrict",)],
+        )
+        field.setNumbers.assert_any_call(11, "CurvesList", [407, 416, 420])
+        field.setNumber.assert_any_call(11, "Sampling", 1000)
+        field.setNumber.assert_any_call(12, "SizeMin", 0.3)
+        field.setNumber.assert_any_call(12, "SizeMax", 1.0)
+        field.setNumber.assert_any_call(12, "DistMin", 1.0)
+        field.setNumber.assert_any_call(12, "DistMax", 20.0)
+        field.setNumbers.assert_any_call(13, "CurvesList", [407, 416, 420])
+        field.setAsBackgroundMesh.assert_called_once_with(13)
+
+    @patch("gmsh_surf_mesh._surface_boundary_curves", side_effect=[[407], [416], [416], [96]])
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.field")
+    @patch(
+        "gmsh_surf_mesh.gmsh.model.getEntities",
+        side_effect=_anisotropic_refinement_entities,
+    )
+    def test_merges_tangent_fields_for_shared_boundary_curves(
+        self, _get_entities, field, _boundary_curves
+    ) -> None:
+        field.add.side_effect = [11, 12, 13, 14, 15, 16, 17]
+        second = self._refinement()
+        second["curves"] = [96]
+        second["surfaces"] = [90, 92]
+
+        field_id = gmsh_surf_mesh.configure_anisotropic_curve_tangential_field(
+            {"anisotropic_curve_refinements": [self._refinement(), second]}
+        )
+
+        self.assertEqual(field_id, 17)
+        field.setNumbers.assert_any_call(13, "CurvesList", [407, 416])
+        field.setNumbers.assert_any_call(16, "CurvesList", [96, 416])
+        field.setNumbers.assert_any_call(17, "FieldsList", [13, 16])
+        field.setAsBackgroundMesh.assert_called_once_with(17)
 
     @patch("gmsh_surf_mesh.gmsh.model.mesh.field")
     @patch(
@@ -458,6 +462,73 @@ class AnisotropicCurveRefinementTests(unittest.TestCase):
             gmsh_surf_mesh.apply_anisotropic_curve_refinement(
                 {"anisotropic_curve_refinement": refinement}
             )
+
+
+class AnisotropicCurveFieldIntegrationTests(unittest.TestCase):
+    def test_tangent_fields_size_curves_and_preserve_explicit_counts(self) -> None:
+        gmsh = gmsh_surf_mesh.gmsh
+        gmsh.initialize()
+        try:
+            gmsh.option.setNumber("General.Terminal", 0)
+            gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+            gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+            gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+            gmsh.option.setNumber("Mesh.MeshSizeMin", 0.001)
+            gmsh.option.setNumber("Mesh.MeshSizeMax", 1.0)
+            gmsh.option.setNumber("Mesh.MaxNumThreads2D", 1)
+            gmsh.model.add("anisotropic_curve_field_test")
+            surfaces = [
+                gmsh.model.occ.addRectangle(x, 0, 0, 1, 1)
+                for x in (0, 3, 6, 9)
+            ]
+            gmsh.model.occ.synchronize()
+            source_curves = [
+                min(
+                    tag
+                    for dim, tag in gmsh.model.getBoundary(
+                        [(2, surface)], oriented=False
+                    )
+                    if dim == 1
+                )
+                for surface in surfaces
+            ]
+            refinements = [
+                {
+                    "curves": [source_curves[index]],
+                    "surfaces": [surfaces[index]],
+                    "sampling": 100,
+                    "size_min_normal": 0.05,
+                    "size_min_tangent": tangent_size,
+                    "size_max_normal": 0.1,
+                    "size_max_tangent": 0.5,
+                    "dist_min": 0.01,
+                    "dist_max": 0.5,
+                }
+                for index, tangent_size in enumerate((0.2, 0.05, 0.05))
+            ]
+            mesh_def = {"anisotropic_curve_refinements": refinements}
+            gmsh.model.mesh.setTransfiniteCurve(source_curves[2], 4)
+            gmsh_surf_mesh.apply_surface_meshing_algorithms(mesh_def)
+            gmsh_surf_mesh.configure_anisotropic_curve_tangential_field(mesh_def)
+            gmsh.model.mesh.generate(1)
+            gmsh.model.mesh.field.setAsBackgroundMesh(0)
+
+            def element_count(dim: int, tag: int) -> int:
+                return sum(len(tags) for tags in gmsh.model.mesh.getElements(dim, tag)[1])
+
+            self.assertEqual(
+                [element_count(1, curve) for curve in source_curves[:3]],
+                [5, 20, 3],
+            )
+            self.assertLess(element_count(1, source_curves[3]), 5)
+            gmsh_surf_mesh.generate_anisotropic_surface_mesh(mesh_def)
+            self.assertTrue(all(element_count(2, surface) > 0 for surface in surfaces))
+            self.assertEqual(
+                [element_count(1, curve) for curve in source_curves[:3]],
+                [5, 20, 3],
+            )
+        finally:
+            gmsh.finalize()
 
 
 class AnisotropicSurfaceAlgorithmTests(unittest.TestCase):

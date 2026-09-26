@@ -114,7 +114,7 @@ class CaseSetup:
     include_aeroacoustic_output: bool = False"""
     # ------
     # step 1
-    case_step: int = 1
+    """case_step: int = 1
     parent_case_id: str | None = "case-8ab2e55e-63c6-4167-9679-1b77eac32325"
     time_steps_per_revolution: int = 120 * 6
     physical_steps: int = 3600
@@ -131,10 +131,11 @@ class CaseSetup:
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False
+    include_aeroacoustic_output: bool = False"""
     # ------
     # step 2
-    """case_step: int = 2
+    case_step: int = 2
+    parent_case_id: str | None = "case-2cd84f26-a687-4209-8f74-7f2fc69c1b5a"
     time_steps_per_revolution: int = 120 * 16
     num_revolutions: int = 2
     physical_steps: int = num_revolutions * time_steps_per_revolution
@@ -151,7 +152,7 @@ class CaseSetup:
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False"""
+    include_aeroacoustic_output: bool = False
     # ------
     # step 3
     """case_step: int = 3
