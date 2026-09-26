@@ -4734,6 +4734,16 @@ def mesh_def_step_file(mesh_def: dict[str, Any], mesh_def_file: Path) -> Path:
     return step_file
 
 
+def print_curves_without_transfinite_definition(
+    cad_curve_ids: set[int], curve_constraints: dict[int, CurveConstraint]
+) -> None:
+    undefined_curve_ids = sorted(cad_curve_ids - curve_constraints.keys())
+    print(
+        f"CAD curves without a Transfinite definition "
+        f"({len(undefined_curve_ids)}): {undefined_curve_ids}"
+    )
+
+
 def generate_surface_mesh(
     step_file: Path,
     mesh_def: dict[str, Any],
@@ -4761,6 +4771,7 @@ def generate_surface_mesh(
         apply_geometry_healing(mesh_def)
         gmsh.model.occ.synchronize()
         apply_degree_two_curve_compounds(mesh_def)
+        cad_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
 
         apply_mesh_size_bounds(mesh_def)
         apply_surface_size_limits(mesh_def)
@@ -4778,6 +4789,7 @@ def generate_surface_mesh(
         apply_boundary_layers(mesh_def)
 
         if not mesh:
+            print_curves_without_transfinite_definition(cad_curve_ids, curve_constraints)
             if show:
                 show_gmsh()
             return
@@ -4791,6 +4803,7 @@ def generate_surface_mesh(
         if output_file is not None:
             gmsh.write(str(output_file))
 
+        print_curves_without_transfinite_definition(cad_curve_ids, curve_constraints)
         if show:
             show_gmsh()
     except Exception as error:

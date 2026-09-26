@@ -50,11 +50,11 @@
         ],
         "sampling": 1000,
         "size_min_normal": 0.1,
-        "size_min_tangent": 1.0,
+        "size_min_tangent": 0.3,
         "size_max_normal": 0.5,
         "size_max_tangent": 1.0,
-        "dist_min": 1.0,
-        "dist_max": 5.0
+        "dist_min": 0.25,
+        "dist_max": 3.0
       },
       {
         "name": "blade 2 tip surfaces",
@@ -68,11 +68,11 @@
         ],
         "sampling": 1000,
         "size_min_normal": 0.1,
-        "size_min_tangent": 1.0,
+        "size_min_tangent": 0.3,
         "size_max_normal": 0.5,
         "size_max_tangent": 1.0,
-        "dist_min": 1.0,
-        "dist_max": 5.0
+        "dist_min": 0.25,
+        "dist_max": 3.0
       },
       {
         "name": "blade 3 tip surfaces",
@@ -86,11 +86,11 @@
         ],
         "sampling": 1000,
         "size_min_normal": 0.1,
-        "size_min_tangent": 1.0,
+        "size_min_tangent": 0.3,
         "size_max_normal": 0.5,
         "size_max_tangent": 1.0,
-        "dist_min": 1.0,
-        "dist_max": 5.0
+        "dist_min": 0.25,
+        "dist_max": 3.0
       },
       {
         "name": "blade 4 tip surfaces",
@@ -104,11 +104,11 @@
         ],
         "sampling": 1000,
         "size_min_normal": 0.1,
-        "size_min_tangent": 1.0,
+        "size_min_tangent": 0.3,
         "size_max_normal": 0.5,
         "size_max_tangent": 1.0,
-        "dist_min": 1.0,
-        "dist_max": 5.0
+        "dist_min": 0.25,
+        "dist_max": 3.0
       },
       {
         "name": "hub",
@@ -178,7 +178,6 @@
           789,
           1023,
           499,
-          758,
           977,
           498,
           757,
@@ -304,7 +303,16 @@
           98,
           120,
           123,
-          437
+          437,
+          425,
+          264,
+          102,
+          113,
+          434,
+          117,
+          758,
+          431,
+          433
         ],
         "surfaces": [
           95,
@@ -374,7 +382,7 @@
         ],
         "sampling": 1000,
         "size_min_normal": 1.0,
-        "size_min_tangent": 3.0,
+        "size_min_tangent": 2.0,
         "size_max_normal": 6.0,
         "size_max_tangent": 6.0,
         "dist_min": 1.0,
@@ -403,6 +411,34 @@
         "name": "tip_curve_constraints",
         "curve_definition": "manual",
         "explicit_curve_sequences": [
+          {
+            "curve_ids": [
+              99,
+              100,
+              476,
+              735,
+              1044,
+              239,
+              149,
+              25,
+              95,
+              60
+            ],
+            "type": "Bump",
+            "mesh size mode": "ele size",
+            "target ele size 1": 1,
+            "target ele size 2": 5
+          },
+          {
+            "curve_ids": [
+              107,
+              109
+            ],
+            "type": "Bump",
+            "mesh size mode": "ele size",
+            "target ele size 1": 1,
+            "target ele size 2": 1.5
+          },
           {
             "curve_ids": [
               408,
