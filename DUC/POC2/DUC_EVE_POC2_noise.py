@@ -11,6 +11,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
+os.environ["FLOW360_DISABLE_SYSTEM_CERTS"] = "1"
+
 import numpy as np
 import flow360 as fl
 from flow360 import u
@@ -31,8 +33,8 @@ from ugrid_to_cgns import write_surface_cgns
 GEOMETRY_STEP_FILE = None
 GEOMETRY_CSM_FILE = None
 GEOMETRY_FILE = None
-AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().parent / (
-    "POC2x2/case-ab4d94eb-4311-4a4e-946d-b5756958c604_flow360.json"
+AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().with_name(
+    "Q40LT_step4_simulation.json"
 )
 LEGACY_SURFACE_MESH_ASSETS_DIR = Path(__file__).resolve().parent / "legacy_SM_assets"
 DEFAULT_SURFACE_MESH_FILE = Path(__file__).resolve().with_name("POC2.cgns")
@@ -134,7 +136,7 @@ class CaseSetup:
     include_aeroacoustic_output: bool = False"""
     # ------
     # step 2
-    case_step: int = 2
+    """case_step: int = 2
     parent_case_id: str | None = "case-2cd84f26-a687-4209-8f74-7f2fc69c1b5a"
     time_steps_per_revolution: int = 120 * 16
     num_revolutions: int = 2
@@ -152,11 +154,11 @@ class CaseSetup:
     adaptive_cfl_max: float = 1.0e6
     adaptive_cfl_max_relative_change: float = 50.0
     adaptive_cfl_convergence_limiting_factor: float = 1.0
-    include_aeroacoustic_output: bool = False
+    include_aeroacoustic_output: bool = False"""
     # ------
     # step 3
     """case_step: int = 3
-    parent_case_id: str | None = "case-d9b612fc-4a0b-4064-9f42-1bec8205ceeb"
+    parent_case_id: str | None = "case-beb13e25-7f8b-4891-9f9d-53f9d8462d9c"
     time_steps_per_revolution: int = 120 * 32
     num_revolutions: int = 2 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
@@ -167,19 +169,19 @@ class CaseSetup:
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
     navier_stokes_linear_solver_max_iterations: int = 25
-    numerical_dissipation_factor: float = 0.25 # 0.2 original
+    numerical_dissipation_factor: float = 0.2
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 1e3
-    adaptive_cfl_max_relative_change: float = 15
-    adaptive_cfl_convergence_limiting_factor: float = 0.25
+    adaptive_cfl_max: float = 1e2
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 0.5
     include_aeroacoustic_output: bool = True
     aeroacoustic_solver_start_time_s: float = 0.0
     aeroacoustic_force_clean_start: bool = False"""
     # ------
     # step 4
-    """case_step: int = 4
-    parent_case_id: str | None = "case-6fd80ded-eef0-42e4-9c59-8e835383ce16"
+    case_step: int = 4
+    parent_case_id: str | None = "case-4fcc3b53-bb3e-43fc-97c1-7047b13067e3"
     time_steps_per_revolution: int = int(120 * 32 * 25 / 12)
     num_revolutions: int = 3 # 3 in original simulation for step 3
     physical_steps: int = num_revolutions * time_steps_per_revolution
@@ -193,13 +195,14 @@ class CaseSetup:
     numerical_dissipation_factor: float = 0.2
     low_mach_preconditioner: bool = True
     adaptive_cfl_min: float = 0.1
-    adaptive_cfl_max: float = 1e3
-    adaptive_cfl_max_relative_change: float = 15
-    adaptive_cfl_convergence_limiting_factor: float = 0.25
+    adaptive_cfl_max: float = 1e2
+    adaptive_cfl_max_relative_change: float = 50.0
+    adaptive_cfl_convergence_limiting_factor: float = 0.5
     include_aeroacoustic_output: bool = True
     aeroacoustic_solver_start_time_s: float = 0.0
-    aeroacoustic_force_clean_start: bool = True"""
+    aeroacoustic_force_clean_start: bool = True
 
+    include_aeroacoustic_observer_group_2: bool = False
 
 
     # Mesh-generation placeholders. The old case JSON was produced from a
@@ -957,21 +960,59 @@ def _make_models_from_volume_mesh(volume_mesh, cfg: CaseSetup):
 
 def _make_aeroacoustic_output(cfg: CaseSetup, source_file: Path = AEROACOUSTIC_SOURCE_FILE):
     with source_file.open(encoding="utf-8") as file:
-        aeroacoustic_output = json.load(file)["aeroacousticOutput"]
+        source = json.load(file)
 
-    observers = [
-        fl.Observer(
-            position=observer_position * u.m,
-            group_name=f"observer_{index:03d}",
-        )
-        for index, observer_position in enumerate(aeroacoustic_output["observers"], start=1)
-    ]
+    if "aeroacousticOutput" in source:
+        aeroacoustic_output = source["aeroacousticOutput"]
+        observers = [
+            fl.Observer(
+                position=position * u.m,
+                group_name=f"observer_{index:03d}",
+            )
+            for index, position in enumerate(aeroacoustic_output["observers"], start=1)
+        ]
+        write_per_surface_output = aeroacoustic_output["writePerSurfaceOutput"]
+        patch_type = aeroacoustic_output["patchType"]
+    else:
+        aeroacoustic_outputs = [
+            output for output in source.get("outputs", [])
+            if output.get("output_type") == "AeroAcousticOutput"
+        ]
+        if len(aeroacoustic_outputs) != 1:
+            raise ValueError(
+                f"Expected exactly one AeroAcousticOutput in {source_file}, "
+                f"found {len(aeroacoustic_outputs)}"
+            )
+        aeroacoustic_output = aeroacoustic_outputs[0]
+        observers = []
+        included_groups = {"1"}
+        if cfg.include_aeroacoustic_observer_group_2:
+            included_groups.add("2")
+        for observer in aeroacoustic_output["observers"]:
+            if observer["group_name"] not in included_groups:
+                continue
+            position = observer["position"]
+            units = position["units"]
+            try:
+                position_unit = getattr(u, units)
+            except AttributeError as exc:
+                raise ValueError(
+                    f"Unsupported observer position unit {units!r} in {source_file}"
+                ) from exc
+            observers.append(
+                fl.Observer(
+                    position=position["value"] * position_unit,
+                    group_name=observer["group_name"],
+                )
+            )
+        write_per_surface_output = aeroacoustic_output["write_per_surface_output"]
+        patch_type = aeroacoustic_output["patch_type"]
 
     return fl.AeroAcousticOutput(
         name="AeroAcousticOutput",
         observers=observers,
-        write_per_surface_output=aeroacoustic_output["writePerSurfaceOutput"],
-        patch_type=aeroacoustic_output["patchType"],
+        write_per_surface_output=write_per_surface_output,
+        patch_type=patch_type,
         aeroacoustic_solver_start_time=cfg.aeroacoustic_solver_start_time_s * u.s,
         force_clean_start=cfg.aeroacoustic_force_clean_start,
     )

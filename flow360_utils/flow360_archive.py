@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import subprocess
 import sys
@@ -49,6 +50,7 @@ WINDOWS_RESERVED_NAMES = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -151,13 +153,20 @@ def run_single_file_download(argv: list[str]) -> int:
     parser.add_argument("local_file")
     parser.add_argument("progress_file")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args(argv)
 
     fl = _import_flow360()
     local_file = Path(args.local_file)
     local_file.parent.mkdir(parents=True, exist_ok=True)
-    progress_callback = ProgressFileCallback(Path(args.progress_file))
     case = fl.Case.from_cloud(args.case_id)
+    if args.resume:
+        download_resumable_file(case, args.remote_file, local_file, Path(args.progress_file))
+        return 0
+
+    # An archive parent started before this version still launches children without
+    # --resume and expects the SDK's progress snapshots. Keep that live run working.
+    progress_callback = ProgressFileCallback(Path(args.progress_file))
     case._download_file(  # pylint: disable=protected-access
         args.remote_file,
         to_file=str(local_file),
@@ -165,6 +174,100 @@ def run_single_file_download(argv: list[str]) -> int:
         progress_callback=progress_callback,
     )
     return 0
+
+
+def _atomic_json_write(path: Path, value: dict) -> None:
+    """Publish a small state file without exposing a half-written JSON document."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _download_paths(local_file: Path) -> tuple[Path, Path]:
+    partial = local_file.with_name(local_file.name + ".flow360.part")
+    return partial, partial.with_name(partial.name + ".json")
+
+
+def _bounded_s3_client(token):
+    """Keep the Flow360 SDK's endpoint settings while bounding blocked reads."""
+    import boto3  # pylint: disable=import-outside-toplevel
+    from botocore.config import Config  # pylint: disable=import-outside-toplevel
+    from flow360.cloud._tls import inject_system_trust  # pylint: disable=import-outside-toplevel
+
+    sdk_client = token.get_client()
+    credential = token.user_credential
+    config = sdk_client.meta.config.merge(Config(connect_timeout=10, read_timeout=60))
+    return inject_system_trust(
+        boto3.client(
+            "s3",
+            region_name=credential.region,
+            aws_access_key_id=credential.access_key_id,
+            aws_secret_access_key=credential.secret_access_key,
+            aws_session_token=credential.session_token,
+            endpoint_url=sdk_client.meta.endpoint_url,
+            config=config,
+        )
+    )
+
+
+def download_resumable_file(case, remote_file: str, local_file: Path, progress_file: Path) -> None:
+    """Stream a single contiguous S3 range and preserve its verified prefix."""
+    token = case.s3_transfer_method._get_s3_sts_token(  # pylint: disable=protected-access
+        case.id, remote_file
+    )
+    client = _bounded_s3_client(token)
+    bucket, key = token.get_bucket(), token.get_s3_key()
+    head = client.head_object(Bucket=bucket, Key=key)
+    total, etag = head["ContentLength"], head["ETag"]
+    partial, metadata_file = _download_paths(local_file)
+    identity = {"case_id": case.id, "remote_file": remote_file, "total": total, "etag": etag}
+    try:
+        saved_identity = json.loads(metadata_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved_identity = None
+    if saved_identity != identity or not partial.exists() or partial.stat().st_size > total:
+        _remove_if_exists(partial)
+        _atomic_json_write(metadata_file, identity)
+    if total == 0 and not partial.exists():
+        partial.touch()
+    offset = partial.stat().st_size if partial.exists() else 0
+    _atomic_json_write(progress_file, {"downloaded": offset, "total": total})
+
+    if offset < total:
+        response = client.get_object(
+            Bucket=bucket, Key=key, Range=f"bytes={offset}-{total - 1}", IfMatch=etag
+        )
+        expected_range = f"bytes {offset}-{total - 1}/{total}"
+        if (
+            response.get("ContentRange") != expected_range
+            or response.get("ContentLength") != total - offset
+            or response.get("ETag") != etag
+        ):
+            response["Body"].close()
+            raise IOError(f"Unexpected S3 range response for {remote_file}")
+        body = response["Body"]
+        try:
+            with partial.open("ab", buffering=0) as output:
+                last_report = time.monotonic()
+                while offset < total:
+                    chunk = body.read(min(DOWNLOAD_CHUNK_SIZE, total - offset))
+                    if not chunk:
+                        raise IOError(f"Short S3 response for {remote_file}: {offset}/{total} bytes")
+                    if output.write(chunk) != len(chunk):
+                        raise IOError(f"Short local write for {remote_file}")
+                    offset += len(chunk)
+                    if time.monotonic() - last_report >= 0.5 or offset == total:
+                        _atomic_json_write(progress_file, {"downloaded": offset, "total": total})
+                        last_report = time.monotonic()
+                output.flush()
+                os.fsync(output.fileno())
+        finally:
+            body.close()
+
+    if partial.stat().st_size != total:
+        raise IOError(f"Incomplete download for {remote_file}: {partial.stat().st_size}/{total}")
+    os.replace(partial, local_file)
+    _remove_if_exists(metadata_file)
 
 
 def sanitize_path_part(value: str, fallback: str = "unnamed") -> str:
@@ -340,20 +443,11 @@ def case_destination(target_dir: Path, project_ref: ProjectRef, case_name: str) 
 
 
 def _read_progress(progress_file: Path) -> tuple[int, int]:
-    progress_files = sorted(
-        progress_file.parent.glob(f"{progress_file.name}.*.json"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    if not progress_files:
-        return 0, 0
-    for candidate in progress_files[:5]:
-        try:
-            progress = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+    try:
+        progress = json.loads(progress_file.read_text(encoding="utf-8"))
         return int(progress.get("downloaded", 0)), int(progress.get("total", 0))
-    return 0, 0
+    except (OSError, ValueError, TypeError):
+        return 0, 0
 
 
 def _remove_if_exists(path: Path) -> None:
@@ -367,6 +461,7 @@ def _remove_progress_files(progress_file: Path) -> None:
     for path in progress_file.parent.glob(f"{progress_file.name}.*.json"):
         _remove_if_exists(path)
     _remove_if_exists(progress_file)
+    _remove_if_exists(progress_file.with_name(progress_file.name + ".tmp"))
 
 
 def download_file_with_watchdog(
@@ -387,8 +482,6 @@ def download_file_with_watchdog(
     for attempt in range(1, attempts + 1):
         if attempt > 1:
             print(f"      retry {attempt - 1}/{max_retries}")
-        if attempt > 1:
-            _remove_if_exists(local_file)
         _remove_progress_files(progress_file)
 
         command = [
@@ -399,6 +492,7 @@ def download_file_with_watchdog(
             remote_file,
             str(local_file),
             str(progress_file),
+            "--resume",
         ]
         if overwrite:
             command.append("--overwrite")
@@ -438,12 +532,22 @@ def download_file_with_watchdog(
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.communicate(timeout=10)
-                _remove_if_exists(local_file)
                 _remove_progress_files(progress_file)
                 break
         else:
             return_code = process.returncode
             if return_code == 0:
+                downloaded, total = _read_progress(progress_file)
+                if (
+                    not progress_file.exists()
+                    or not local_file.exists()
+                    or downloaded != total
+                    or local_file.stat().st_size != total
+                ):
+                    last_error = "download process exited without a verified final file"
+                    print(f"      {last_error}")
+                    _remove_progress_files(progress_file)
+                    continue
                 _remove_progress_files(progress_file)
                 return str(local_file), watchdog_kills
             _, stderr = process.communicate(timeout=10)
@@ -502,6 +606,7 @@ def download_project_cases(
             destination.mkdir(parents=True, exist_ok=True)
             selected_files = wanted_remote_files(case)
             missing_files = missing_requested_files(case)
+            (destination / f"{case_id}.txt").write_text(f"{case_id}\n", encoding="utf-8")
         except Exception as exc:  # pylint: disable=broad-exception-caught
             print(f"  Case {case_id}: ERROR during case inspection: {exc}")
             records.append(
@@ -554,6 +659,7 @@ def download_project_cases(
             if not overwrite:
                 local_file = unique_path(local_file)
             try:
+                print(f"    downloading: {remote_file} -> {local_file}", flush=True)
                 downloaded_file, watchdog_kills = download_file_with_watchdog(
                     case=case,
                     remote_file=remote_file,
@@ -868,13 +974,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--download-stall-timeout",
         type=float,
-        default=60.0,
-        help="Seconds without byte progress before a file download is restarted. Default: 60.",
+        default=300.0,
+        help="Seconds without byte progress before a file download is restarted. Default: 300.",
     )
     parser.add_argument(
         "--download-watchdog-interval",
         type=float,
-        default=10.0,
+        default=20.0,
         help="Seconds between watchdog checks during file downloads. Default: 10.",
     )
     parser.add_argument(

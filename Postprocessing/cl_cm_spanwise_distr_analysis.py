@@ -1,4 +1,4 @@
-"""Create spanwise lift and rolling-moment distributions from Flow360 surface results.
+"""Create spanwise lift and rolling-moment distributions from Flow360 surface results_postprocessing.
 
 How to prepare and run the analysis
 -----------------------------------

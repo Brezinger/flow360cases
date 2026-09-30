@@ -61,7 +61,7 @@ def make_params(mesh_object):
             ],
             outputs=[
                 fl.VolumeOutput(output_format="tecplot", output_fields=vol_fields),
-                # This mesh_object['*'] will select all the boundaries in the mesh and export the surface results.
+                # This mesh_object['*'] will select all the boundaries in the mesh and export the surface results_postprocessing.
                 # Regular expressions can be used to filter for certain boundaries
                 fl.SurfaceOutput(
                     surfaces=[mesh_object["*"]], output_fields=surf_fields, output_format="tecplot"

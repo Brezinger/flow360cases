@@ -33,7 +33,7 @@ def define_and_run(project_id=None, elev_deflection_deg=0., U_inf = 270, alpha_d
     :param y1_fac:              first layer thickness scaling factor
     :param surf_mesh_lvl:       Mesh refinement level
     :param flow360folder:       Flow360 folder to put the case in
-    :param results_path:        Path to store results
+    :param results_path:        Path to store results_postprocessing
     :param run_flag:            Flag, determines, if simulation is only set-up (False) or also run (True)
     :return:
     """
@@ -437,7 +437,7 @@ def main():
     else:
         study_name = "GBT_{0:s}_rotation_{1:.1f}rad_s".format(['x', 'y', 'z'][np.argwhere(rotation).flatten()[0]], np.linalg.norm(rotation))
 
-    # initialize results DataFrame
+    # initialize results_postprocessing DataFrame
     cols=['U_inf', 'alpha_deg', 'beta_deg', 'elev_deflection_deg', "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
     df_results = pd.DataFrame(columns=cols)
     df_results[cols[:4]] = list(product(U_inf_range, alpha_deg_range, beta_deg_range, elev_deflection_deg_range))
@@ -475,7 +475,7 @@ def main():
                              surf_mesh_lvl=mshlvl, flow360folder=curr_folder, results_path=results_dir, run_flag=run)
 
         if run:
-            # extract CL, CD, CMY from results as moving average over last 20 timesteps
+            # extract CL, CD, CMY from results_postprocessing as moving average over last 20 timesteps
             CL_avg = res['CL'].tail(20).mean()
             CD_avg = res['CD'].tail(20).mean()
             CFx = res['CFx'].tail(20).mean()

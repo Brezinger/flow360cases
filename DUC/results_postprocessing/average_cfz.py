@@ -3,13 +3,14 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+RESULTS_DIR = Path(__file__).resolve().parent / "Lifter4B" / "forces"
 
 """N_STEPS = 120 * 16
-CSV_FILE = Path(__file__).with_name(
+CSV_FILE = RESULTS_DIR / (
     "step2_case-950e2800-b54d-4826-b85f-56206efdc51f_results_total_forces_v2.csv"
 )"""
 N_STEPS = 120 * 4
-CSV_FILE = Path(__file__).with_name(
+CSV_FILE = RESULTS_DIR / (
     "step2B_case-a5d80787-d004-44d8-9892-3d1844516cb0_results_total_forces_v2.csv"
 )
 

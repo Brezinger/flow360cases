@@ -1,6 +1,6 @@
 """Compare full-aircraft aerodynamic Cmx over airspeed for XWing wing variants.
 
-The script reads the Flow360 ``surfaces.vtu`` results for the available rectangular
+The script reads the Flow360 ``surfaces.vtu`` results_postprocessing for the available rectangular
 and trapezoidal XWing cases. It computes the aerodynamic rolling-moment coefficient
 directly from pressure and skin-friction forces, then writes a comparison plot and a
 CSV table to ``<flow360-root>/cmx_vs_airspeed``.
@@ -172,7 +172,7 @@ def main() -> None:
     missing_files = [case.surface_file for case in CASES if not case.surface_file.is_file()]
     if missing_files:
         formatted = "\n".join(f"  - {path}" for path in missing_files)
-        raise FileNotFoundError(f"Missing Flow360 surface results:\n{formatted}")
+        raise FileNotFoundError(f"Missing Flow360 surface results_postprocessing:\n{formatted}")
 
     records = []
     for case in CASES:

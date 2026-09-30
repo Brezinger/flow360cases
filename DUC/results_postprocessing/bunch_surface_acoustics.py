@@ -9,7 +9,7 @@ from itertools import zip_longest
 from pathlib import Path
 
 
-RESULTS_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = Path(__file__).resolve().parent / "Lifter4B"
 DEFAULT_SURFACE_RESOLVED_DIR = RESULTS_DIR / "aeroacoustics" / "step3" / "surface_resolved"
 GROUPS = ("blade1", "blade2", "blade3", "blade4", "hub")
 REQUIRED_BLADE_SECTIONS = ("Inner", "main", "TE")

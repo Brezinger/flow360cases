@@ -7,7 +7,16 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-RESULTS_DIR = Path("C:/git/flow360cases/DUC/results/forces").resolve()
+RESULTS_DIR = Path(__file__).resolve().parent / "POC2" / "forces"
+STEP_CONFIG_OVERRIDES = {
+    "step0": {"rpm": 1000.0, "time_steps_per_revolution": 120},
+    "step1": {"rpm": 1000.0, "time_steps_per_revolution": 120 * 6},
+    "step2": {"rpm": 1000.0, "time_steps_per_revolution": 120 * 16},
+    "step3": {"rpm": 1000., "time_steps_per_revolution": 120 * 32},
+    "step4": {"rpm": 1000., "time_steps_per_revolution": 120 * 32 * 25/12},
+}
+
+"""RESULTS_DIR = Path(__file__).resolve().parent / "Lifter4B" / "forces"
 STEP_CONFIG_OVERRIDES = {
     "step0C": {"rpm": 1075.0, "time_steps_per_revolution": 120},
     "step0D": {"rpm": 1075.0, "time_steps_per_revolution": 120},
@@ -21,9 +30,9 @@ STEP_CONFIG_OVERRIDES = {
     "step2D": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 16},
     "step3": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 32},
     "step4": {"rpm": 1063.677, "time_steps_per_revolution": 120 * 32 * 25/12},
-}
+}"""
 
-"""RESULTS_DIR = Path("C:/git/flow360cases/DUC/POC2x2/results/forces")
+"""RESULTS_DIR = Path("C:/git/flow360cases/DUC/POC2x2/results_postprocessing/forces")
 STEP_CONFIG_OVERRIDES = {
     "step0": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120},
     "step1": {"rpm": 104.92919462989909/(2*np.pi)*60, "time_steps_per_revolution": 120 * 6},
@@ -37,6 +46,7 @@ OUTPUT_FILE = RESULTS_DIR / "thrust_torque_coefficients_over_revolutions.png"
 AVERAGING_WINDOW_REVOLUTIONS = 3
 AXIS_PERCENTILE_LOW = 2
 AXIS_PERCENTILE_HIGH = 98
+CQ_VERTICAL_OFFSET_FRACTION = 0.15
 REFERENCE_DENSITY_KG_M3 = 1.111635
 REFERENCE_SPEED_OF_SOUND_M_S = 349.237
 PROPELLER_RADIUS_M = 1.4
@@ -51,7 +61,8 @@ class RunConfig:
 
 
 def _run_label(path: Path) -> str:
-    return path.name.split("_case-", 1)[0]
+    name = path.name.removesuffix("_results_total_forces_v2.csv")
+    return name.split("_case-", 1)[0]
 
 
 def _run_config(label: str) -> RunConfig:
@@ -169,8 +180,9 @@ def plot_thrust_and_torque_coefficients() -> Path:
 
     ct_y_min, ct_y_max = _percentile_limits(all_thrust_coefficients)
     cq_y_min, cq_y_max = _percentile_limits(all_torque_coefficients)
+    cq_axis_offset = CQ_VERTICAL_OFFSET_FRACTION * (cq_y_max - cq_y_min)
     ax.set_ylim(ct_y_min, ct_y_max)
-    ax_torque.set_ylim(cq_y_min, cq_y_max)
+    ax_torque.set_ylim(cq_y_min + cq_axis_offset, cq_y_max + cq_axis_offset)
     ax.axvspan(averaging_start, averaging_end, color="gray", alpha=0.18, label="averaging window")
     ax.hlines(
         average_ct,

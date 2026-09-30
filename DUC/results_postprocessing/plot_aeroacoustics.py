@@ -18,7 +18,8 @@ import numpy as np
 from scipy.signal import spectrogram, welch
 
 
-RESULTS_DIR = Path(__file__).resolve().parent
+SCRIPT_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = SCRIPT_DIR / "POC2"
 AEROACOUSTICS_DIR = RESULTS_DIR / "aeroacoustics"
 PLOTS_DIR = RESULTS_DIR / "aeroacoustic_plots"
 
@@ -35,6 +36,8 @@ OBSERVER_ANGLES_DEG = {
 }
 FLOW360_OBSERVER_NUMBERING_OFFSET = -1
 DEFAULT_RPM = 1063.677
+POC2_RPM = 1000.0
+POC2_PROPELLER_RADIUS_M = 1.4
 STEP3_TIME_STEPS_PER_REVOLUTION = 120 * 32
 STEP4_TIME_STEPS_PER_REVOLUTION = STEP3_TIME_STEPS_PER_REVOLUTION * 25 / 12
 DEFAULT_TIME_STEPS_PER_REVOLUTION = STEP4_TIME_STEPS_PER_REVOLUTION
@@ -43,6 +46,7 @@ LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3 = 1.064099
 LOCAL_RESULTS_REFERENCE_VELOCITY_M_S = 155.9432
 LOCAL_RESULTS_REFERENCE_TEMPERATURE_K = 303.275
 LOCAL_RESULTS_L_GRID_UNIT_M = 0.001
+POC2_REFERENCE_VELOCITY_M_S = 2.0 * np.pi * POC2_PROPELLER_RADIUS_M * POC2_RPM / 60.0
 POC2X2_REFERENCE_DENSITY_KG_M3 = 1.149
 POC2X2_REFERENCE_VELOCITY_M_S = 146.857683
 POC2X2_REFERENCE_TEMPERATURE_K = 283.275
@@ -68,7 +72,6 @@ SURFACE_THIRD_OCTAVE_GROUP_PAIRS = (
     ("blade1+blade3", ("blade1", "blade3")),
     ("blade2+blade4", ("blade2", "blade4")),
 )
-POC2X_MEASUREMENT_SHEET_NAMES = ("POC_2X_SBD_Ref", "POC2_2X SBD_Ref")
 POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER = {
     2: 5,
     3: 6,
@@ -171,9 +174,7 @@ class MeasurementSpectrum:
 @dataclass(frozen=True)
 class Poc2xMeasurementData:
     spectra_by_observer: dict[int, MeasurementSpectrum]
-    unweighted_spectra_by_observer: dict[int, MeasurementSpectrum]
     oaspl_dba_by_observer: dict[int, float]
-    oaspl_db_by_observer: dict[int, float]
 
 
 def _csv_observer_index(user_observer_index: int) -> int:
@@ -181,15 +182,10 @@ def _csv_observer_index(user_observer_index: int) -> int:
 
 
 def _default_acoustic_files() -> list[Path]:
-    search_dirs = [
-        AEROACOUSTICS_DIR,
-        RESULTS_DIR.parent / "POC2x2" / "results" / "aeroacoustics",
-    ]
-    candidates = []
-    for results_dir in search_dirs:
-        candidates.extend(sorted(results_dir.glob("*_results_total_acoustics_v*.csv")))
+    results_dir = AEROACOUSTICS_DIR / "step4"
+    candidates = sorted(results_dir.glob("*_total_acoustics_v*.csv"))
     if not candidates:
-        raise FileNotFoundError(f"No Flow360 total-acoustics CSV files found in {search_dirs}")
+        raise FileNotFoundError(f"No Flow360 step4 total-acoustics CSV files found in {results_dir}")
     return candidates
 
 
@@ -589,8 +585,32 @@ def print_oaspl_values(
         print(f"  Observer {observer}: {unweighted:.2f} dB, {a_weighted:.2f} dBA")
 
 
+def print_oaspl_differences(
+    dataset: AcousticDataset,
+    simulated_dba_by_observer: dict[int, float],
+    measured_dba_by_observer: dict[int, float],
+    observers: tuple[int, ...],
+) -> None:
+    matched_observers = [
+        observer
+        for observer in observers
+        if observer in simulated_dba_by_observer and observer in measured_dba_by_observer
+    ]
+    if not matched_observers:
+        return
+
+    print(f"A-weighted OASPL differences for {_case_label(dataset.source_file)} (simulation - measurement):")
+    for observer in matched_observers:
+        simulated = simulated_dba_by_observer[observer]
+        measured = measured_dba_by_observer[observer]
+        print(
+            f"  Observer {observer}: simulation {simulated:.2f} dBA, "
+            f"measurement {measured:.2f} dBA, difference {simulated - measured:+.2f} dBA"
+        )
+
+
 def _case_label(source_file: Path) -> str:
-    return source_file.name.split("_results_total_acoustics", 1)[0]
+    return re.split(r"_(?:results_)?total_acoustics", source_file.name, maxsplit=1)[0]
 
 
 def _case_id(source_file: Path) -> str:
@@ -623,6 +643,8 @@ def _legend_label(source_file: Path) -> str:
     path_parts = {part.lower() for part in source_file.resolve().parts}
     if "poc2x2" in path_parts:
         return "total - Case: Q40-LT"
+    if "poc2" in path_parts:
+        return f"total - Case: POC2 {step_label} (1000 RPM)"
     if _case_id(source_file) == "case-cf29e49e-da21-43ad-80e2-61a6f97bec80":
         return "total - Case: DUC EVE100 CCW Lifter4B"
     return f"total - Case: {step_label}"
@@ -671,6 +693,8 @@ def _timing_for_file(csv_file: Path, rpm: float | None, time_steps_per_revolutio
         step_label,
         (DEFAULT_RPM, DEFAULT_TIME_STEPS_PER_REVOLUTION),
     )
+    if "poc2" in {part.lower() for part in csv_file.resolve().parts}:
+        default_rpm = POC2_RPM
     return (
         default_rpm if rpm is None else rpm,
         default_steps_per_revolution if time_steps_per_revolution is None else time_steps_per_revolution,
@@ -698,6 +722,11 @@ def _reference_values_for_file(
         default_velocity = POC2X2_REFERENCE_VELOCITY_M_S
         default_temperature = POC2X2_REFERENCE_TEMPERATURE_K
         default_l_grid_unit_m = POC2X2_L_GRID_UNIT_M
+    elif "poc2" in path_parts:
+        default_density = LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3
+        default_velocity = POC2_REFERENCE_VELOCITY_M_S
+        default_temperature = LOCAL_RESULTS_REFERENCE_TEMPERATURE_K
+        default_l_grid_unit_m = LOCAL_RESULTS_L_GRID_UNIT_M
     else:
         default_density = LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3
         default_velocity = LOCAL_RESULTS_REFERENCE_VELOCITY_M_S
@@ -717,20 +746,37 @@ def render_bar_plot(
     plot: PlotDefinition,
     source_file: Path,
     output_dir: Path = PLOTS_DIR,
+    measurement_oaspl_dba_by_observer: dict[int, float] | None = None,
 ) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, plot.name == "oaspl_a_weighted")
     observers = sorted(values_by_observer)
     values = [values_by_observer[observer] for observer in observers]
 
     fig, ax = plt.subplots(figsize=(8, 5))
     bars = ax.bar([str(observer) for observer in observers], values, color="#4477aa")
     ax.bar_label(bars, labels=[f"{value:.1f}" for value in values], padding=3, fontsize=9)
+    all_values = list(values)
+    if plot.name == "oaspl_a_weighted" and measurement_oaspl_dba_by_observer:
+        measured_observers = [observer for observer in observers if observer in measurement_oaspl_dba_by_observer]
+        if measured_observers:
+            measured_values = [measurement_oaspl_dba_by_observer[observer] for observer in measured_observers]
+            all_values.extend(measured_values)
+            ax.plot(
+                [observers.index(observer) for observer in measured_observers],
+                measured_values,
+                color="black",
+                marker="x",
+                markersize=8,
+                linestyle="None",
+                label="Experiment 1000 RPM",
+            )
+            ax.legend(loc="upper right")
     ax.set_xlabel("Observer")
     ax.set_ylabel(plot.ylabel)
     ax.set_title(f"{plot.title} - {_case_label(source_file)}")
     ax.grid(axis="y", alpha=0.3)
-    y_min = min(values)
-    y_max = max(values)
+    y_min = min(all_values)
+    y_max = max(all_values)
     padding = 3.0 if y_min == y_max else 0.15 * (y_max - y_min)
     ax.set_ylim(y_min - padding, y_max + padding)
     fig.tight_layout()
@@ -745,7 +791,6 @@ def render_comparison_plot(
     results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
     observers: tuple[int, ...],
     output_dir: Path = PLOTS_DIR,
-    measurement_oaspl_db_by_observer: dict[int, float] | None = None,
     measurement_oaspl_dba_by_observer: dict[int, float] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -770,35 +815,19 @@ def render_comparison_plot(
                 linestyle="-",
             )
 
-        measurement_oaspl_by_observer = None
-        measurement_label = "measurement 1000 RPM"
-        if plot.name == "oaspl_unweighted":
-            measurement_oaspl_by_observer = measurement_oaspl_db_by_observer
-            measurement_label = "measurement 1000 RPM (reconstructed)"
-        elif plot.name == "oaspl_a_weighted":
-            measurement_oaspl_by_observer = measurement_oaspl_dba_by_observer
-
-        if measurement_oaspl_by_observer is not None:
-            measurement_observers = [
-                observer
-                for observer in observers
-                if observer in measurement_oaspl_by_observer
-            ]
-            if measurement_observers:
-                measurement_values = [
-                    measurement_oaspl_by_observer[observer]
-                    for observer in measurement_observers
-                ]
-                all_values.extend(measurement_values)
+        if plot.name == "oaspl_a_weighted" and measurement_oaspl_dba_by_observer:
+            measured_observers = [observer for observer in observers if observer in measurement_oaspl_dba_by_observer]
+            if measured_observers:
+                measured_values = [measurement_oaspl_dba_by_observer[observer] for observer in measured_observers]
+                all_values.extend(measured_values)
                 ax.plot(
-                    measurement_observers,
-                    measurement_values,
-                    linewidth=1.5,
-                    markersize=6,
-                    label=measurement_label,
+                    measured_observers,
+                    measured_values,
+                    markersize=8,
+                    label="Experiment 1000 RPM",
                     color="black",
                     marker="x",
-                    linestyle=":",
+                    linestyle="None",
                 )
 
         y_min = min(all_values)
@@ -849,6 +878,12 @@ def _weighting_filename_part() -> str:
     return "_a_weighted" if APPLY_A_WEIGHTING_TO_SPECTRA else ""
 
 
+def _single_weighting_output_dir(output_dir: Path, a_weighted: bool) -> Path:
+    plot_dir = output_dir / ("a-weighted" if a_weighted else "unweighted")
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    return plot_dir
+
+
 def _style_frequency_axis(ax) -> None:
     ax.tick_params(axis="both", which="major", labelsize=13)
     ax.tick_params(axis="both", which="minor", labelsize=10)
@@ -859,7 +894,9 @@ def _style_frequency_axis(ax) -> None:
     ax.xaxis.set_major_locator(LogLocator(base=10))
     ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=(2, 4, 6, 8), numticks=5))
     ax.xaxis.set_major_formatter(FuncFormatter(_frequency_tick_label))
-    ax.xaxis.set_minor_formatter(FuncFormatter(_frequency_tick_label))
+    ax.xaxis.set_minor_formatter(
+        FuncFormatter(lambda value, position: "" if value == 8000 else _frequency_tick_label(value, position))
+    )
 
     ax.tick_params(axis="x", which="major", labelsize=10)
     ax.tick_params(axis="x", which="minor", labelsize=8)
@@ -871,13 +908,8 @@ def _style_frequency_axis(ax) -> None:
     ax.yaxis.set_minor_formatter(FuncFormatter(_frequency_tick_label))
 
 
-def _oaspl_from_band_spl_db(band_spl_db: np.ndarray) -> float:
-    return float(10.0 * np.log10(np.sum(10.0 ** (np.asarray(band_spl_db, dtype=float) / 10.0))))
-
-
 def load_poc2x_1000rpm_measurement_data(
     workbook_file: Path,
-    sheet_names: tuple[str, ...] = POC2X_MEASUREMENT_SHEET_NAMES,
 ) -> Poc2xMeasurementData:
     try:
         from openpyxl import load_workbook
@@ -886,74 +918,58 @@ def load_poc2x_1000rpm_measurement_data(
 
     workbook_file = Path(workbook_file)
     workbook = load_workbook(workbook_file, data_only=True, read_only=True)
-    worksheet = None
-    for sheet_name in sheet_names:
-        if sheet_name in workbook.sheetnames:
-            worksheet = workbook[sheet_name]
-            break
-    if worksheet is None:
-        raise KeyError(
-            f"None of the measurement sheets {sheet_names} were found in {workbook_file}. "
-            f"Available sheets: {workbook.sheetnames}"
-        )
+    try:
+        worksheet = workbook.worksheets[0]
+        for observer, column_index in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER.items():
+            header_cell = worksheet.cell(row=3, column=column_index)
+            expected = f"{OBSERVER_ANGLES_DEG[observer]} 1000 rpm"
+            if expected not in str(header_cell.value or "").lower():
+                raise ValueError(f"Expected {expected!r} in {worksheet.title}!{header_cell.coordinate}")
 
-    frequencies_by_observer = {
-        observer: []
-        for observer in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER
-    }
-    spl_by_observer = {
-        observer: []
-        for observer in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER
-    }
-    oaspl_dba_by_observer = {}
+        oaspl_dba_by_observer = {}
+        for observer, column_index in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER.items():
+            value = worksheet.cell(row=28, column=column_index).value
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and np.isfinite(value):
+                oaspl_dba_by_observer[observer] = float(value)
 
-    for row in worksheet.iter_rows(min_row=4, values_only=True):
-        frequency_hz = row[0] if row else None
-        if isinstance(frequency_hz, str) and frequency_hz.strip().lower() == "oaspl":
+        frequencies_by_observer = {
+            observer: []
+            for observer in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER
+        }
+        spl_by_observer = {
+            observer: []
+            for observer in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER
+        }
+        for row in worksheet.iter_rows(min_row=4, values_only=True):
+            frequency_hz = row[0] if row else None
+            if not isinstance(frequency_hz, (int, float)):
+                continue
             for observer, column_index in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER.items():
                 spl_db = row[column_index - 1]
                 if isinstance(spl_db, (int, float)):
-                    oaspl_dba_by_observer[observer] = float(spl_db)
-            continue
-        if not isinstance(frequency_hz, (int, float)):
-            continue
-        for observer, column_index in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER.items():
-            spl_db = row[column_index - 1]
-            if isinstance(spl_db, (int, float)):
-                frequencies_by_observer[observer].append(float(frequency_hz))
-                spl_by_observer[observer].append(float(spl_db))
+                    frequencies_by_observer[observer].append(float(frequency_hz))
+                    spl_by_observer[observer].append(float(spl_db))
 
-    measurement_spectra = {}
-    unweighted_measurement_spectra = {}
-    oaspl_db_by_observer = {}
-    for observer, frequencies_hz in frequencies_by_observer.items():
-        if not frequencies_hz:
-            continue
-        frequency_array = np.asarray(frequencies_hz, dtype=float)
-        a_weighted_spl_db = np.asarray(spl_by_observer[observer], dtype=float)
-        unweighted_spl_db = a_weighted_spl_db - _a_weighting_db(frequency_array)
-        measurement_spectra[observer] = MeasurementSpectrum(
-            frequencies_hz=frequency_array,
-            spl_db=a_weighted_spl_db,
+        measurement_spectra = {}
+        for observer, frequencies_hz in frequencies_by_observer.items():
+            if not frequencies_hz:
+                continue
+            measurement_spectra[observer] = MeasurementSpectrum(
+                frequencies_hz=np.asarray(frequencies_hz, dtype=float),
+                spl_db=np.asarray(spl_by_observer[observer], dtype=float),
+            )
+        return Poc2xMeasurementData(
+            spectra_by_observer=measurement_spectra,
+            oaspl_dba_by_observer=oaspl_dba_by_observer,
         )
-        unweighted_measurement_spectra[observer] = MeasurementSpectrum(
-            frequencies_hz=frequency_array,
-            spl_db=unweighted_spl_db,
-        )
-        oaspl_db_by_observer[observer] = _oaspl_from_band_spl_db(unweighted_spl_db)
-    return Poc2xMeasurementData(
-        spectra_by_observer=measurement_spectra,
-        unweighted_spectra_by_observer=unweighted_measurement_spectra,
-        oaspl_dba_by_observer=oaspl_dba_by_observer,
-        oaspl_db_by_observer=oaspl_db_by_observer,
-    )
+    finally:
+        workbook.close()
 
 
 def load_poc2x_1000rpm_measurement_spectra(
     workbook_file: Path,
-    sheet_names: tuple[str, ...] = POC2X_MEASUREMENT_SHEET_NAMES,
 ) -> dict[int, MeasurementSpectrum]:
-    return load_poc2x_1000rpm_measurement_data(workbook_file, sheet_names).spectra_by_observer
+    return load_poc2x_1000rpm_measurement_data(workbook_file).spectra_by_observer
 
 
 def render_spectrum_plots(
@@ -961,7 +977,7 @@ def render_spectrum_plots(
     observers: tuple[int, ...],
     output_dir: Path = PLOTS_DIR,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, APPLY_A_WEIGHTING_TO_SPECTRA)
     output_files = []
 
     for observer in observers:
@@ -1005,14 +1021,10 @@ def render_third_octave_plots(
     output_dir: Path = PLOTS_DIR,
     measurement_spectra_by_observer: dict[int, MeasurementSpectrum] | None = None,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, APPLY_A_WEIGHTING_TO_SPECTRA)
     output_files = []
     markers = ("o", "s", "D", "^")
-    measurement_label = (
-        "measurement 1000 RPM"
-        if APPLY_A_WEIGHTING_TO_SPECTRA
-        else "measurement 1000 RPM (reconstructed)"
-    )
+    measurement_label = "Experiment 1000 RPM"
 
     for observer in observers:
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
@@ -1030,7 +1042,7 @@ def render_third_octave_plots(
                 marker=markers[index % len(markers)],
                 markerfacecolor="none",
                 linestyle="-",
-                linewidth=1.2,
+                linewidth=1.5,
             )
 
         if measurement_spectra_by_observer is not None:
@@ -1050,9 +1062,10 @@ def render_third_octave_plots(
                         measurement_spectrum.spl_db[frequency_mask],
                         label=measurement_label,
                         color="black",
-                        linestyle=":",
+                        linestyle="--",
                         marker="x",
-                        linewidth=1.5,
+                        markersize=6,
+                        linewidth=2.0,
                     )
 
         ax.set_title(f"1/3 Octave Spectra for observer ID: {observer}")
@@ -1095,7 +1108,7 @@ def render_surface_pair_third_octave_plots(
     output_dir: Path = PLOTS_DIR,
     group_pairs: tuple[tuple[str, tuple[str, ...]], ...] = SURFACE_THIRD_OCTAVE_GROUP_PAIRS,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, APPLY_A_WEIGHTING_TO_SPECTRA)
     output_files = []
     pair_groups = tuple(group for _, groups in group_pairs for group in groups)
     surface_datasets = load_surface_resolved_datasets(
@@ -1293,7 +1306,7 @@ def render_bpf_component_plots(
     output_dir: Path = PLOTS_DIR,
     blade_count: int = DEFAULT_BLADE_COUNT,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, False)
     output_files = []
     component_definitions = (
         ("Thickness pressure", "thickness_by_observer"),
@@ -1372,7 +1385,7 @@ def render_harmonic_content_plots(
     output_dir: Path = PLOTS_DIR,
     blade_count: int = DEFAULT_BLADE_COUNT,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, False)
     output_files = []
     markers = ("^", ">", "s", "o")
 
@@ -1652,7 +1665,7 @@ def render_spectrogram_plots(
     observers: tuple[int, ...],
     output_dir: Path = PLOTS_DIR,
 ) -> list[Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _single_weighting_output_dir(output_dir, False)
     output_files = []
     component_definitions = (
         ("PRESSURE", "pressure_by_observer", "total_pressure"),
@@ -1764,25 +1777,38 @@ def make_plots(
     for plot in plots:
         values_by_observer = evaluate_plot(dataset, plot)
         values_by_plot[plot.name] = values_by_observer
-        output_file = render_bar_plot(values_by_observer, plot, dataset.source_file, output_dir)
+        output_file = render_bar_plot(
+            values_by_observer,
+            plot,
+            dataset.source_file,
+            output_dir,
+            measurement_oaspl_dba_by_observer=(
+                measurement_data.oaspl_dba_by_observer if measurement_data is not None else None
+            ),
+        )
         output_files.append(output_file)
         print(f"Wrote {output_file}")
     if all(plot.name in values_by_plot for plot in PLOTS):
         print_oaspl_values(dataset, values_by_plot, observers)
-    if measurement_data is not None:
-        measurement_spectra_by_observer = (
-            measurement_data.spectra_by_observer
-            if APPLY_A_WEIGHTING_TO_SPECTRA
-            else measurement_data.unweighted_spectra_by_observer
-        )
-        for third_octave_output_file in render_third_octave_plots(
-            [(dataset, values_by_plot)],
+    if measurement_data is not None and "oaspl_a_weighted" in values_by_plot:
+        print_oaspl_differences(
+            dataset,
+            values_by_plot["oaspl_a_weighted"],
+            measurement_data.oaspl_dba_by_observer,
             observers,
-            output_dir,
-            measurement_spectra_by_observer=measurement_spectra_by_observer,
-        ):
-            output_files.append(third_octave_output_file)
-            print(f"Wrote {third_octave_output_file}")
+        )
+    for third_octave_output_file in render_third_octave_plots(
+        [(dataset, values_by_plot)],
+        observers,
+        output_dir,
+        measurement_spectra_by_observer=(
+            measurement_data.spectra_by_observer
+            if measurement_data is not None and APPLY_A_WEIGHTING_TO_SPECTRA
+            else None
+        ),
+    ):
+        output_files.append(third_octave_output_file)
+        print(f"Wrote {third_octave_output_file}")
     for pressure_time_output_file in render_pressure_time_history_plots(
         [(dataset, values_by_plot)],
         observers,
@@ -1874,20 +1900,20 @@ def make_comparison_plot(
         )
         if all(plot.name in values_by_plot for plot in PLOTS):
             print_oaspl_values(dataset, values_by_plot, observers)
+        if measurement_data is not None and "oaspl_a_weighted" in values_by_plot:
+            print_oaspl_differences(
+                dataset,
+                values_by_plot["oaspl_a_weighted"],
+                measurement_data.oaspl_dba_by_observer,
+                observers,
+            )
 
     output_file = render_comparison_plot(
         results_by_case,
         observers,
         output_dir,
-        measurement_oaspl_db_by_observer=(
-            measurement_data.oaspl_db_by_observer
-            if measurement_data is not None
-            else None
-        ),
         measurement_oaspl_dba_by_observer=(
-            measurement_data.oaspl_dba_by_observer
-            if measurement_data is not None
-            else None
+            measurement_data.oaspl_dba_by_observer if measurement_data is not None else None
         ),
     )
     print(f"Wrote {output_file}")
@@ -1898,12 +1924,8 @@ def make_comparison_plot(
         observers,
         output_dir,
         measurement_spectra_by_observer=(
-            (
-                measurement_data.spectra_by_observer
-                if APPLY_A_WEIGHTING_TO_SPECTRA
-                else measurement_data.unweighted_spectra_by_observer
-            )
-            if measurement_data is not None
+            measurement_data.spectra_by_observer
+            if measurement_data is not None and APPLY_A_WEIGHTING_TO_SPECTRA
             else None
         ),
     ):
@@ -1996,7 +2018,7 @@ def _parse_revolution_range(value: str) -> RevolutionRange | None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Plot Flow360 aeroacoustic OASPL results.")
+    parser = argparse.ArgumentParser(description="Plot Flow360 aeroacoustic OASPL results_postprocessing.")
     parser.add_argument(
         "--csv",
         type=Path,
@@ -2057,7 +2079,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Excel workbook containing POC2x measurement data. "
             "When provided, overlays 1000 RPM columns E:G on A-weighted 1/3-octave plots "
-            "for observers 2, 3, and 4."
+            "and row 28 OASPL on A-weighted observer plots for observers 2, 3, and 4. "
+            "Also prints simulated-minus-measured A-weighted OASPL differences."
         ),
     )
     weighting_group = parser.add_mutually_exclusive_group()

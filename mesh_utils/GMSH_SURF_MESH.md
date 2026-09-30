@@ -5,7 +5,7 @@ surface mesh.  Its configuration is a JSON file that describes geometry handling
 mesh sizing, structured regions, unstructured regions, and boundary layers.  It is
 intended for CAD models whose Gmsh entity tags have been identified beforehand.
 
-[`../DUC/msh_def_POC2.json`](../DUC/msh_def_POC2.json) is the primary working
+[`../DUC/POC2/msh_def_POC2.json`](../DUC/POC2/msh_def_POC2.json) is the primary working
 example.  It configures four automatically traced blade zones, local size limits,
 and a boundary layer.
 

@@ -104,7 +104,7 @@ def define_and_run(project_cgns_file_name=None, name=None,
     :param turbulator_location_files: Geometry-specific turbulator coordinate files
     :param wake_refinement_files: Geometry-specific wake refinement coordinate files
     :param flow360folder:       Flow360 folder to put the case in
-    :param results_path:        Path to store results
+    :param results_path:        Path to store results_postprocessing
     :param generate_vol_mesh:   Generate the volume mesh before returning or running the case
     :param boundary_layer_growth_rate: Boundary layer growth rate for volume meshing
     :param n_timesteps:         Maximum steady solver pseudo-steps
@@ -636,7 +636,7 @@ def main():
                     "alpha_deg": alpha_deg,
                     "input_mode": "target_lift_coefficient",
                 })
-    # initialize results DataFrame
+    # initialize results_postprocessing DataFrame
     cols = ["U_inf", "target_lift_coefficient", "alpha_deg", "CL", "CD", "CFx", "CFy", "CFz", "CMx", "CMy", "CMz"]
     df_results = pd.DataFrame(operating_points).reindex(columns=cols + ["input_mode"])
 

@@ -15,10 +15,11 @@ except ImportError:
     sf = None
 
 
-RESULTS_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = Path(__file__).resolve().parent / "Lifter4B"
 DEFAULT_INPUT_FILE = (
     RESULTS_DIR
     / "aeroacoustics"
+    / "step4"
     / "case-cf29e49e-da21-43ad-80e2-61a6f97bec80_results_total_acoustics_v3.csv"
 )
 DEFAULT_OUTPUT_DIR = RESULTS_DIR / "audio"
