@@ -390,8 +390,8 @@ if __name__ == "__main__":
     result = compute_surface_mesh_zones(
         total_elements=None,
         h_le_first=0.001,
-        h_te_first=0.5 / 105 / 4,
-        growth_rate=1.2,
+        h_te_first=0.001,
+        growth_rate=1.12,
         chord=1.0,
         h_const_target=0.01,
         plot=True,
