@@ -83,13 +83,14 @@ mesh options are optional:
 | `min element size` / `min_element_size` | Global Gmsh minimum element size. |
 | `max element size` / `max_element_size` | Global Gmsh maximum element size. |
 | `surface_meshing_algorithm` | Optional global 2D meshing algorithm. |
+| `point_density_refinements` | Local target element sizes at CAD point tags. |
 | `surface_size_limits` | Per-surface maximum sizes. |
 | `anisotropic_curve_refinements` | Surface-scoped anisotropic curve sizing fields; their surfaces use BAMG automatically. |
 | `boundary_layers` | Boundary-layer fields applied along selected curves and surfaces. |
 | `surface_meshing_algorithms` | Per-surface unstructured meshing algorithm. |
 | `unstructured_surfaces` | Surface tags deliberately excluded from transfinite/recombined meshing. |
 
-#### Global and surface size limits
+#### Global, point, and surface size limits
 
 `min element size` and `max element size` set `Mesh.MeshSizeMin` and
 `Mesh.MeshSizeMax`.  `surface_size_limits` adds maximum-size caps only on the
@@ -107,6 +108,19 @@ selected surfaces:
 If a surface appears more than once, the smallest configured maximum wins.  In
 POC2, all other surfaces are still subject to the global `max_element_size` of
 `10.0`.
+
+`point_density_refinements` sets the local Gmsh mesh size at selected CAD
+points after geometry healing and curve compounding. Each entry needs a
+non-empty `points` list and a positive `element_size`. If a point appears in
+multiple entries, the smallest size is used:
+
+```json
+{
+  "point_density_refinements": [
+    { "points": [505], "element_size": 2.0 }
+  ]
+}
+```
 
 #### Anisotropic curve refinement
 

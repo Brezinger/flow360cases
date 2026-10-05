@@ -704,6 +704,31 @@ class BoundaryLayerTests(unittest.TestCase):
         field.setAsBoundaryLayer.assert_called_once_with(7)
 
 
+class PointDensityRefinementTests(unittest.TestCase):
+    @patch("gmsh_surf_mesh.gmsh.model.getEntities", return_value=[(0, 505), (0, 506)])
+    @patch("gmsh_surf_mesh.gmsh.model.mesh.setSize")
+    def test_applies_smallest_size_to_each_point(self, set_size, _get_entities) -> None:
+        gmsh_surf_mesh.apply_point_density_refinements(
+            {
+                "point_density_refinements": [
+                    {"points": [505, 506], "element_size": 3.0},
+                    {"points": [505], "element_size": 2.0},
+                ]
+            }
+        )
+
+        set_size.assert_any_call([(0, 505)], 2.0)
+        set_size.assert_any_call([(0, 506)], 3.0)
+        self.assertEqual(set_size.call_count, 2)
+
+    @patch("gmsh_surf_mesh.gmsh.model.getEntities", return_value=[(0, 505)])
+    def test_rejects_unknown_point(self, _get_entities) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown points \\[506\\]"):
+            gmsh_surf_mesh.apply_point_density_refinements(
+                {"point_density_refinements": [{"points": [506], "element_size": 2.0}]}
+            )
+
+
 class SurfaceSizeLimitTests(unittest.TestCase):
     @patch(
         "gmsh_surf_mesh.gmsh.model.getEntities",

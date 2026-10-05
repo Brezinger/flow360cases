@@ -17,20 +17,17 @@ from flow360.component.simulation.folder import ROOT_FOLDER
 from flow360.environment import current_environment
 
 
-GEOMETRY_STEP_FILE = None
-GEOMETRY_CSM_FILE = None
-GEOMETRY_FILE = None
+SURFACE_MESH_FILE = Path(__file__).resolve().with_name("Pusher.cgns")
 AEROACOUSTIC_SOURCE_FILE = Path(__file__).resolve().with_name(
     "Q40LT_step4_simulation.json"
 )
 
 @dataclass(frozen=True)
-class VolumeCylinderRefinementSpec:
+class AxisymmetricVolumeRefinementSpec:
     name: str
     axial_min_offset: float
     axial_max_offset: float
-    inner_radius_ratio: float
-    outer_radius_ratio: float
+    upstream_radius_ratio: float
     spacing: float
 
 
@@ -39,8 +36,9 @@ class BladeVortexBoxRefinementSpec:
     name: str
     axial_offset: float
     span_axis_index: int
-    length: float
-    tangential_width: float
+    length_radius_ratio: float
+    tangential_width_radius_ratio: float
+    height: float | None  # Metres; set explicitly for each refinement.
     spacing: float
 
 
@@ -53,7 +51,7 @@ class StepSettings:
     max_pseudo_steps: int
     numerical_dissipation_factor: float
     rpm: float = 2186.0
-    rotation_direction: int = -1
+    rotation_direction: int = 1
     wall_roughness_height: float = 1.0e-5
     navier_stokes_relative_tolerance: float = 0.0175
     navier_stokes_order_of_accuracy: int = 2
@@ -93,7 +91,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     1: StepSettings(
         step_number=1,
-        parent_case_id="case-8ab2e55e-63c6-4167-9679-1b77eac32325",
+        parent_case_id="",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25 * 1/2 * 6/16),
         num_revolutions=5,
         max_pseudo_steps=15,
@@ -101,7 +99,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     2: StepSettings(
         step_number=2,
-        parent_case_id="case-2cd84f26-a687-4209-8f74-7f2fc69c1b5a",
+        parent_case_id="",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25 * 1/2),
         num_revolutions=2,
         max_pseudo_steps=12,
@@ -109,7 +107,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     3: StepSettings(
         step_number=3,
-        parent_case_id="case-beb13e25-7f8b-4891-9f9d-53f9d8462d9c",
+        parent_case_id="",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25),
         num_revolutions=2,
         max_pseudo_steps=8,
@@ -120,7 +118,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     4: StepSettings(
         step_number=4,
-        parent_case_id="case-4fcc3b53-bb3e-43fc-97c1-7047b13067e3",
+        parent_case_id="",
         time_steps_per_revolution=final_timesteps_per_rev,
         num_revolutions=3,
         max_pseudo_steps=10,
@@ -147,8 +145,8 @@ class CaseSetup:
     """Constants copied from the old POC2x2 Flow360 JSON setup."""
 
     name: str = "DUC EVE Pusher"
-    geometry_length_unit: str = "mm"
-    flow360_folder_path: tuple[str, ...] = ("DUC", "POC2")
+    surface_mesh_length_unit: str = "mm"
+    flow360_folder_path: tuple[str, ...] = ("DUC", "Pusher")
 
     propeller_radius: float = 2.120/2
 
@@ -157,47 +155,40 @@ class CaseSetup:
 
     alpha_deg: float = 3.5
     beta_deg: float = 0.0
+    true_airspeed_knots: float = 91.6
     altitude_ft: float = 0.0
     temperature_offset_deg_c: float = 10.0
 
     #rotation_axis: tuple[float, float, float] = (1.0, 0.0, 0.0)
     #rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rotation_axis: tuple[float, float, float] = (0.0, 0.0, 1.0)
-    rotation_center: tuple[float, float, float] = (0.0, 0.0, 0.0184375)
+    rotation_axis: tuple[float, float, float] = (-1.0, 0.0, 0.0)
+    rotation_center: tuple[float, float, float] = (0.36138462, 0.0, 0.0)
 
     step: StepSettings = field(default_factory=lambda: select_step(step_selector))
 
-    include_aeroacoustic_observer_group_2: bool = False
+    include_aeroacoustic_observer_group_2: bool = True
 
 
-    # Mesh-generation placeholders. The old case JSON was produced from a
-    # supplied volume mesh, so it does not define these. Keep these conservative
-    # until the CAD import tags and generated mesh are checked.
+    # Volume-mesh settings for the Gmsh surface mesh.
     # Dimensionless radial ratios from the original 2.8 m propeller setup.
     rotation_volume_radius_ratio: float = 1.0714285714285714
-    rotation_volume_height: float = 0.423125
+    rotation_volume_height: float = 0.931
     octree_base_spacing: float = 0.00295898 * 1.234
     rotation_volume_spacing: float = octree_base_spacing * 2
     farfield_relative_size: float = 50
-    surface_max_edge_length: float = 9.88e-3
-    curvature_resolution_angle_deg: float = 5.0
-    boundary_layer_first_layer_thickness: float = 3.3e-5 * 1.5
+    boundary_layer_first_layer_thickness: float = 2.62e-5
     boundary_layer_growth_rate: float = 1.16
-    surface_edge_growth_rate: float = 1.12
-    blade_inner_max_edge_length: float = 9.88e-3
-    hub_max_edge_length: float = 5.02e-3
-    blade_main_max_edge_length: float = 3.02e-3
-    blade_te_max_edge_length: float = 1.42e-3
-    trailing_edge_normal_spacing: float = 8.9e-5
-    hub_edge_spacing: float = 0.992e-3
     tip_wake_inner_radius_ratio: float = 0.7857142857142857
-    tip_wake_axial_lower_offset: float = -0.1184375
     tip_wake_spacing: float = octree_base_spacing
     blade_vortex_spacing: float = octree_base_spacing
+    # Ideal far-wake radius ratio for 4914 N at 91.6 kn, from the notebook.
+    far_wake_radius_ratio: float = 0.9209301158839447
 
     def __post_init__(self) -> None:
         if type(self.step.rotation_direction) is not int or self.step.rotation_direction not in (-1, 1):
             raise ValueError("rotation_direction must be +1 or -1")
+        if not 0.0 < self.far_wake_radius_ratio <= 1.0:
+            raise ValueError("far_wake_radius_ratio must be in (0, 1]")
 
     @property
     def ref_area(self) -> float:
@@ -220,6 +211,10 @@ class CaseSetup:
         return abs(self.omega_rad_s) * self.propeller_radius
 
     @property
+    def freestream_speed_m_s(self) -> float:
+        return self.true_airspeed_knots * (1852.0 / 3600.0)
+
+    @property
     def time_step_size_s(self) -> float:
         return 60.0 / (self.step.rpm * self.step.time_steps_per_revolution)
 
@@ -227,84 +222,81 @@ class CaseSetup:
 CONFIG = CaseSetup()
 
 
-# Axial offsets are measured from the rotation center. These values preserve
-# the original positions when the rotation center is (0, 0, 0.0184375) m.
-# Cylinder radial dimensions are multiples of the blade radius.
-VOLUME_CYLINDER_REFINEMENTS: tuple[VolumeCylinderRefinementSpec, ...] = (
-    VolumeCylinderRefinementSpec(
+# Axial offsets are measured from the rotation center along the upstream
+# freestream axis (opposite the Flow360 freestream velocity direction).
+# The minimum offset is downstream; its radius is scaled by far_wake_radius_ratio.
+# Historic refinement names are retained even though every body is now solid.
+VOLUME_AXISYMMETRIC_REFINEMENTS: tuple[AxisymmetricVolumeRefinementSpec, ...] = (
+    AxisymmetricVolumeRefinementSpec(
         name="intermediate_cylinder",
-        axial_min_offset=-0.3846475,
+        axial_min_offset=-1.1903105,
         axial_max_offset=0.4210155,
-        inner_radius_ratio=0.0,
-        outer_radius_ratio=1.2032642857142857,
+        upstream_radius_ratio=1.2032642857142857,
         spacing=CONFIG.octree_base_spacing * 2**3,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="intermediate_annulus",
         axial_min_offset=-6.2806475,
         axial_max_offset=0.2115625,
-        inner_radius_ratio=0.7585785714285714,
-        outer_radius_ratio=1.3602142857142858,
+        upstream_radius_ratio=0.9 * 1.3602142857142858,
         spacing=CONFIG.octree_base_spacing * 2**3,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="coarse_cylinder",
         axial_min_offset=-0.7508595,
         axial_max_offset=0.8604685,
-        inner_radius_ratio=0.0,
-        outer_radius_ratio=1.3602142857142858,
+        upstream_radius_ratio=1.3602142857142858,
         spacing=CONFIG.octree_base_spacing * 2**4,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="short_coarse_annulus",
         axial_min_offset=-6.6834775,
         axial_max_offset=0.7139845,
-        inner_radius_ratio=0.4185271428571429,
-        outer_radius_ratio=1.4648428571428572,
+        upstream_radius_ratio=0.9 * 1.4648428571428572,
         spacing=CONFIG.octree_base_spacing * 2**4,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="coarse_annulus",
         axial_min_offset=-8.4412875,
         axial_max_offset=0.4210155,
-        inner_radius_ratio=0.5231585714285714,
-        outer_radius_ratio=1.6217928571428573,
+        upstream_radius_ratio=0.9 * 1.6217928571428573,
         spacing=CONFIG.octree_base_spacing * 2**4,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="outer_short_wide_cylinder",
         axial_min_offset=-10.8484375,
         axial_max_offset=1.1527425,
-        inner_radius_ratio=0.0,
-        outer_radius_ratio=1.8928571428571428,
+        upstream_radius_ratio=1.8928571428571428,
         spacing=CONFIG.octree_base_spacing * 2**5,
     ),
-    VolumeCylinderRefinementSpec(
+    AxisymmetricVolumeRefinementSpec(
         name="outermost_cylinder",
         axial_min_offset=-9.2469575,
         axial_max_offset=1.5928925,
-        inner_radius_ratio=0.0,
-        outer_radius_ratio=2.185714285714286,
+        upstream_radius_ratio=2.185714285714286,
         spacing=CONFIG.octree_base_spacing * 2**5,
     ),
 )
 
 
+# Span and tangential widths retain the ratios from POC2's 1.4 m blade radius.
 BLADE_VORTEX_REFINEMENTS: tuple[BladeVortexBoxRefinementSpec, ...] = (
     BladeVortexBoxRefinementSpec(
         name="Blade1+3Refinement",
-        axial_offset=0.1115625,
+        axial_offset=0.36138462,
         span_axis_index=0,
-        length=2.97,
-        tangential_width=0.34,
+        length_radius_ratio=2.97 / 1.4,
+        tangential_width_radius_ratio=0.5 / 1.4,
+        height=0.15,
         spacing=CONFIG.blade_vortex_spacing,
     ),
     BladeVortexBoxRefinementSpec(
         name="Blade2+4Refinement",
-        axial_offset=-0.0154375,
+        axial_offset=0.36138462,
         span_axis_index=1,
-        length=2.97,
-        tangential_width=0.34,
+        length_radius_ratio=2.97 / 1.4,
+        tangential_width_radius_ratio=0.5 / 1.4,
+        height=0.15,
         spacing=CONFIG.blade_vortex_spacing,
     ),
 )
@@ -313,201 +305,41 @@ BLADE_VORTEX_REFINEMENTS: tuple[BladeVortexBoxRefinementSpec, ...] = (
 BLADE_IDS = (1, 2, 3, 4)
 
 
-def _blade_group_names(suffix: str) -> list[str]:
-    return [f"blade{blade_id}{suffix}" for blade_id in BLADE_IDS]
-
-
-# Update these after the first geometry upload if Flow360 exposes different names.
-FACE_GROUP_ALIASES = {
-    "bladeInner": _blade_group_names("Inner"),
-    "hub": ["hub"],
-    "bladeMain": _blade_group_names("main"),
-    "bladeTE": _blade_group_names("TE"),
-}
-
-CAD_WALL_GROUP_ALIASES = {
-    "hub": ["hub"],
-    **{
-        f"blade{blade_id}": [
-            f"blade{blade_id}Inner",
-            f"blade{blade_id}main",
-            f"blade{blade_id}TE",
-        ]
-        for blade_id in BLADE_IDS
-    },
-}
-
 SURFACE_MESH_WALL_PREFIXES = {
     "hub": ["hub_"],
     **{f"blade{blade_id}": [f"blade{blade_id}"] for blade_id in BLADE_IDS},
 }
 
-EDGE_GROUP_ALIASES = {
-    "leading_edge": [
-        "leadingEdges",
-        "leadingEdge",
-        "leading_edge",
-        *_blade_group_names("LE"),
-        *_blade_group_names("LeadingEdges"),
-    ],
-    "trailing_edge": [
-        "trailingEdges",
-        "trailingEdge",
-        "trailing_edge",
-        "bladeTrailingEdge",
-        *_blade_group_names("TEEdges"),
-        *_blade_group_names("TrailingEdges"),
-    ],
-    "hub_edges": ["hubEdges", "hub_edges"],
-}
-
-CSM_FACE_GROUPS = {
-    "hub": [20, 37, 1, 56, 50, 26],
-    "blade1": [18, 13, 12, 8, 9, 19, 14, 22, 6],
-}
-
-
-def _write_geometry_csm_file(csm_file: Path, step_file: Path) -> None:
-    if not step_file.exists():
-        raise FileNotFoundError(f"Could not find STEP file for CSM import: {step_file}")
-
-    lines = [
-        f"import $/{step_file.name} -1",
-        "",
-    ]
-    for group_name, face_ids in CSM_FACE_GROUPS.items():
-        variable_name = f"{group_name}Faces"
-        face_id_values = "; ".join(str(face_id) for face_id in face_ids)
-        lines.extend(
-            [
-                f"# {group_name}",
-                f"dimension {variable_name} {len(face_ids)} 1",
-                f"set {variable_name} \"{face_id_values}\"",
-                f"patbeg i {variable_name}.size",
-                f"   select face {variable_name}[i]",
-                f"   attribute faceName ${group_name}",
-                f"   attribute groupName ${group_name}",
-                "patend",
-                "",
-            ]
-        )
-    lines.append(f"dump $/{step_file.with_suffix('.egads').name} 0 1 0")
-    csm_text = "\n".join(lines) + "\n"
-    csm_file.write_text(csm_text, encoding="utf-8")
-
-
-def _matches_entity_type(entity, entity_type_name: str | None) -> bool:
-    if entity_type_name is None:
-        return True
-    actual_type_name = getattr(entity, "private_attribute_entity_type_name", None)
-    return actual_type_name is None or actual_type_name == entity_type_name
-
-
-def _entities_by_possible_names(
-    geometry,
-    possible_names: list[str],
-    *,
-    entity_type_name: str | None = None,
-):
-    entities = []
-    for name in possible_names:
-        try:
-            matched = geometry[name]
-        except Exception:
-            registry = getattr(geometry, "internal_registry", None)
-            if registry is None:
-                continue
-            matched = registry.find_by_naming_pattern(name)
-            if not matched:
-                continue
-        if isinstance(matched, list):
-            entities.extend(entity for entity in matched if _matches_entity_type(entity, entity_type_name))
-        else:
-            if _matches_entity_type(matched, entity_type_name):
-                entities.append(matched)
-    return entities
-
-
 def _available_surface_group_names(geometry) -> list[str]:
-    boundary_names = getattr(geometry, "boundary_names", None)
-    if boundary_names is not None:
-        return sorted(boundary_names)
-    return _available_entity_group_names(geometry, "Surface")
-
-
-def _available_edge_group_names(geometry) -> list[str]:
-    return _available_entity_group_names(geometry, "Edge")
-
-
-def _available_entity_group_names(geometry, entity_type_name: str) -> list[str]:
-    registry = getattr(geometry, "internal_registry", None)
-    if registry is None:
-        return []
-    names = []
-    for entity_list in registry.internal_registry.values():
-        for entity in entity_list:
-            if getattr(entity, "private_attribute_entity_type_name", None) == entity_type_name:
-                names.append(getattr(entity, "name", repr(entity)))
-    return sorted(set(names))
+    return sorted(getattr(geometry, "boundary_names", []))
 
 
 def _wall_entities(geometry) -> dict[str, list]:
-    boundary_names = getattr(geometry, "boundary_names", None)
-    if boundary_names is not None:
-        wall_entities = {
-            wall_name: [
-                geometry[boundary_name]
-                for boundary_name in boundary_names
-                if any(
-                    boundary_name.startswith(prefix)
-                    or boundary_name.rsplit("/", 1)[-1].startswith(prefix)
-                    for prefix in prefixes
-                )
-            ]
-            for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
-        }
-        if any(wall_entities.values()):
-            return wall_entities
-
-        wall_boundary_names = [
-            boundary_name
+    boundary_names = getattr(geometry, "boundary_names", [])
+    wall_entities = {
+        wall_name: [
+            geometry[boundary_name]
             for boundary_name in boundary_names
-            if "farfield" not in boundary_name.lower() and "interface" not in boundary_name.lower()
+            if any(
+                boundary_name.startswith(prefix)
+                or boundary_name.rsplit("/", 1)[-1].startswith(prefix)
+                for prefix in prefixes
+            )
         ]
-        if not wall_boundary_names:
-            wall_boundary_names = list(boundary_names)
-        return {"wall": [geometry[boundary_name] for boundary_name in wall_boundary_names]}
-
-    return {
-        wall_name: _entities_by_possible_names(
-            geometry,
-            possible_names,
-            entity_type_name="Surface",
-        )
-        for wall_name, possible_names in CAD_WALL_GROUP_ALIASES.items()
+        for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
     }
+    if any(wall_entities.values()):
+        return wall_entities
 
-
-def _surface_refinement_entities(geometry) -> dict[str, list]:
-    return {
-        zone_name: _entities_by_possible_names(
-            geometry,
-            possible_names,
-            entity_type_name="Surface",
-        )
-        for zone_name, possible_names in FACE_GROUP_ALIASES.items()
-    }
-
-
-def _edge_entities(geometry) -> dict[str, list]:
-    return {
-        edge_name: _entities_by_possible_names(
-            geometry,
-            possible_names,
-            entity_type_name="Edge",
-        )
-        for edge_name, possible_names in EDGE_GROUP_ALIASES.items()
-    }
+    wall_boundary_names = [
+        boundary_name
+        for boundary_name in boundary_names
+        if "farfield" not in boundary_name.lower()
+        and "interface" not in boundary_name.lower()
+    ]
+    if not wall_boundary_names:
+        wall_boundary_names = list(boundary_names)
+    return {"wall": [geometry[name] for name in wall_boundary_names]}
 
 
 def _all_walls(wall_entities: dict[str, list]):
@@ -548,6 +380,17 @@ def _rotation_frame(cfg: CaseSetup) -> tuple[
     return axis, radial_u, radial_v
 
 
+def _freestream_upstream_axis(cfg: CaseSetup) -> tuple[float, float, float]:
+    alpha = math.radians(cfg.alpha_deg)
+    beta = math.radians(cfg.beta_deg)
+    # Flow360 freestream: (cos(beta)*cos(alpha), -sin(beta), cos(beta)*sin(alpha)).
+    return (
+        -math.cos(beta) * math.cos(alpha),
+        math.sin(beta),
+        -math.cos(beta) * math.sin(alpha),
+    )
+
+
 def _axis_point(
     cfg: CaseSetup, axis: tuple[float, float, float], axial_offset: float
 ) -> tuple[float, float, float]:
@@ -568,44 +411,21 @@ def _rotation_volume(cfg: CaseSetup):
     )
 
 
-def _make_project(geometry_file: Path, cfg: CaseSetup, flow360_folder, use_beta_mesher):
-    if not GEOMETRY_CSM_FILE.exists():
-        raise FileNotFoundError(
-            f"Could not find CSM file with faceName/edgeName tags: {GEOMETRY_CSM_FILE}"
-        )
-    if geometry_file.suffix.lower() == ".egads" and not geometry_file.exists():
-        raise FileNotFoundError(
-            f"Could not find generated EGADS geometry: {geometry_file}. "
-            f"Open or run the CSM file first to create it: {GEOMETRY_CSM_FILE}"
-        )
-
-    if use_beta_mesher:
-        proj_name = cfg.name + "_beta_mesher"
-    else:
-        proj_name = cfg.name
-
-    project = fl.Project.from_geometry(
-        str(geometry_file),
-        name=proj_name,
+def _make_project_from_local_surface_mesh(
+    surface_mesh_file: Path, cfg: CaseSetup, flow360_folder
+):
+    surface_mesh_file = Path(surface_mesh_file)
+    if not surface_mesh_file.is_file():
+        raise FileNotFoundError(f"Could not find Gmsh CGNS surface mesh: {surface_mesh_file}")
+    if surface_mesh_file.suffix.lower() != ".cgns":
+        raise ValueError(f"Expected a CGNS surface mesh, got {surface_mesh_file}")
+    return fl.Project.from_surface_mesh(
+        str(surface_mesh_file),
+        name=cfg.name,
         folder=flow360_folder,
-        length_unit=cfg.geometry_length_unit,
+        length_unit=cfg.surface_mesh_length_unit,
         run_async=False,
     )
-    geometry = project.geometry
-
-    # Same convention as GBT.py. These calls are harmless if the imported CAD
-    # does not have these tags; in that case FACE_GROUP_ALIASES must be updated from
-    # geometry.show_available_groupings(verbose_mode=True).
-    try:
-        geometry.group_faces_by_tag("faceName")
-    except Exception:
-        pass
-    try:
-        geometry.group_edges_by_tag("edgeName")
-    except Exception:
-        pass
-
-    return project
 
 
 def _find_subfolder(folder_tree: dict, name: str) -> dict | None:
@@ -631,87 +451,35 @@ def _get_or_create_flow360_folder(folder_path: tuple[str, ...]):
     return folder
 
 
-def _make_surface_edge_refinements(geometry, cfg: CaseSetup):
-    geometry.group_edges_by_tag("edgeName")
-    edge_entities = _edge_entities(geometry)
-    required_edge_groups = ("trailing_edge", "hub_edges")
-    missing = [name for name in required_edge_groups if not edge_entities[name]]
-    if missing:
-        raise ValueError(
-            f"Could not resolve edge groups {missing}. "
-            f"Available edge groups: {_available_edge_group_names(geometry)}. "
-            "Tag the CAD edges with edgeName/groupName='trailingEdges' and 'hubEdges' in the CSM."
-        )
-
-    return [
-        fl.SurfaceEdgeRefinement(
-            name="TrailingEdgeSurfaceEdgeRefinement",
-            edges=edge_entities["trailing_edge"],
-            method=fl.HeightBasedRefinement(value=cfg.trailing_edge_normal_spacing * u.m),
-        ),
-        fl.SurfaceEdgeRefinement(
-            name="HubEdgesSurfaceEdgeRefinement",
-            edges=edge_entities["hub_edges"],
-            method=fl.HeightBasedRefinement(value=cfg.hub_edge_spacing * u.m),
-        ),
-    ]
-
-
-def _make_surface_refinements(geometry, cfg: CaseSetup):
-    geometry.group_faces_by_tag("faceName")
-    face_entities = _surface_refinement_entities(geometry)
-    missing = [name for name, entities in face_entities.items() if not entities]
-    if missing:
-        raise ValueError(
-            f"Could not resolve faceName groups {missing}. "
-            f"Available faceName groups: {_available_surface_group_names(geometry)}. "
-            "Check the CSM faceName attributes."
-        )
-
-    zone_sizes = {
-        "bladeInner": cfg.blade_inner_max_edge_length,
-        "hub": cfg.hub_max_edge_length,
-        "bladeMain": cfg.blade_main_max_edge_length,
-        "bladeTE": cfg.blade_te_max_edge_length,
-    }
-    return [
-        fl.SurfaceRefinement(
-            name=f"{zone_name}SurfaceRefinement",
-            faces=face_entities[zone_name],
-            max_edge_length=max_edge_length * u.m,
-        )
-        for zone_name, max_edge_length in zone_sizes.items()
-    ]
-
-
 def _make_meshing_defaults(cfg: CaseSetup):
     return fl.MeshingDefaults(
-        surface_edge_growth_rate=cfg.surface_edge_growth_rate,
-        surface_max_edge_length=cfg.surface_max_edge_length * u.m,
-        curvature_resolution_angle=cfg.curvature_resolution_angle_deg * u.deg,
         boundary_layer_growth_rate=cfg.boundary_layer_growth_rate,
         boundary_layer_first_layer_thickness=cfg.boundary_layer_first_layer_thickness * u.m,
         octree_spacing=fl.OctreeSpacing(base_spacing=cfg.octree_base_spacing * u.m),
     )
 
 
-def _make_volume_cylinder_refinements(cfg: CaseSetup):
-    axis, _, _ = _rotation_frame(cfg)
+def _make_axisymmetric_volume_refinements(cfg: CaseSetup):
+    axis = _freestream_upstream_axis(cfg)
     refinements = []
-    for spec in VOLUME_CYLINDER_REFINEMENTS:
-        axial_center = 0.5 * (spec.axial_min_offset + spec.axial_max_offset)
-        cylinder = fl.Cylinder(
+    for spec in VOLUME_AXISYMMETRIC_REFINEMENTS:
+        upstream_radius = spec.upstream_radius_ratio * cfg.propeller_radius
+        downstream_radius = upstream_radius * cfg.far_wake_radius_ratio
+        volume = fl.AxisymmetricBody(
             name=f"{spec.name}_volume",
-            center=_axis_point(cfg, axis, axial_center) * u.m,
+            center=cfg.rotation_center * u.m,
             axis=axis,
-            height=(spec.axial_max_offset - spec.axial_min_offset) * u.m,
-            inner_radius=spec.inner_radius_ratio * cfg.propeller_radius * u.m,
-            outer_radius=spec.outer_radius_ratio * cfg.propeller_radius * u.m,
+            profile_curve=[
+                (spec.axial_min_offset, 0.0) * u.m,
+                (spec.axial_min_offset, downstream_radius) * u.m,
+                (spec.axial_max_offset, upstream_radius) * u.m,
+                (spec.axial_max_offset, 0.0) * u.m,
+            ],
         )
         refinements.append(
             fl.UniformRefinement(
                 name=f"{spec.name}_refinement",
-                entities=[cylinder],
+                entities=[volume],
                 spacing=spec.spacing * u.m,
             )
         )
@@ -720,13 +488,11 @@ def _make_volume_cylinder_refinements(cfg: CaseSetup):
 
 def _make_tip_wake_refinement(cfg: CaseSetup):
     axis, _, _ = _rotation_frame(cfg)
-    axial_upper = 0.5 * cfg.rotation_volume_height
-    axial_lower = cfg.tip_wake_axial_lower_offset
     cylinder = fl.Cylinder(
         name="tip_wake_annulus_volume",
-        center=_axis_point(cfg, axis, 0.5 * (axial_lower + axial_upper)) * u.m,
+        center=cfg.rotation_center * u.m,
         axis=axis,
-        height=(axial_upper - axial_lower) * u.m,
+        height=cfg.rotation_volume_height * u.m,
         inner_radius=cfg.tip_wake_inner_radius * u.m,
         outer_radius=cfg.rotation_volume_radius * u.m,
     )
@@ -741,19 +507,18 @@ def _make_blade_vortex_box_refinements(cfg: CaseSetup):
     axis, radial_u, radial_v = _rotation_frame(cfg)
     radial_axes = (radial_u, radial_v)
     refinements = []
-    axial_upper = 0.5 * cfg.rotation_volume_height
-    blade_vortex_axial_size = 2.0 * (axial_upper - BLADE_VORTEX_REFINEMENTS[0].axial_offset)
-    if blade_vortex_axial_size <= 0.0:
-        raise ValueError(
-            "Blade-vortex refinement center is above the rotation-volume upper boundary. "
-            f"axial_offset={BLADE_VORTEX_REFINEMENTS[0].axial_offset}, upper_offset={axial_upper}"
-        )
     for spec in BLADE_VORTEX_REFINEMENTS:
+        if spec.height is None or spec.height <= 0.0:
+            raise ValueError(f"Set a positive height in metres for {spec.name} before volume meshing.")
         box = fl.Box.from_principal_axes(
             name=f"{spec.name}_volume",
             center=_axis_point(cfg, axis, spec.axial_offset) * u.m,
             axes=(radial_axes[spec.span_axis_index], radial_axes[1 - spec.span_axis_index]),
-            size=(spec.length, spec.tangential_width, blade_vortex_axial_size) * u.m,
+            size=(
+                spec.length_radius_ratio * cfg.propeller_radius,
+                spec.tangential_width_radius_ratio * cfg.propeller_radius,
+                spec.height,
+            ) * u.m,
         )
         refinements.append(
             fl.UniformRefinement(
@@ -767,11 +532,8 @@ def _make_blade_vortex_box_refinements(cfg: CaseSetup):
 
 def _make_meshing_params(
     rotation_volume,
-    geometry,
     cfg: CaseSetup,
     *,
-    use_beta_mesher: bool,
-    include_surface_refinements: bool = True,
     include_volume_refinements: bool = True,
     enclosed_entities: list | None = None,
 ):
@@ -780,19 +542,14 @@ def _make_meshing_params(
         relative_size=cfg.farfield_relative_size,
     )
     refinements = []
-    if include_surface_refinements:
-        refinements.extend(_make_surface_refinements(geometry, cfg))
     if include_volume_refinements:
         refinements.extend(
             [
-                *_make_volume_cylinder_refinements(cfg),
+                *_make_axisymmetric_volume_refinements(cfg),
                 _make_tip_wake_refinement(cfg),
                 *_make_blade_vortex_box_refinements(cfg),
             ]
         )
-    if include_surface_refinements and not use_beta_mesher:
-        refinements.extend(_make_surface_edge_refinements(geometry, cfg))
-
     return farfield, fl.MeshingParams(
         defaults=_make_meshing_defaults(cfg),
         volume_zones=[
@@ -813,7 +570,7 @@ def _make_meshing_params(
 def _make_operating_condition(cfg: CaseSetup):
     thermal_state = _make_thermal_state(cfg)
     return fl.AerospaceCondition.from_mach(
-        mach=0 / thermal_state.speed_of_sound.to("m/s").value,
+        mach=cfg.freestream_speed_m_s / thermal_state.speed_of_sound.to("m/s").value,
         reference_mach=_tip_mach(cfg, thermal_state),
         alpha=cfg.alpha_deg * u.deg,
         beta=cfg.beta_deg * u.deg,
@@ -878,16 +635,13 @@ def _make_wall_model(name: str, surfaces: list, cfg: CaseSetup):
 
 
 def _make_models(geometry, farfield, rotation_volume, cfg: CaseSetup, wall_entities=None):
-    if hasattr(geometry, "group_faces_by_tag"):
-        geometry.group_faces_by_tag("faceName")
     if wall_entities is None:
         wall_entities = _wall_entities(geometry)
     missing = [name for name, entities in wall_entities.items() if not entities]
     if missing:
         raise ValueError(
-            f"Could not resolve wall face groups {missing}. "
-            f"Available face groups: {_available_surface_group_names(geometry)}. "
-            "Update FACE_GROUP_ALIASES."
+            f"Could not resolve wall boundaries {missing}. "
+            f"Available boundaries: {_available_surface_group_names(geometry)}."
         )
 
     models = [
@@ -1038,8 +792,6 @@ def _make_outputs(wall_surfaces: list, cfg: CaseSetup):
                 "Cp",
                 "Mach",
                 "qcriterion",
-                "mut",
-                "mutRatio",
                 "gradW",
                 "T",
             ],
@@ -1058,7 +810,16 @@ def _make_outputs(wall_surfaces: list, cfg: CaseSetup):
                 "nodeForcesPerUnitArea",
                 "nodeNormals",
             ],
-            write_single_file=False,
+            write_single_file=True,
+        ),
+        fl.TimeAverageSurfaceOutput(
+            name="TimeAverageSurfacePressure",
+            surfaces=wall_surfaces,
+            output_format=["paraview"],
+            frequency=-1,
+            start_step=-1,
+            output_fields=["pressure_pa"],
+            write_single_file=True,
         ),
     ]
 
@@ -1072,31 +833,26 @@ def build_params(
     project,
     cfg: CaseSetup = CONFIG,
     *,
-    use_beta_mesher: bool = False,
     include_volume_refinements: bool = True,
 ):
     root_type_name = _project_root_type_name(project)
     if root_type_name == "VOLUME_MESH":
         mesh_params = None
         models, wall_surfaces = _make_models_from_volume_mesh(project.volume_mesh, cfg)
-    else:
-        use_existing_surface_mesh = root_type_name == "SURFACE_MESH"
-        geometry = project.surface_mesh if use_existing_surface_mesh else project.geometry
-        if hasattr(geometry, "group_faces_by_tag"):
-            geometry.group_faces_by_tag("faceName")
-        wall_entities = _wall_entities(geometry)
+    elif root_type_name == "SURFACE_MESH":
+        surface_mesh = project.surface_mesh
+        wall_entities = _wall_entities(surface_mesh)
         wall_surfaces = _all_walls(wall_entities)
         rotation_volume = _rotation_volume(cfg)
         farfield, mesh_params = _make_meshing_params(
             rotation_volume,
-            geometry,
             cfg,
-            use_beta_mesher=use_beta_mesher,
-            include_surface_refinements=not use_existing_surface_mesh,
             include_volume_refinements=include_volume_refinements,
             enclosed_entities=wall_surfaces,
         )
-        models, wall_surfaces = _make_models(geometry, farfield, rotation_volume, cfg, wall_entities)
+        models, wall_surfaces = _make_models(surface_mesh, farfield, rotation_volume, cfg, wall_entities)
+    else:
+        raise ValueError(f"Expected a surface or volume mesh project, got {root_type_name!r}")
 
     with fl.SI_unit_system:
         params_kwargs = {
@@ -1171,7 +927,7 @@ def _make_project_from_parent_case(cfg: CaseSetup):
 
 def define_and_run(
     *,
-    geometry_file: Path = GEOMETRY_FILE,
+    surface_mesh_file: Path = SURFACE_MESH_FILE,
     cfg: CaseSetup = CONFIG,
     flow360_folder=None,
     submit_draft_only: bool = True,
@@ -1185,12 +941,11 @@ def define_and_run(
     project = (
         _make_project_from_parent_case(cfg)
         if fork_from is not None
-        else _make_project(geometry_file, cfg, flow360_folder, use_beta_mesher)
+        else _make_project_from_local_surface_mesh(surface_mesh_file, cfg, flow360_folder)
     )
     params = build_params(
         project,
         cfg,
-        use_beta_mesher=use_beta_mesher,
         include_volume_refinements=generate_volume_mesh,
     )
 
@@ -1256,7 +1011,7 @@ def define_and_run(
 def main():
     # Continue from the existing Flow360 case; meshing is handled separately.
     use_beta_mesher = True
-    generate_volume_mesh = False
+    generate_volume_mesh = True
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)
@@ -1271,6 +1026,10 @@ def main():
         f"({thermal_state.temperature.to('degC').value:.2f} degC)\n"
         f"  Density: {thermal_state.density.to('kg/m**3').value:.6f} kg/m^3\n"
         f"  Speed of sound: {thermal_state.speed_of_sound.to('m/s').value:.3f} m/s\n"
+        f"  Freestream speed: {CONFIG.freestream_speed_m_s:.3f} m/s "
+        f"({CONFIG.true_airspeed_knots:.1f} kn)\n"
+        f"  Freestream Mach: "
+        f"{CONFIG.freestream_speed_m_s / thermal_state.speed_of_sound.to('m/s').value:.6f}\n"
         f"  Reference Mach: {reference_mach:.6f}\n"
         f"  Reference velocity: {reference_velocity.to('m/s').value:.3f} m/s\n"
         f"  Dynamic pressure: {dynamic_pressure.to('Pa').value:.2f} Pa "

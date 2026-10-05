@@ -3992,6 +3992,52 @@ def apply_mesh_size_bounds(mesh_def: dict[str, Any]) -> None:
         gmsh.option.setNumber("Mesh.MeshSizeMax", float(max_size))
 
 
+def apply_point_density_refinements(mesh_def: dict[str, Any]) -> None:
+    """Assign local element sizes to CAD points after geometry healing."""
+    entries = mesh_def.get("point_density_refinements", [])
+    if not isinstance(entries, list):
+        raise TypeError("'point_density_refinements' must be a list.")
+    if not entries:
+        return
+
+    available_point_ids = {point_id for _, point_id in gmsh.model.getEntities(0)}
+    point_sizes: dict[int, float] = {}
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            raise TypeError(f"Point density refinement {index} must be an object.")
+
+        point_ids = entry.get("points")
+        if not isinstance(point_ids, list) or not point_ids:
+            raise ValueError(
+                f"Point density refinement {index} must define a non-empty 'points' list."
+            )
+        point_ids = [int(point_id) for point_id in point_ids]
+        unknown_point_ids = sorted(set(point_ids) - available_point_ids)
+        if unknown_point_ids:
+            raise ValueError(
+                f"Point density refinement {index} references unknown points "
+                f"{unknown_point_ids}."
+            )
+
+        try:
+            element_size = float(entry["element_size"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                f"Point density refinement {index} needs a numeric 'element_size'."
+            ) from error
+        if not math.isfinite(element_size) or element_size <= 0.0:
+            raise ValueError(
+                f"Point density refinement {index} element_size must be positive and finite."
+            )
+        for point_id in point_ids:
+            point_sizes[point_id] = min(
+                point_sizes.get(point_id, element_size), element_size
+            )
+
+    for point_id, element_size in point_sizes.items():
+        gmsh.model.mesh.setSize([(0, point_id)], element_size)
+
+
 def apply_surface_size_limits(mesh_def: dict[str, Any]) -> None:
     """Apply optional maximum element sizes to selected surfaces."""
     entries = mesh_def.get("surface_size_limits", [])
@@ -4795,6 +4841,7 @@ def generate_surface_mesh(
         cad_curve_ids = {curve_id for _, curve_id in gmsh.model.getEntities(1)}
 
         apply_mesh_size_bounds(mesh_def)
+        apply_point_density_refinements(mesh_def)
         apply_surface_size_limits(mesh_def)
 
         mesh_def = expand_mesh_zones(mesh_def)
