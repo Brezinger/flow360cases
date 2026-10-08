@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
@@ -97,6 +98,32 @@ CASE_ID_PATTERN = re.compile(r"case-[0-9a-fA-F-]+")
 
 def _default_line_colors() -> list[str]:
     return plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+
+def _save_figure(fig, output_file: Path) -> None:
+    """Replace completed plots atomically, including files open in image viewers."""
+    output_file = Path(output_file)
+    with tempfile.NamedTemporaryFile(dir=output_file.parent, suffix=output_file.suffix, delete=False) as file:
+        temporary = Path(file.name)
+    try:
+        fig.savefig(temporary, dpi=200)
+        temporary.replace(output_file)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _set_spectrum_limits(ax) -> None:
+    """Keep the usual display range, expanding it to show higher tone peaks."""
+    lower, upper = SPECTRUM_Y_LIMITS_DB
+    for line in ax.lines:
+        values = np.asarray(line.get_ydata(), dtype=float)
+        visible = (np.asarray(line.get_xdata(), dtype=float) >= SPECTRUM_MIN_FREQUENCY_HZ) & (
+            np.asarray(line.get_xdata(), dtype=float) <= SPECTRUM_MAX_FREQUENCY_HZ
+        )
+        values = values[visible & np.isfinite(values)]
+        if values.size:
+            upper = max(upper, float(np.max(values)) + 5)
+    ax.set_ylim(lower, upper)
 
 
 def _is_local_step4(source_file: Path) -> bool:
@@ -572,6 +599,14 @@ def _weighting_db(frequency_hz: np.ndarray, apply_a_weighting: bool) -> np.ndarr
 
 
 def _welch_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return additive bin powers (Pa²), normalized by the window energy."""
+    frequencies, density = _welch_spectrum(pressure, sample_rate_hz, scaling="density")
+    return frequencies, density * (frequencies[1] - frequencies[0])
+
+
+def _welch_spectrum(
+    pressure: np.ndarray, sample_rate_hz: float, *, scaling: str,
+) -> tuple[np.ndarray, np.ndarray]:
     pressure = _filter_zero_signal_edges(pressure)
     sample_count = len(pressure)
     if sample_count < 8:
@@ -584,7 +619,7 @@ def _welch_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> 
         window=WINDOW,
         nperseg=nperseg,
         noverlap=nperseg // 2,
-        scaling="spectrum",
+        scaling=scaling,
     )
     return frequencies, mean_square_by_bin
 
@@ -614,13 +649,16 @@ def spl_spectrum_db(
 ) -> tuple[np.ndarray, np.ndarray]:
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
-    frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
+    # Keep amplitude-normalized narrowband peaks separate from additive power.
+    frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
+    mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    frequencies, mean_square_by_bin = frequencies[mask], mean_square_by_bin[mask]
     linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
     return frequencies, _db_from_power(mean_square_by_bin * linear_weight)
 
 
 def tone_spl_db(pressure: np.ndarray, sample_rate_hz: float, target_frequency_hz: float) -> tuple[float, float]:
-    frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
+    frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
     valid_frequency_mask = frequencies > 0.0
     frequencies = frequencies[valid_frequency_mask]
     mean_square_by_bin = mean_square_by_bin[valid_frequency_mask]
@@ -961,7 +999,7 @@ def render_bar_plot(
     fig.tight_layout()
 
     output_file = output_dir / f"{_case_label(source_file)}_{plot.filename}"
-    fig.savefig(output_file, dpi=200)
+    _save_figure(fig, output_file)
     plt.close(fig)
     return output_file
 
@@ -1043,7 +1081,7 @@ def render_comparison_plot(
 
     fig.tight_layout()
     output_file = output_dir / COMPARISON_OUTPUT_FILE
-    fig.savefig(output_file, dpi=200)
+    _save_figure(fig, output_file)
     plt.close(fig)
     return output_file
 
@@ -1181,16 +1219,16 @@ def render_spectrum_plots(
 
         ax.set_title(f"Spectra for observer ID: {observer}")
         ax.set_xlabel("Frequency [Hz]")
-        ax.set_ylabel("SPL [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else "SPL [dB]")
+        ax.set_ylabel("Amplitude spectrum [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else "Amplitude spectrum [dB]")
         ax.set_xscale("log")
         ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ)
-        ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
+        _set_spectrum_limits(ax)
         _style_frequency_axis(ax)
         ax.legend(loc="upper right", fontsize=12)
         fig.tight_layout()
 
         output_file = output_dir / f"spectrum{_weighting_filename_part()}_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
     return output_files
@@ -1254,13 +1292,13 @@ def render_third_octave_plots(
         ax.set_ylabel(r"SPL$_{1/3}$ [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else r"SPL$_{1/3}$ [dB]")
         ax.set_xscale("log")
         ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, upper_frequency_limit)
-        ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
+        _set_spectrum_limits(ax)
         _style_frequency_axis(ax)
         ax.legend(loc="lower right", fontsize=10)
         fig.tight_layout()
 
         output_file = output_dir / f"third_octave_spectrum{_weighting_filename_part()}_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
     return output_files
@@ -1361,13 +1399,13 @@ def render_surface_pair_third_octave_plots(
         ax.set_ylabel(r"SPL$_{1/3}$ [dBA]" if APPLY_A_WEIGHTING_TO_SPECTRA else r"SPL$_{1/3}$ [dB]")
         ax.set_xscale("log")
         ax.set_xlim(SPECTRUM_MIN_FREQUENCY_HZ, upper_frequency_limit)
-        ax.set_ylim(*SPECTRUM_Y_LIMITS_DB)
+        _set_spectrum_limits(ax)
         _style_frequency_axis(ax)
         ax.legend(loc="upper right", fontsize=12)
         fig.tight_layout()
 
         output_file = output_dir / f"surface_pair_third_octave_spectrum{_weighting_filename_part()}_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1472,7 +1510,7 @@ def render_surface_pair_oaspl_plots(
 
     fig.tight_layout()
     output_file = output_dir / "surface_pair_oaspl_observers_1_5.png"
-    fig.savefig(output_file, dpi=200)
+    _save_figure(fig, output_file)
     plt.close(fig)
     return output_file
 
@@ -1553,7 +1591,7 @@ def render_bpf_component_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"thickness_loading_{harmonic_label}_bpf.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1617,7 +1655,7 @@ def render_harmonic_content_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"harmonic_content_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1661,7 +1699,7 @@ def render_pressure_time_history_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"pressure_time_history_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1730,7 +1768,7 @@ def render_surface_pressure_time_history_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"surface_pressure_time_history_blade1_blade2_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1808,7 +1846,7 @@ def render_average_pressure_time_history_plots(
         fig.tight_layout()
 
         output_file = output_dir / f"average_pressure_time_history_observer_{observer}.png"
-        fig.savefig(output_file, dpi=200)
+        _save_figure(fig, output_file)
         plt.close(fig)
         output_files.append(output_file)
 
@@ -1893,7 +1931,7 @@ def render_spectrogram_plots(
                 output_file = output_dir / (
                     f"spectrogram_{filename_part}_{case_label}_observer_{observer}.png"
                 )
-                fig.savefig(output_file, dpi=200)
+                _save_figure(fig, output_file)
                 plt.close(fig)
                 output_files.append(output_file)
 
@@ -2013,6 +2051,7 @@ def make_plots(
             "grid_unit_m": dataset.l_grid_unit_m,
             "observers": observer_windows,
             "oaspl": values_by_plot,
+            "power_normalization": "Welch density times frequency-bin width",
         }
         (output_dir / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if measurement_data is not None and "oaspl_a_weighted" in values_by_plot:

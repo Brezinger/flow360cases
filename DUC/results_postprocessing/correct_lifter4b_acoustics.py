@@ -213,7 +213,8 @@ Source measurement: `{measurement_excel}`; 1000 RPM, A-weighted third-octave ban
 50–10,000 Hz, observers 2–4 (90°, 105°, 135°). Source CFD: `{poc2_csv}` and
 `{lifter_csv}`. The 24 bands use exact third-octave edges; reported nominal
 frequencies are retained in the tables. CFD pressures are dimensionalized and
-Welch spectra are computed as in `plot_aeroacoustics.py`. OASPL is recomputed
+Welch bin powers are computed as PSD times frequency-bin width, with window-energy
+normalization, as in `plot_aeroacoustics.py`. OASPL is recomputed
 from the 24 A-weighted band energies, not corrected as a single dB value.
 The top band is centered at 10 kHz and includes its full upper half-band.
 
