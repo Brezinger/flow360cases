@@ -61,7 +61,11 @@ From the repository root, with the configured interpreter:
 Exact per-study commands are in `aeroacoustic_regeneration_commands.txt` and
 sources/settings in `aeroacoustic_regeneration_summary.json`. Per-study
 `analysis_manifest.json` files report physical references and resolution.
-Existing reports and the original audit retain their historical source snapshots.
+Existing reports retain their historical source snapshots. The
+[current mathematical audit](aeroacoustic_math_audit/mathematical_audit.md) describes
+the corrected implementation; the
+[original audit](aeroacoustic_math_audit/mathematical_audit_pre_corrections_2026-10-08.md)
+is preserved separately.
 
 ## CLI examples
 

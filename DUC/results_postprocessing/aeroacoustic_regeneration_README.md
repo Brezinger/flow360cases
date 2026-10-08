@@ -43,5 +43,6 @@ The optional Q40LT comparison requires its recorded F: input path.
 These fixes do not establish solver, acoustic-sampling or record-length
 convergence. Longer stationary records and convergence checks remain necessary.
 The earlier PDF reports and source snapshots describe previous versions and are
-retained as historical documents. The mathematical audit likewise records the
-pre-fix state.
+retained as historical documents. The
+[mathematical audit](aeroacoustic_math_audit/mathematical_audit.md) now describes the
+corrected implementation; its original version is archived separately.
