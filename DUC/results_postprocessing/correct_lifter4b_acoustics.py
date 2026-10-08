@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 from pathlib import Path
 
 import matplotlib
@@ -17,7 +16,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-import plot_aeroacoustics as acoustics
+try:
+    from . import plot_aeroacoustics as acoustics
+except ImportError:  # Direct CLI execution.
+    import plot_aeroacoustics as acoustics
 
 
 ROOT = Path(__file__).resolve().parent
@@ -36,41 +38,40 @@ DEFAULT_LIFTER_CSV = (
     / "case-cf29e49e-da21-43ad-80e2-61a6f97bec80_results_total_acoustics_v3.csv"
 )
 OBSERVERS = (2, 3, 4)
-PRESSURE_REFERENCE_PA = acoustics.ACOUSTIC_PRESSURE_REFERENCE_PA
 
 
 def nominal_to_exact_centers(frequencies_hz: np.ndarray) -> np.ndarray:
-    """Map nominal ISO third-octave labels (50, 63, ..., 10000) to band centers."""
-    frequencies_hz = np.asarray(frequencies_hz, dtype=float)
-    centers = 1000.0 * 2.0 ** (np.rint(3.0 * np.log2(frequencies_hz / 1000.0)) / 3.0)
-    if np.any(np.abs(centers / frequencies_hz - 1.0) > 0.02):
-        raise ValueError("Measurement frequencies do not match third-octave centers")
-    if np.unique(centers).size != centers.size or np.any(np.diff(centers) <= 0):
-        raise ValueError("Measurement bands must be unique and ascending")
+    """Use the plotting script's IEC base-10 bands for nominal measurement labels."""
+    centers = acoustics.exact_third_octave_centers(frequencies_hz)
+    if (centers.ndim != 1 or not centers.size or np.unique(centers).size != centers.size
+            or np.any(np.diff(centers) <= 0)):
+        raise ValueError("Measurement bands must be nonempty, unique and ascending")
     return centers
 
 
 def energy_sum_db(band_levels_db: np.ndarray) -> float:
     """Sum band mean-square pressure, including any A-weighting already present."""
     band_levels_db = np.asarray(band_levels_db, dtype=float)
-    return float(10.0 * np.log10(np.sum(10.0 ** (band_levels_db / 10.0))))
+    if band_levels_db.ndim != 1 or not band_levels_db.size:
+        raise ValueError("Need a nonempty one-dimensional band-level array")
+    if np.any(np.isnan(band_levels_db)) or np.any(np.isposinf(band_levels_db)):
+        raise ValueError("Cannot sum unavailable or invalid band levels")
+    power = float(np.sum(10.0 ** (band_levels_db / 10.0)))
+    return -np.inf if power == 0.0 else float(10.0 * np.log10(power))
 
 
 def cfd_band_levels(dataset: acoustics.AcousticDataset, observer: int, centers_hz: np.ndarray) -> np.ndarray:
-    pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
-    frequencies_hz, power_pa2 = acoustics._welch_mean_square_spectrum(pressure_pa, dataset.sample_rate_hz)
-    weighted_power_pa2 = power_pa2 * 10.0 ** (acoustics._a_weighting_db(frequencies_hz) / 10.0)
-    factor = 2.0 ** (1.0 / 6.0)
-    levels = []
-    for center in centers_hz:
-        mask = (frequencies_hz >= center / factor) & (frequencies_hz < center * factor)
-        if not np.any(mask):
-            raise ValueError(f"No CFD frequency bins in the {center:.1f} Hz band")
-        energy_pa2 = float(np.sum(weighted_power_pa2[mask]))
-        if energy_pa2 <= 0.0:
-            raise ValueError(f"Zero CFD power in the {center:.1f} Hz band")
-        levels.append(10.0 * math.log10(energy_pa2 / PRESSURE_REFERENCE_PA**2))
-    return np.asarray(levels)
+    pressure_pa = acoustics._observer_pressure(dataset, observer)
+    levels = acoustics.third_octave_spectrum_at_centers_db(
+        pressure_pa, dataset.sample_rate_hz, centers_hz, apply_a_weighting=True
+    )
+    if not np.all(np.isfinite(levels)):
+        unavailable = np.asarray(centers_hz)[~np.isfinite(levels)]
+        raise ValueError(
+            "Cannot calibrate bands with unavailable or zero CFD power: "
+            + ", ".join(f"{center:.1f} Hz" for center in unavailable)
+        )
+    return levels
 
 
 def load_cfd(csv_file: Path) -> acoustics.AcousticDataset:
@@ -157,6 +158,12 @@ def run(measurement_excel: Path, poc2_csv: Path, lifter_csv: Path,
     measurement = acoustics.load_poc2x_1000rpm_measurement_data(measurement_excel)
     if set(measurement.spectra_by_observer) != set(OBSERVERS):
         raise ValueError(f"Need POC2 measurements for observers {OBSERVERS}")
+    for observer, spectrum in measurement.spectra_by_observer.items():
+        if spectrum.weighting != "A" or spectrum.band_base != "10":
+            raise ValueError(
+                f"Observer {observer} calibration needs A-weighted measurement bands "
+                "using the IEC base-10 comparison convention"
+            )
     poc2 = load_cfd(poc2_csv)
     lifter = load_cfd(lifter_csv)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -211,18 +218,22 @@ def run(measurement_excel: Path, poc2_csv: Path, lifter_csv: Path,
 
 Source measurement: `{measurement_excel}`; 1000 RPM, A-weighted third-octave bands,
 50–10,000 Hz, observers 2–4 (90°, 105°, 135°). Source CFD: `{poc2_csv}` and
-`{lifter_csv}`. The 24 bands use exact third-octave edges; reported nominal
+`{lifter_csv}`. The 24 bands use IEC base-10 exact third-octave edges; reported nominal
 frequencies are retained in the tables. CFD pressures are dimensionalized and
 Welch bin powers are computed as PSD times frequency-bin width, with window-energy
 normalization, as in `plot_aeroacoustics.py`. OASPL is recomputed
 from the 24 A-weighted band energies, not corrected as a single dB value.
 The top band is centered at 10 kHz and includes its full upper half-band.
+IEC base-10 bands are assumed for the measurement's nominal labels; the workbook
+does not establish the analyser filter convention. FFT-bin integration is not
+equivalent to a standards-certified filter bank, especially for short records.
 
 The measured levels are used *as reported* by the workbook, matching the
 existing `plot_aeroacoustics.py --measurement-excel ... --a-weighting` comparison.
 No distance or atmospheric-absorption adjustment is applied. The separate
-microphone-position file places the test microphones around 15.45 m, while
-the POC2 CFD setup specifies observers around 100 m; therefore this transfer
+microphone-position file gives a radius around 15.45 in its coordinate units;
+those units and the workbook's normalization basis have not been established.
+The POC2 CFD setup specifies observers around 100 m; therefore this transfer
 is conditional on the workbook already representing the intended comparison
 basis. Its levels should not be interpreted as a validated prediction at a
 specified distance without resolving that basis.
