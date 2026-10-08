@@ -31,6 +31,23 @@ class SpectralAuditTests(unittest.TestCase):
         np.testing.assert_allclose(upper[:-1], lower[1:])
         self.assertAlmostEqual(upper[-1], 11220.184543019635)
 
+    def test_nonstandard_nominal_labels_are_not_silently_mapped(self):
+        with self.assertRaisesRegex(ValueError, 'preferred nominal'):
+            a.exact_third_octave_centers(np.array([50, 51]))
+        exact = 1000 * 10.0 ** np.array([-1.3, -1.2, -1, -.8, 0, 1])
+        np.testing.assert_allclose(a.exact_third_octave_centers(exact), exact)
+
+    def test_valid_edge_zeros_do_not_change_selected_time_window(self):
+        from scipy.signal import get_window
+
+        pressure = np.r_[np.zeros(100), np.random.default_rng(83).normal(size=800), np.zeros(100)]
+        frequencies, powers = a._welch_mean_square_spectrum(pressure, self.fs)
+        self.assertEqual(len(frequencies), len(pressure) // 2 + 1)
+        self.assertAlmostEqual(frequencies[1] - frequencies[0], self.fs / len(pressure))
+        window = get_window('hann', len(pressure))
+        expected = np.sum(((pressure - pressure.mean()) * window) ** 2) / np.sum(window ** 2)
+        self.assertAlmostEqual(powers.sum(), expected, places=12)
+
     def test_top_band_contains_power_above_display_cutoff(self):
         pressure = self.tone(10500)
         centers, levels = a.third_octave_spectrum_db(pressure, self.fs, False)
@@ -67,6 +84,11 @@ class SpectralAuditTests(unittest.TestCase):
             a.third_octave_spectrum_at_centers_db(pressure, 20000, [10000])
         with self.assertRaisesRegex(ValueError, 'Nyquist'):
             a.tone_spl_db(pressure, self.fs, 20000)
+
+    def test_empty_narrowband_interval_is_rejected(self):
+        for evaluator in (a.oaspl_unweighted_db, a.spl_spectrum_db, a.psd_spectrum_db):
+            with self.subTest(evaluator=evaluator.__name__), self.assertRaisesRegex(ValueError, 'No frequencies'):
+                evaluator(np.ones(8), 100000)
 
     def test_measurement_matched_overall_uses_full_test_bandwidth(self):
         pressure = self.tone(10500, rms=.8) + self.tone(1000, rms=.6)

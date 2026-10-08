@@ -36,6 +36,29 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(a._timing_for_file(path, 2000, 4000), (2000, 4000))
         self.assertEqual(a._reference_values_for_file(path, 1, 2, 300, 1), (1, 2, 300, 1))
 
+    def test_cfd_skip_uses_first_sample_at_or_after_requested_duration(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            cut = a.prepare_acoustic_dataset(self.dataset(), 1, "cfd")
+        self.assertEqual(cut.selection_windows_by_observer[1][0], 8)
+
+    def test_coherent_components_keep_valid_zero_edges_for_the_same_fft_window(self):
+        values = np.cos(np.arange(4096)*.1)
+        d = self.dataset(values)
+        thickness = values.copy()
+        thickness[:50] = 0
+        thickness[-30:] = 0
+        d = replace(d, thickness_by_observer={1: thickness}, loading_by_observer={1: values-thickness})
+        with contextlib.redirect_stdout(io.StringIO()):
+            d = a.prepare_acoustic_dataset(d)
+        selected = a._observer_pressure(d, 1, "thickness_by_observer")
+        self.assertEqual(len(selected), len(values))
+        frequencies, _ = a._welch_mean_square_spectrum(selected, d.sample_rate_hz)
+        self.assertAlmostEqual(frequencies[1], d.sample_rate_hz/len(values))
+
+    def test_measurements_cannot_repeat_the_same_exact_band(self):
+        with self.assertRaises(ValueError):
+            a.MeasurementSpectrum(np.asarray([50, 50.11872336272722]), np.asarray([50, 51]))
+
     def test_revolution_cut_origin_is_signal_start(self):
         d = self.dataset()
         with contextlib.redirect_stdout(io.StringIO()):

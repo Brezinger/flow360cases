@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
@@ -19,7 +20,7 @@ except ImportError:
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, MultipleLocator
 import numpy as np
-from scipy.signal import spectrogram, welch
+from scipy.signal import get_window, spectrogram, welch
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -79,8 +80,8 @@ SPECTRUM_MAX_FREQUENCY_HZ = 10_000.0
 SPECTRUM_X_TICKS_HZ = (40, 60, 80, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000)
 SPECTRUM_Y_LIMITS_DB = (-20.0, 70.0)
 SPECTROGRAM_MAX_FREQUENCY_HZ = 5_000.0
-SPECTROGRAM_LIMITS_DB = (0.0, 120.0)
-SPECTROGRAM_NPERSEG = 512
+SPECTROGRAM_LIMITS_DB = (-40.0, 80.0)
+SPECTROGRAM_WINDOW_S: float | None = None
 HARMONIC_INDICES = tuple(range(1, 11))
 HARMONIC_Y_LIMITS_DB = (0.0, 110.0)
 SURFACE_TIME_HISTORY_GROUPS = ("blade1", "blade2")
@@ -243,6 +244,9 @@ class MeasurementSpectrum:
                 or not np.all(np.isfinite(frequencies)) or not np.all(np.isfinite(levels))
                 or np.any(frequencies <= 0) or np.any(np.diff(frequencies) <= 0)):
             raise ValueError("Measurement frequencies and levels must be finite, ordered, matching arrays.")
+        exact = exact_third_octave_centers(frequencies)
+        if len(np.unique(exact)) != len(exact):
+            raise ValueError("Measurement frequencies must represent distinct third-octave bands.")
 
 
 @dataclass(frozen=True)
@@ -486,12 +490,13 @@ def prepare_acoustic_dataset(
     revolution_range: RevolutionRange | None = None,
 ) -> AcousticDataset:
     """Cut each observer's initial signal interval, keeping components aligned."""
-    if n_timesteps_skip < 0 or skip_unit not in ("cfd", "acoustic"):
+    if (not isinstance(n_timesteps_skip, (int, np.integer)) or isinstance(n_timesteps_skip, bool)
+            or n_timesteps_skip < 0 or skip_unit not in ("cfd", "acoustic")):
         raise ValueError("Skip count must be nonnegative and units must be cfd or acoustic.")
     skip_samples = n_timesteps_skip
     if skip_unit == "cfd":
         cfd_spacing = 60.0 / (dataset.rpm * dataset.time_steps_per_revolution)
-        skip_samples = int(round(n_timesteps_skip * cfd_spacing / dataset.sample_spacing_s))
+        skip_samples = int(np.ceil(n_timesteps_skip * cfd_spacing / dataset.sample_spacing_s - 1e-3))
     components = ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
     prepared = {component: {} for component in components}
     windows = {}
@@ -501,7 +506,9 @@ def prepare_acoustic_dataset(
             getattr(dataset, component)[observer] != 0 for component in components
         ], axis=0))
         if not active.size:
-            raise ValueError(f"Observer {observer} has no nonzero acoustic signal.")
+            if n_timesteps_skip or revolution_range:
+                raise ValueError(f"Observer {observer} has no nonzero acoustic signal to select.")
+            active = np.asarray([0, len(dataset.time)-1])
         start, stop = int(active[0]) + skip_samples, int(active[-1]) + 1
         if revolution_range is not None:
             if revolution_range.start_index < 0 or revolution_range.end_index <= revolution_range.start_index:
@@ -600,7 +607,11 @@ def _filter_zero_signal_edges(pressure: np.ndarray) -> np.ndarray:
 def _pressure_time_history(dataset: AcousticDataset, observer: int) -> tuple[np.ndarray, np.ndarray]:
     """Clip edge padding together with its timestamps; retain interior zeros."""
     pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
-    nonzero_indices = np.flatnonzero(pressure_pa != 0.0)
+    nonzero_indices = np.flatnonzero(np.any([
+        getattr(dataset, name)[observer] != 0.0
+        for name in ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
+        if hasattr(dataset, name)
+    ], axis=0))
     windows = getattr(dataset, "selection_windows_by_observer", None)
     valid = slice(*windows[observer]) if windows is not None else (
         slice(nonzero_indices[0], nonzero_indices[-1] + 1)
@@ -637,14 +648,12 @@ def _nperseg(sample_count: int) -> int:
 
 
 def _validate_spectral_input(pressure: np.ndarray, sample_rate_hz: float) -> np.ndarray:
+    """Validate an already selected physical record without changing its time window."""
     pressure = np.asarray(pressure, dtype=float)
     if pressure.ndim != 1 or pressure.size < 8 or not np.all(np.isfinite(pressure)):
         raise ValueError("Spectral pressure must be a finite, one-dimensional array of at least eight samples.")
     if not np.isfinite(sample_rate_hz) or sample_rate_hz <= 0.0:
         raise ValueError("Sample rate must be finite and positive.")
-    pressure = _filter_zero_signal_edges(pressure)
-    if pressure.size < 8:
-        raise ValueError("Too few active samples for spectral analysis after clipping zero padding.")
     return pressure
 
 
@@ -744,6 +753,8 @@ def spl_spectrum_db(
     # Keep amplitude-normalized narrowband peaks separate from additive power.
     frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
     mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    if not np.any(mask):
+        raise ValueError("No frequencies remain inside the configured frequency band.")
     frequencies, mean_square_by_bin = frequencies[mask], mean_square_by_bin[mask]
     linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
     return frequencies, _db_from_power(mean_square_by_bin * linear_weight)
@@ -760,6 +771,8 @@ def psd_spectrum_db(
     _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
     frequencies, density = _welch_spectrum(pressure, sample_rate_hz, scaling="density")
     mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    if not np.any(mask):
+        raise ValueError("No frequencies remain inside the configured frequency band.")
     frequencies, density = frequencies[mask], density[mask]
     return frequencies, _db_from_power(density * 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0))
 
@@ -834,7 +847,12 @@ def exact_third_octave_centers(nominal_centers_hz: np.ndarray) -> np.ndarray:
     if np.any(~np.isfinite(nominal)) or np.any(nominal <= 0.0):
         raise ValueError("Nominal third-octave centres must be positive and finite.")
     exact = 1000.0 * 10.0 ** (np.round(10.0 * np.log10(nominal / 1000.0)) / 10.0)
-    if np.any(np.abs(nominal / exact - 1.0) > 0.05):
+    preferred = np.asarray([1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0])
+    decade = 10.0 ** np.floor(np.log10(nominal))
+    mantissa = nominal / decade
+    is_preferred = np.any(np.isclose(mantissa[..., None], preferred, rtol=1.0e-6, atol=0.0), axis=-1)
+    is_exact = np.isclose(nominal, exact, rtol=1.0e-6, atol=0.0)
+    if np.any(~(is_preferred | is_exact)):
         raise ValueError("Centres do not match preferred nominal IEC third-octave labels.")
     return exact
 
@@ -952,23 +970,76 @@ PLOTS = (
         name="oaspl_unweighted",
         filename="oaspl_unweighted_observers_1_5.png",
         evaluator=oaspl_unweighted_db,
-        ylabel="OASPL [dB]",
-        title="Unweighted OASPL",
+        ylabel="OASPL, 40–10000 Hz [dB]",
+        title="Unweighted OASPL (40–10000 Hz)",
     ),
     PlotDefinition(
         name="oaspl_a_weighted",
         filename="oaspl_a_weighted_observers_1_5.png",
         evaluator=oaspl_a_weighted_db,
-        ylabel="A-weighted OASPL [dBA]",
-        title="A-weighted OASPL",
+        ylabel="A-weighted OASPL, 40–10000 Hz [dBA]",
+        title="A-weighted OASPL (40–10000 Hz)",
     ),
 )
 
 
+MEASUREMENT_MATCHED_OASPL_NAME = "oaspl_a_weighted_measurement_matched"
+
+
+def _measurement_comparison_centers(measurement_data: Poc2xMeasurementData) -> np.ndarray:
+    """Require one declared band coverage and weighting for a measured OA comparison."""
+    if not measurement_data.spectra_by_observer:
+        raise ValueError("Measurement-matched OASPL needs measured third-octave spectra")
+    nominal = None
+    exact = None
+    for observer, spectrum in measurement_data.spectra_by_observer.items():
+        if spectrum.weighting != "A" or spectrum.band_base != "10":
+            raise ValueError("OASPL comparison requires A-weighted IEC base-10 measurement bands")
+        observer_exact = exact_third_octave_centers(spectrum.frequencies_hz)
+        if nominal is None:
+            nominal = np.asarray(spectrum.frequencies_hz, dtype=float)
+            exact = observer_exact
+        elif not np.array_equal(observer_exact, exact):
+            raise ValueError("Measured observers must use the same complete third-octave bands")
+        if observer not in measurement_data.oaspl_dba_by_observer:
+            raise ValueError(f"Missing measured OASPL for observer {observer}")
+        band_sum = float(10.0 * np.log10(np.sum(10.0 ** (np.asarray(spectrum.spl_db) / 10.0))))
+        if not np.isclose(band_sum, measurement_data.oaspl_dba_by_observer[observer], atol=0.01, rtol=0.0):
+            raise ValueError(f"Measured OASPL does not equal its band-energy sum for observer {observer}")
+    if set(measurement_data.oaspl_dba_by_observer) != set(measurement_data.spectra_by_observer):
+        raise ValueError("Measured OASPL and spectra must contain the same observers")
+    return nominal
+
+
+def _measurement_matched_oaspl_values(
+    dataset: AcousticDataset, measurement_data: Poc2xMeasurementData,
+) -> dict[int, float]:
+    nominal = _measurement_comparison_centers(measurement_data)
+    return {
+        observer: measurement_matched_oaspl_db(
+            _observer_pressure(dataset, observer), dataset.sample_rate_hz, nominal,
+            apply_a_weighting=True,
+        )
+        for observer in dataset.pressure_by_observer
+    }
+
+
+def _measurement_matched_oaspl_plot(nominal_centers_hz: np.ndarray) -> PlotDefinition:
+    nominal = np.asarray(nominal_centers_hz, dtype=float)
+    coverage = f"complete {nominal.min():g}–{nominal.max():g} Hz band centres"
+    return replace(
+        PLOTS[1], name=MEASUREMENT_MATCHED_OASPL_NAME,
+        filename="oaspl_a_weighted_measurement_matched_observers_1_5.png",
+        evaluator=lambda pressure, fs: measurement_matched_oaspl_db(pressure, fs, nominal),
+        ylabel=f"A-weighted OASPL [dBA]\n{coverage}",
+        title=f"A-weighted OASPL ({coverage})",
+    )
+
+
 def evaluate_plot(dataset: AcousticDataset, plot: PlotDefinition) -> dict[int, float]:
     return {
-        observer: plot.evaluator(pressure * dataset.pressure_scale_pa, dataset.sample_rate_hz)
-        for observer, pressure in dataset.pressure_by_observer.items()
+        observer: plot.evaluator(_observer_pressure(dataset, observer), dataset.sample_rate_hz)
+        for observer in dataset.pressure_by_observer
     }
 
 
@@ -977,11 +1048,15 @@ def print_oaspl_values(
     values_by_plot: dict[str, dict[int, float]],
     observers: tuple[int, ...],
 ) -> None:
-    print(f"OASPL values for {_case_label(dataset.source_file)}:")
+    print(f"OASPL values for {_case_label(dataset.source_file)} (40–10000 Hz):")
     for observer in observers:
         unweighted = values_by_plot["oaspl_unweighted"][observer]
         a_weighted = values_by_plot["oaspl_a_weighted"][observer]
         print(f"  Observer {observer}: {unweighted:.2f} dB, {a_weighted:.2f} dBA")
+    if MEASUREMENT_MATCHED_OASPL_NAME in values_by_plot:
+        print("  A-weighted OASPL using complete measurement bands (IEC base-10 assumed):")
+        for observer in observers:
+            print(f"    Observer {observer}: {values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME][observer]:.2f} dBA")
 
 
 def print_oaspl_differences(
@@ -989,6 +1064,7 @@ def print_oaspl_differences(
     simulated_dba_by_observer: dict[int, float],
     measured_dba_by_observer: dict[int, float],
     observers: tuple[int, ...],
+    band_description: str | None = None,
 ) -> None:
     matched_observers = [
         observer
@@ -999,6 +1075,8 @@ def print_oaspl_differences(
         return
 
     print(f"A-weighted OASPL differences for {_case_label(dataset.source_file)} (simulation - measurement):")
+    if band_description is not None:
+        print(f"  Coverage: {band_description}; IEC base-10 convention assumed.")
     for observer in matched_observers:
         simulated = simulated_dba_by_observer[observer]
         measured = measured_dba_by_observer[observer]
@@ -1016,20 +1094,21 @@ def write_poc2_test_results(
     simulated_dba_by_observer: dict[int, float],
     measured_dba_by_observer: dict[int, float],
     output_dir: Path,
+    band_description: str = "Complete measurement third-octave bands (IEC base-10 assumed)",
 ) -> Path:
-    """Save measured POC2 OASPL and signed simulation errors."""
+    """Save measurement-matched POC2 OASPL and signed simulation errors."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / "poc2_test_results.csv"
+    output_file = output_dir / "poc2_test_results_measurement_matched.csv"
     with output_file.open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(("observer", "angle_deg", "simulation_dba", "experiment_dba", "simulation_minus_experiment_dba"))
+        writer.writerow(("observer", "angle_deg", "simulation_dba", "experiment_dba", "simulation_minus_experiment_dba", "integration_basis"))
         for observer in sorted(measured_dba_by_observer.keys() & simulated_dba_by_observer.keys()):
             simulated = simulated_dba_by_observer[observer]
             measured = measured_dba_by_observer[observer]
             difference = simulated - measured
             if abs(difference) < 0.005:
                 difference = 0.0
-            writer.writerow((observer, OBSERVER_ANGLES_DEG[observer], f"{simulated:.2f}", f"{measured:.2f}", f"{difference:+.2f}"))
+            writer.writerow((observer, OBSERVER_ANGLES_DEG[observer], f"{simulated:.2f}", f"{measured:.2f}", f"{difference:+.2f}", band_description))
     print(f"Wrote POC2 test results for {_legend_label(dataset.source_file)}: {output_file}")
     return output_file
 
@@ -1196,15 +1275,18 @@ def render_bar_plot(
     measurement_oaspl_dba_by_observer: dict[int, float] | None = None,
     measurement_label: str = MEASUREMENT_LABEL,
 ) -> Path:
-    output_dir = _single_weighting_output_dir(output_dir, plot.name == "oaspl_a_weighted")
+    if measurement_oaspl_dba_by_observer and plot.name != MEASUREMENT_MATCHED_OASPL_NAME:
+        raise ValueError("Measured OASPL markers require measurement-matched complete CFD bands")
+    output_dir = _single_weighting_output_dir(output_dir, plot.name.startswith("oaspl_a_weighted"))
     observers = sorted(values_by_observer)
     values = [values_by_observer[observer] for observer in observers]
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    bars = ax.bar([str(observer) for observer in observers], values, color="#4477aa")
+    bars = ax.bar([str(observer) for observer in observers],
+                  [value if np.isfinite(value) else np.nan for value in values], color="#4477aa")
     ax.bar_label(bars, labels=[f"{value:.1f}" for value in values], padding=3, fontsize=9)
     all_values = list(values)
-    if plot.name == "oaspl_a_weighted" and measurement_oaspl_dba_by_observer:
+    if plot.name == MEASUREMENT_MATCHED_OASPL_NAME and measurement_oaspl_dba_by_observer:
         measured_observers = [observer for observer in observers if observer in measurement_oaspl_dba_by_observer]
         if measured_observers:
             measured_values = [measurement_oaspl_dba_by_observer[observer] for observer in measured_observers]
@@ -1229,8 +1311,9 @@ def render_bar_plot(
     ax.set_ylabel(plot.ylabel)
     ax.set_title(f"{plot.title} - {_case_label(source_file)}")
     ax.grid(axis="y", alpha=0.3)
-    y_min = min(all_values)
-    y_max = max(all_values)
+    finite_values = [value for value in all_values if np.isfinite(value)]
+    y_min = min(finite_values) if finite_values else -20.0
+    y_max = max(finite_values) if finite_values else 0.0
     padding = 3.0 if y_min == y_max else 0.15 * (y_max - y_min)
     ax.set_ylim(y_min - padding, y_max + padding)
     fig.tight_layout()
@@ -1247,13 +1330,21 @@ def render_comparison_plot(
     output_dir: Path = PLOTS_DIR,
     measurement_oaspl_dba_by_observer: dict[int, float] | None = None,
     measurement_label: str = MEASUREMENT_LABEL,
+    measurement_band_centers_hz: np.ndarray | None = None,
 ) -> Path:
+    matched_plot = None
+    if measurement_oaspl_dba_by_observer:
+        if measurement_band_centers_hz is None:
+            raise ValueError("Measured OASPL comparison needs explicit third-octave band coverage")
+        matched_plot = _measurement_matched_oaspl_plot(measurement_band_centers_hz)
+        if any(MEASUREMENT_MATCHED_OASPL_NAME not in values for _, values in results_by_case):
+            raise ValueError("Measured OASPL comparison requires matched CFD band integrals for every case")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(18, 5.5), sharex=True)
     markers = ("o", ">", "s", "D")
 
-    for ax, plot in zip(axes, PLOTS):
+    for ax, plot in zip(axes, (PLOTS[0], matched_plot or PLOTS[1])):
         all_values = []
         for index, (dataset, values_by_plot) in enumerate(results_by_case):
             values_by_observer = values_by_plot[plot.name]
@@ -1270,7 +1361,7 @@ def render_comparison_plot(
                 linestyle="-",
             )
 
-        if plot.name == "oaspl_a_weighted" and measurement_oaspl_dba_by_observer:
+        if plot.name == MEASUREMENT_MATCHED_OASPL_NAME and measurement_oaspl_dba_by_observer:
             measured_observers = [observer for observer in observers if observer in measurement_oaspl_dba_by_observer]
             if measured_observers:
                 measured_values = [measurement_oaspl_dba_by_observer[observer] for observer in measured_observers]
@@ -1285,8 +1376,9 @@ def render_comparison_plot(
                     linestyle="None",
                 )
 
-        y_min = min(all_values)
-        y_max = max(all_values)
+        finite_values = [value for value in all_values if np.isfinite(value)]
+        y_min = min(finite_values) if finite_values else -20.0
+        y_max = max(finite_values) if finite_values else 0.0
         padding = 0.2 * (y_max - y_min) if y_max > y_min else 3.0
         y_lower = y_min - max(padding, 8.0)
         y_upper = y_max + padding
@@ -1317,7 +1409,11 @@ def render_comparison_plot(
         ax.legend(loc="upper right")
 
     fig.tight_layout()
-    output_file = output_dir / COMPARISON_OUTPUT_FILE
+    output_name = (
+        Path(COMPARISON_OUTPUT_FILE).stem + "_measurement_matched.png"
+        if matched_plot is not None else COMPARISON_OUTPUT_FILE
+    )
+    output_file = output_dir / output_name
     _save_figure(fig, output_file)
     plt.close(fig)
     return output_file
@@ -1396,7 +1492,7 @@ def load_poc2x_1000rpm_measurement_data(
             observer: []
             for observer in POC2X_1000RPM_MEASUREMENT_COLUMNS_BY_OBSERVER
         }
-        for row in worksheet.iter_rows(min_row=4, values_only=True):
+        for row in worksheet.iter_rows(min_row=4, max_row=27, values_only=True):
             frequency_hz = row[0] if row else None
             if not isinstance(frequency_hz, (int, float)):
                 continue
@@ -1408,16 +1504,18 @@ def load_poc2x_1000rpm_measurement_data(
 
         measurement_spectra = {}
         for observer, frequencies_hz in frequencies_by_observer.items():
-            if not frequencies_hz:
-                continue
+            if len(frequencies_hz) != 24:
+                raise ValueError(f"Expected all 24 measured third-octave bands for observer {observer}")
             measurement_spectra[observer] = MeasurementSpectrum(
                 frequencies_hz=np.asarray(frequencies_hz, dtype=float),
                 spl_db=np.asarray(spl_by_observer[observer], dtype=float),
             )
-        return Poc2xMeasurementData(
+        measurement = Poc2xMeasurementData(
             spectra_by_observer=measurement_spectra,
             oaspl_dba_by_observer=oaspl_dba_by_observer,
         )
+        _measurement_comparison_centers(measurement)
+        return measurement
     finally:
         workbook.close()
 
@@ -1426,6 +1524,123 @@ def load_poc2x_1000rpm_measurement_spectra(
     workbook_file: Path,
 ) -> dict[int, MeasurementSpectrum]:
     return load_poc2x_1000rpm_measurement_data(workbook_file).spectra_by_observer
+
+
+def _observer_pressure(dataset: AcousticDataset, observer: int, component: str = "pressure_by_observer") -> np.ndarray:
+    """Select a shared observer window before dimensionalizing any component."""
+    if dataset.selection_windows_by_observer is not None:
+        start, stop = dataset.selection_windows_by_observer[observer]
+    else:
+        active = np.flatnonzero(np.any([
+            getattr(dataset, name)[observer] != 0
+            for name in ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
+        ], axis=0))
+        start, stop = (int(active[0]), int(active[-1]) + 1) if active.size else (0, len(dataset.time))
+    return getattr(dataset, component)[observer][start:stop] * dataset.pressure_scale_pa
+
+
+def spectral_analysis_metadata(dataset: AcousticDataset, observer: int) -> dict:
+    pressure = _observer_pressure(dataset, observer)
+    count = len(pressure)
+    segment = _nperseg(count)
+    fs = dataset.sample_rate_hz
+    window = get_window(WINDOW, segment)
+    df = fs / segment
+    enbw = fs * float(np.sum(window**2)) / float(np.sum(window))**2
+    centers, lower, upper = _third_octave_bands(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ)
+    frequencies = np.fft.rfftfreq(segment, 1/fs)
+    bands = [{"center_hz": float(c), "lower_hz": float(lo), "upper_hz": float(hi),
+              "fft_bins": int(np.count_nonzero((frequencies >= lo) & (frequencies < hi))),
+              "complete_nyquist_support": bool(hi <= fs/2)}
+             for c, lo, hi in zip(centers, lower, upper)]
+    requested_window_s = SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/dataset.rpm
+    spectrogram_segment = min(count, max(8, int(round(requested_window_s * fs))))
+    return {
+        "retained_samples": count, "duration_s": count/fs, "sample_rate_hz": fs,
+        "resolution_hz": df, "equivalent_noise_bandwidth_hz": enbw,
+        "welch_segment_samples": segment, "window": WINDOW,
+        "welch_segments": 1 + (count-segment)//(segment-segment//2),
+        "retained_revolutions": count/fs * dataset.rpm/60,
+        "cfd_samples_per_10khz_period": dataset.rpm/60 * dataset.time_steps_per_revolution / 10000,
+        "acoustic_samples_per_10khz_period": fs/10000,
+        "band_resolution": bands,
+        "spectrogram_requested_window_s": requested_window_s,
+        "spectrogram_actual_window_s": spectrogram_segment/fs,
+        "spectrogram_resolution_hz": fs/spectrogram_segment,
+        "spectrogram_frames": 1+(count-spectrogram_segment)//(spectrogram_segment-spectrogram_segment//2),
+        "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
+    }
+
+
+def _analysis_manifest(dataset: AcousticDataset, values_by_plot: dict, n_timesteps_skip: int = 0,
+                       skip_unit: str = "cfd") -> dict:
+    observers = {}
+    skipped = n_timesteps_skip if skip_unit == "acoustic" else int(np.ceil(
+        n_timesteps_skip * 60.0/(dataset.rpm*dataset.time_steps_per_revolution*dataset.sample_spacing_s)-1e-3))
+    for observer in dataset.pressure_by_observer:
+        metadata = spectral_analysis_metadata(dataset, observer)
+        metadata["angle_deg"] = _observer_angle_deg(dataset.source_file, observer)
+        metadata["elapsed_span_s"] = (metadata["retained_samples"]-1)*dataset.sample_spacing_s
+        metadata["skipped_acoustic_samples"] = skipped
+        observers[str(observer)] = metadata
+        unresolved = [b["center_hz"] for b in metadata["band_resolution"] if b["fft_bins"] == 0]
+        sparse = [b["center_hz"] for b in metadata["band_resolution"] if 0 < b["fft_bins"] < 3]
+        print(f"  Observer {observer} analysis: {metadata['retained_revolutions']:.2f} rev, "
+              f"df={metadata['resolution_hz']:.3f} Hz, ENBW={metadata['equivalent_noise_bandwidth_hz']:.3f} Hz, "
+              f"{metadata['welch_segments']} Welch segment(s); "
+              f"{len(unresolved)} empty and {len(sparse)} sparsely sampled third-octave bands.")
+    sources = dataset.source_files or (dataset.source_file,)
+    pusher = "pusher" in {part.lower() for part in dataset.source_file.parts}
+    return {
+        "sources": [str(source.resolve()) for source in sources],
+        "n_timesteps_skip": n_timesteps_skip, "skip_unit": skip_unit,
+        "sample_spacing_s": dataset.sample_spacing_s,
+        "rpm": dataset.rpm, "solver_steps_per_revolution": dataset.time_steps_per_revolution,
+        "density_kg_m3": dataset.reference_density_kg_m3, "temperature_k": dataset.reference_temperature_k,
+        "reference_velocity_m_s": dataset.reference_velocity_m_s, "grid_unit_m": dataset.l_grid_unit_m,
+        "revolution_range": dataset.revolution_range.label if dataset.revolution_range else "all",
+        "selection_origin": "Each observer's common active pressure/thickness/loading window",
+        "observers": observers, "oaspl": values_by_plot,
+        "oaspl_literal_frequency_interval_hz": [OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ],
+        "power_normalization": "Welch density times frequency-bin width",
+        "third_octave_convention": "IEC base-10 frequency definitions; full bands, FFT-bin integration",
+        "observer_radius_m": PUSHER_OBSERVER_RADIUS_M if pusher else None,
+        "observer_geometry_basis": "Current Pusher study: 1000 ft arc" if pusher else "See simulation input",
+        "measurement_comparison_basis": "IEC base-10 bands assumed; measurement distance and propagation normalization unverified",
+        "limitations": ["FFT-bin integration is not a certified IEC filter bank",
+                        "Few-bin bands and one-periodogram records have limited spectral resolution and statistical confidence",
+                        "Nyquist support does not establish CFD temporal or spatial accuracy",
+                        "Harmonic fits estimate stationary coherent tones; modulation and broadband remain in residuals"],
+    }
+
+
+def render_psd_plots(
+    results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
+    observers: tuple[int, ...],
+    output_dir: Path = PLOTS_DIR,
+) -> list[Path]:
+    output_dir = _single_weighting_output_dir(output_dir, APPLY_A_WEIGHTING_TO_SPECTRA)
+    output_files = []
+    for observer in observers:
+        fig, ax = plt.subplots(figsize=(10.5, 6.0))
+        for index, (dataset, _) in enumerate(results_by_case):
+            frequencies, levels = psd_spectrum_db(_observer_pressure(dataset, observer), dataset.sample_rate_hz)
+            metadata = spectral_analysis_metadata(dataset, observer)
+            label = (f"{_legend_label(dataset.source_file)}; df={metadata['resolution_hz']:.2f} Hz, "
+                     f"ENBW={metadata['equivalent_noise_bandwidth_hz']:.2f} Hz")
+            ax.plot(frequencies, levels, color=_line_color(dataset.source_file, index), label=label, linewidth=1.1)
+        ax.set(xscale="log", xlim=(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ),
+               xlabel="Frequency [Hz]", ylabel="Pressure PSD [dB re (20 µPa)²/Hz]" +
+               (" (A-weighted)" if APPLY_A_WEIGHTING_TO_SPECTRA else ""),
+               title=f"Pressure spectral density for observer {observer}")
+        _style_frequency_axis(ax)
+        ax.legend(fontsize=8, loc="upper right")
+        fig.tight_layout()
+        output_file = output_dir/f"psd_spectrum{_weighting_filename_part()}_observer_{observer}.png"
+        _save_figure(fig, output_file)
+        plt.close(fig)
+        output_files.append(output_file)
+    return output_files
 
 
 def render_spectrum_plots(
@@ -1439,7 +1654,7 @@ def render_spectrum_plots(
     for observer in observers:
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
         for index, (dataset, _) in enumerate(results_by_case):
-            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            pressure_pa = _observer_pressure(dataset, observer)
             frequencies, spl_db = spl_spectrum_db(pressure_pa, dataset.sample_rate_hz)
             frequency_mask = (
                 (frequencies >= SPECTRUM_MIN_FREQUENCY_HZ)
@@ -1478,6 +1693,13 @@ def render_third_octave_plots(
     measurement_spectra_by_observer: dict[int, MeasurementSpectrum] | None = None,
     measurement_label: str = MEASUREMENT_LABEL,
 ) -> list[Path]:
+    expected_weighting = "A" if APPLY_A_WEIGHTING_TO_SPECTRA else "Z"
+    for observer, spectrum in (measurement_spectra_by_observer or {}).items():
+        if spectrum.weighting != expected_weighting or spectrum.band_base != "10":
+            raise ValueError(
+                f"Observer {observer} measurement weighting/bands do not match the "
+                f"{expected_weighting}-weighted IEC base-10 plot"
+            )
     output_dir = _single_weighting_output_dir(output_dir, APPLY_A_WEIGHTING_TO_SPECTRA)
     output_files = []
     markers = ("o", "s", "D", "^")
@@ -1486,13 +1708,12 @@ def render_third_octave_plots(
         fig, ax = plt.subplots(figsize=(8.5, 5.2))
         upper_frequency_limit = SPECTRUM_MAX_FREQUENCY_HZ
         for index, (dataset, _) in enumerate(results_by_case):
-            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            pressure_pa = _observer_pressure(dataset, observer)
             center_frequencies, band_spl_db = third_octave_spectrum_db(pressure_pa, dataset.sample_rate_hz)
             upper_frequency_limit = max(upper_frequency_limit, float(np.max(center_frequencies)))
-            valid_band_mask = np.isfinite(band_spl_db)
             ax.plot(
-                center_frequencies[valid_band_mask],
-                band_spl_db[valid_band_mask],
+                center_frequencies,
+                band_spl_db,
                 label=_legend_label(dataset.source_file),
                 color=_line_color(dataset.source_file, index),
                 marker=markers[index % len(markers)],
@@ -1600,12 +1821,7 @@ def render_surface_pair_third_octave_plots(
                     )
                     continue
 
-                first_surface_dataset = case_surfaces[group_names[0]].dataset
-                summed_pressure = np.zeros_like(first_surface_dataset.pressure_by_observer[observer])
-                for group_name in group_names:
-                    surface_dataset = case_surfaces[group_name].dataset
-                    _validate_matching_surface_signals(first_surface_dataset, surface_dataset, pair_label)
-                    summed_pressure += surface_dataset.pressure_by_observer[observer]
+                summed_pressure = _summed_surface_pair_pressure(case_surfaces, group_names, observer, pair_label)
 
                 pressure_pa = summed_pressure * total_dataset.pressure_scale_pa
                 center_frequencies, band_spl_db = third_octave_spectrum_db(
@@ -1613,7 +1829,6 @@ def render_surface_pair_third_octave_plots(
                     total_dataset.sample_rate_hz,
                 )
                 upper_frequency_limit = max(upper_frequency_limit, float(np.max(center_frequencies)))
-                valid_band_mask = np.isfinite(band_spl_db)
                 style = pair_styles.get(
                     pair_label,
                     {
@@ -1622,8 +1837,8 @@ def render_surface_pair_third_octave_plots(
                     },
                 )
                 ax.plot(
-                    center_frequencies[valid_band_mask],
-                    band_spl_db[valid_band_mask],
+                    center_frequencies,
+                    band_spl_db,
                     label=f"{pair_label} - {_legend_label(total_dataset.source_file)}",
                     color=_line_color(total_dataset.source_file, case_index),
                     markerfacecolor="none",
@@ -1661,7 +1876,13 @@ def _summed_surface_pair_pressure(
         surface_dataset = case_surfaces[group_name].dataset
         _validate_matching_surface_signals(first_surface_dataset, surface_dataset, pair_label)
         summed_pressure += surface_dataset.pressure_by_observer[observer]
-    return summed_pressure
+    if first_surface_dataset.selection_windows_by_observer is not None:
+        return summed_pressure[slice(*first_surface_dataset.selection_windows_by_observer[observer])]
+    active = np.flatnonzero(np.any([
+        getattr(case_surfaces[group].dataset, component)[observer] != 0
+        for group in group_names for component in ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
+    ], axis=0))
+    return summed_pressure[active[0]:active[-1]+1] if active.size else summed_pressure
 
 
 def render_surface_pair_oaspl_plots(
@@ -1781,22 +2002,23 @@ def render_bpf_component_plots(
                 target_frequency = _bpf_frequency_hz(dataset, harmonic, blade_count)
                 component_by_observer = getattr(dataset, attribute_name)
                 values = []
-                nearest_frequencies = []
+                fitted_frequencies = []
                 for observer in observers:
-                    component_pressure = component_by_observer[observer] * dataset.pressure_scale_pa
-                    nearest_frequency, spl_db = tone_spl_db(
+                    component_pressure = _observer_pressure(dataset, observer, attribute_name)
+                    fit_frequencies, fit_levels = harmonic_tone_spl_db(
                         component_pressure,
                         dataset.sample_rate_hz,
-                        target_frequency,
+                        _bpf_frequency_hz(dataset, 1, blade_count),
                     )
+                    fitted_frequency, spl_db = fit_frequencies[harmonic-1], fit_levels[harmonic-1]
                     values.append(spl_db)
-                    nearest_frequencies.append(nearest_frequency)
+                    fitted_frequencies.append(fitted_frequency)
                 all_component_values.extend(values)
-                actual_frequencies.append(float(np.mean(nearest_frequencies)))
+                actual_frequencies.append(float(np.mean(fitted_frequencies)))
                 ax.plot(
                     values,
                     observers,
-                    label=_legend_label(dataset.source_file),
+                    label=f"{_legend_label(dataset.source_file)} ({target_frequency:.2f} Hz)",
                     color=_line_color(dataset.source_file, index),
                     marker=markers[index % len(markers)],
                     markerfacecolor=_line_color(dataset.source_file, index),
@@ -1805,24 +2027,23 @@ def render_bpf_component_plots(
                 )
 
             ax.set_title(component_title)
-            ax.set_xlabel("SPL [dB]")
+            ax.set_xlabel("Fitted coherent tone level [dB]")
             ax.set_ylim(0, max(observers) + 1)
             ax.set_yticks(range(0, max(observers) + 2))
             ax.grid(True, alpha=0.3)
 
         axes[0].set_ylabel("Observer ID")
         axes[-1].legend(loc="lower left")
-        if all_component_values:
-            x_min = min(all_component_values)
-            x_max = max(all_component_values)
+        finite_values = [value for value in all_component_values if np.isfinite(value)]
+        if finite_values:
+            x_min = min(finite_values)
+            x_max = max(finite_values)
             x_padding = max(4.0, 0.15 * (x_max - x_min))
             for ax in axes:
                 ax.set_xlim(x_min - x_padding, x_max + x_padding)
 
-        average_frequency = float(np.mean(actual_frequencies)) if actual_frequencies else 0.0
         fig.suptitle(
-            f"Thickness and Loading Component for the {harmonic_label.title()} BPF "
-            f"({average_frequency:.1f} Hz)",
+            f"Coherent thickness, loading and total tone estimates at the {harmonic_label} BPF",
             y=0.98,
         )
         fig.tight_layout()
@@ -1850,16 +2071,9 @@ def render_harmonic_content_plots(
         fig, ax = plt.subplots(figsize=(10.5, 6.0))
         for index, (dataset, _) in enumerate(results_by_case):
             bpf_frequency = _bpf_frequency_hz(dataset, 1, blade_count)
-            harmonic_levels = []
-            for harmonic in harmonics:
-                target_frequency = float(harmonic * bpf_frequency)
-                pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
-                spl_db = harmonic_third_octave_spl_db(
-                    pressure_pa,
-                    dataset.sample_rate_hz,
-                    target_frequency,
-                )
-                harmonic_levels.append(spl_db)
+            _, harmonic_levels = harmonic_tone_spl_db(
+                _observer_pressure(dataset, observer), dataset.sample_rate_hz, bpf_frequency,
+            )
 
             color = _line_color(dataset.source_file, index)
             ax.vlines(
@@ -1881,9 +2095,9 @@ def render_harmonic_content_plots(
                 markerfacecolor=color,
             )
 
-        ax.set_title(f"Harmonic content for observer ID: {observer}")
+        ax.set_title(f"Coherent harmonic tone estimates for observer ID: {observer}")
         ax.set_xlabel("Harmonics")
-        ax.set_ylabel(r"SPL$_{1/3}$ [dB]")
+        ax.set_ylabel("Joint sinusoidal-fit RMS level [dB]")
         ax.set_xlim(0, max(HARMONIC_INDICES) + 1)
         ax.set_xticks(range(0, max(HARMONIC_INDICES) + 2))
         ax.set_ylim(*HARMONIC_Y_LIMITS_DB)
@@ -2044,15 +2258,15 @@ def render_average_pressure_time_history_plots(
         all_pressure_values = []
 
         for index, (dataset, _) in enumerate(results_by_case):
-            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
-            pressure_pa = _filter_zero_signal_edges(pressure_pa)
+            pressure_pa = _observer_pressure(dataset, observer)
             samples_per_revolution = int(round(dataset.sample_rate_hz * 60.0 / dataset.rpm))
             complete_revolutions = len(pressure_pa) // samples_per_revolution
             average_count = min(
                 _average_revolution_count(dataset, revolution_count), complete_revolutions,
             )
             if average_count < 1:
-                raise ValueError(f"Observer {observer} has less than one complete acoustic revolution.")
+                warnings.warn(f"Observer {observer} has less than one complete revolution; skipping its phase average.", RuntimeWarning)
+                continue
             averaged_pressure_pa = _average_revolutions(
                 pressure_pa[:average_count * samples_per_revolution],
                 revolution_count=average_count,
@@ -2070,6 +2284,9 @@ def render_average_pressure_time_history_plots(
             )
 
         ax.set_title(f"Average Pressure-time History for observer ID: {observer}")
+        if not ax.lines:
+            plt.close(fig)
+            continue
         ax.set_xlabel("Elapsed time [s]")
         ax.set_ylabel("Pressure [Pa]")
         ax.margins(x=0)
@@ -2093,11 +2310,15 @@ def render_average_pressure_time_history_plots(
 def _spectrogram_spl_db(
     pressure_pa: np.ndarray,
     sample_rate_hz: float,
+    *,
+    window_duration_s: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    pressure_pa = _filter_zero_signal_edges(pressure_pa)
-    nperseg = min(SPECTROGRAM_NPERSEG, len(pressure_pa))
-    if nperseg < 8:
-        raise ValueError("Too few samples for spectrogram calculation.")
+    pressure_pa = _validate_spectral_input(pressure_pa, sample_rate_hz)
+    if window_duration_s is None:
+        window_duration_s = SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/DEFAULT_RPM
+    if not np.isfinite(window_duration_s) or window_duration_s <= 0:
+        raise ValueError("Spectrogram window duration must be finite and positive.")
+    nperseg = min(len(pressure_pa), max(8, int(round(window_duration_s * sample_rate_hz))))
 
     frequencies, times, power_by_time = spectrogram(
         _fluctuating_pressure(pressure_pa),
@@ -2105,7 +2326,8 @@ def _spectrogram_spl_db(
         window=WINDOW,
         nperseg=nperseg,
         noverlap=nperseg // 2,
-        scaling="spectrum",
+        scaling="density",
+        detrend=False,
         mode="psd",
     )
     spl_db = _db_from_power(power_by_time)
@@ -2133,34 +2355,39 @@ def render_spectrogram_plots(
         for observer in observers:
             for component_title, attribute_name, filename_part in component_definitions:
                 component_by_observer = getattr(dataset, attribute_name)
-                pressure_pa = component_by_observer[observer] * dataset.pressure_scale_pa
+                pressure_pa = _observer_pressure(dataset, observer, attribute_name)
                 frequencies, times, spl_db = _spectrogram_spl_db(
                     pressure_pa,
                     dataset.sample_rate_hz,
+                    window_duration_s=SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/dataset.rpm,
                 )
 
+                frequency_step = frequencies[1]-frequencies[0]
                 frequency_mask = frequencies <= SPECTROGRAM_MAX_FREQUENCY_HZ
                 frequencies = frequencies[frequency_mask]
                 spl_db = spl_db[frequency_mask, :]
-                time_fraction = times / times[-1] if times[-1] > 0.0 else times
+                duration_s = len(pressure_pa) / dataset.sample_rate_hz
+                time_edges = np.concatenate(([0.0], (times[:-1]+times[1:])/2, [duration_s]))
+                frequency_edges = np.concatenate(([0.0], frequencies[:-1]+frequency_step/2, [frequencies[-1]+frequency_step/2]))
 
                 fig, ax = plt.subplots(figsize=(10.5, 6.0))
                 mesh = ax.pcolormesh(
-                    time_fraction,
-                    frequencies,
+                    time_edges,
+                    frequency_edges,
                     spl_db,
-                    shading="nearest",
+                    shading="flat",
                     cmap="jet",
                     vmin=SPECTROGRAM_LIMITS_DB[0],
                     vmax=SPECTROGRAM_LIMITS_DB[1],
                 )
                 colorbar = fig.colorbar(mesh, ax=ax, pad=0.10)
-                colorbar.set_label("SPL [dB]")
+                colorbar.set_label("Pressure PSD [dB re (20 µPa)²/Hz]")
 
-                ax.set_title(f"{component_title} - Spectrogram for Observer ID: {observer}")
-                ax.set_xlabel("Time Fraction")
+                frame_count = len(times)
+                ax.set_title(f"{component_title} - Observer {observer}; df={frequency_step:.1f} Hz, {frame_count} frames")
+                ax.set_xlabel("Elapsed time [s]")
                 ax.set_ylabel("Frequency [Hz]")
-                ax.set_xlim(0.0, 1.0)
+                ax.set_xlim(0.0, duration_s)
                 ax.set_ylim(0.0, SPECTROGRAM_MAX_FREQUENCY_HZ)
                 ax.grid(True, color="white", linewidth=0.5, alpha=0.5)
                 fig.tight_layout()
@@ -2215,7 +2442,7 @@ def make_plots(
     dataset = combine_acoustic_datasets(datasets) if csv_files else datasets[0]
     if csv_files or n_timesteps_skip or revolution_range is not None:
         print("Acoustic sources: " + ", ".join(str(source) for source in sources))
-        dataset = prepare_acoustic_dataset(dataset, n_timesteps_skip, skip_unit, revolution_range)
+    dataset = prepare_acoustic_dataset(dataset, n_timesteps_skip, skip_unit, revolution_range)
     print(
         f"Loaded {dataset.source_file.name}: "
         f"{len(dataset.time)} samples, "
@@ -2233,70 +2460,60 @@ def make_plots(
 
     output_files = []
     values_by_plot = {}
+    measurement_centers = (
+        _measurement_comparison_centers(measurement_data) if measurement_data is not None else None
+    )
+    if measurement_data is not None:
+        values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME] = _measurement_matched_oaspl_values(dataset, measurement_data)
+        print("Measurement comparison assumes IEC base-10 bands; workbook distance/propagation normalization "
+              "is not established. Levels are used as reported, without a distance correction.")
     for plot in plots:
         values_by_observer = evaluate_plot(dataset, plot)
         values_by_plot[plot.name] = values_by_observer
+        render_plot = plot
+        measurement_values = None
+        if measurement_data is not None and plot.name == "oaspl_a_weighted":
+            render_plot = _measurement_matched_oaspl_plot(measurement_centers)
+            values_by_observer = values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME]
+            measurement_values = measurement_data.oaspl_dba_by_observer
         output_file = render_bar_plot(
             values_by_observer,
-            plot,
+            render_plot,
             dataset.source_file,
             output_dir,
-            measurement_oaspl_dba_by_observer=(
-                measurement_data.oaspl_dba_by_observer if measurement_data is not None else None
-            ),
+            measurement_oaspl_dba_by_observer=measurement_values,
             measurement_label=measurement_label,
         )
         output_files.append(output_file)
         print(f"Wrote {output_file}")
     if all(plot.name in values_by_plot for plot in PLOTS):
         print_oaspl_values(dataset, values_by_plot, observers)
-    if csv_files or n_timesteps_skip:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        skipped_samples = (
-            n_timesteps_skip if skip_unit == "acoustic"
-            else int(round(n_timesteps_skip * 60.0 / (
-                dataset.rpm * dataset.time_steps_per_revolution * dataset.sample_spacing_s
-            )))
-        )
-        observer_windows = {}
-        for observer in observers:
-            elapsed, _ = _pressure_time_history(dataset, observer)
-            observer_windows[str(observer)] = {
-                "retained_samples": len(elapsed),
-                "elapsed_span_s": float(elapsed[-1]),
-                "skipped_acoustic_samples": skipped_samples,
-            }
-        manifest = {
-            "sources": [str(source.resolve()) for source in sources],
-            "n_timesteps_skip": n_timesteps_skip, "skip_unit": skip_unit,
-            "sample_spacing_s": dataset.sample_spacing_s,
-            "rpm": dataset.rpm, "solver_steps_per_revolution": dataset.time_steps_per_revolution,
-            "density_kg_m3": dataset.reference_density_kg_m3,
-            "temperature_k": dataset.reference_temperature_k,
-            "reference_velocity_m_s": dataset.reference_velocity_m_s,
-            "grid_unit_m": dataset.l_grid_unit_m,
-            "observers": observer_windows,
-            "oaspl": values_by_plot,
-            "power_normalization": "Welch density times frequency-bin width",
-        }
-        (output_dir / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    if measurement_data is not None and "oaspl_a_weighted" in values_by_plot:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = _analysis_manifest(dataset, values_by_plot, n_timesteps_skip, skip_unit)
+    (output_dir / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    if measurement_data is not None:
+        band_description = _measurement_matched_oaspl_plot(measurement_centers).title
         print_oaspl_differences(
             dataset,
-            values_by_plot["oaspl_a_weighted"],
+            values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME],
             measurement_data.oaspl_dba_by_observer,
             observers,
+            band_description=band_description,
         )
         if "poc2" in {part.lower() for part in dataset.source_file.resolve().parts}:
             write_poc2_test_results(
                 dataset,
-                values_by_plot["oaspl_a_weighted"],
+                values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME],
                 measurement_data.oaspl_dba_by_observer,
                 output_dir,
+                band_description=band_description,
             )
     for spectrum_output_file in render_spectrum_plots([(dataset, values_by_plot)], observers, output_dir):
         output_files.append(spectrum_output_file)
         print(f"Wrote {spectrum_output_file}")
+    for density_output_file in render_psd_plots([(dataset, values_by_plot)], observers, output_dir):
+        output_files.append(density_output_file)
+        print(f"Wrote {density_output_file}")
     for harmonic_output_file in render_harmonic_content_plots(
         [(dataset, values_by_plot)], observers, output_dir,
     ):
@@ -2371,6 +2588,9 @@ def make_comparison_plot(
     measurement_label: str = MEASUREMENT_LABEL,
 ) -> Path:
     csv_files = _default_acoustic_files() if csv_files is None else [Path(path) for path in csv_files]
+    measurement_centers = (
+        _measurement_comparison_centers(measurement_data) if measurement_data is not None else None
+    )
     results_by_case = []
     for csv_file in csv_files:
         rpm, time_steps_per_revolution = _timing_for_file(csv_file, None, None)
@@ -2390,9 +2610,11 @@ def make_comparison_plot(
             reference_velocity_m_s=reference_velocity_m_s,
             reference_temperature_k=reference_temperature_k,
             l_grid_unit_m=l_grid_unit_m,
-            revolution_range=revolution_range,
         )
+        dataset = prepare_acoustic_dataset(dataset, revolution_range=revolution_range)
         values_by_plot = {plot.name: evaluate_plot(dataset, plot) for plot in plots}
+        if measurement_data is not None:
+            values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME] = _measurement_matched_oaspl_values(dataset, measurement_data)
         results_by_case.append((dataset, values_by_plot))
         print(
             f"Loaded {dataset.source_file.name}: "
@@ -2407,21 +2629,28 @@ def make_comparison_plot(
         )
         if all(plot.name in values_by_plot for plot in PLOTS):
             print_oaspl_values(dataset, values_by_plot, observers)
-        if (measurement_data is not None and "oaspl_a_weighted" in values_by_plot
-                and "poc2" in {part.lower() for part in dataset.source_file.resolve().parts}):
+        if measurement_data is not None:
+            band_description = _measurement_matched_oaspl_plot(measurement_centers).title
             print_oaspl_differences(
                 dataset,
-                values_by_plot["oaspl_a_weighted"],
+                values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME],
                 measurement_data.oaspl_dba_by_observer,
                 observers,
+                band_description=band_description,
             )
-            write_poc2_test_results(
-                dataset,
-                values_by_plot["oaspl_a_weighted"],
-                measurement_data.oaspl_dba_by_observer,
-                output_dir,
-            )
+            if "poc2" in {part.lower() for part in dataset.source_file.resolve().parts}:
+                write_poc2_test_results(
+                    dataset,
+                    values_by_plot[MEASUREMENT_MATCHED_OASPL_NAME],
+                    measurement_data.oaspl_dba_by_observer,
+                    output_dir,
+                    band_description=band_description,
+                )
 
+    output_dir.mkdir(parents=True, exist_ok=True)
+    case_manifests = [_analysis_manifest(dataset, values) for dataset, values in results_by_case]
+    manifest = case_manifests[0] if len(case_manifests) == 1 else {"cases": case_manifests}
+    (output_dir/"analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     output_file = render_comparison_plot(
         results_by_case,
         observers,
@@ -2430,10 +2659,13 @@ def make_comparison_plot(
             measurement_data.oaspl_dba_by_observer if measurement_data is not None else None
         ),
         measurement_label=measurement_label,
+        measurement_band_centers_hz=measurement_centers,
     )
     print(f"Wrote {output_file}")
     for spectrum_output_file in render_spectrum_plots(results_by_case, observers, output_dir):
         print(f"Wrote {spectrum_output_file}")
+    for density_output_file in render_psd_plots(results_by_case, observers, output_dir):
+        print(f"Wrote {density_output_file}")
     for third_octave_output_file in render_third_octave_plots(
         results_by_case,
         observers,
@@ -2547,13 +2779,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-timesteps-skip", type=int, default=0, help="Initial signal steps to remove per observer.")
     parser.add_argument("--skip-unit", choices=("cfd", "acoustic"), default="cfd")
     parser.add_argument("--observers", type=_parse_observers, default=DEFAULT_OBSERVERS)
+    parser.add_argument("--nperseg", default=NPERSEG,
+                        help="Welch segment samples (integer >=8), or All for one full-record periodogram.")
+    parser.add_argument("--spectrogram-window-s", type=float, default=None,
+                        help="Spectrogram window duration in seconds; default is one propeller revolution.")
     parser.add_argument(
         "--revolutions",
         type=_parse_revolution_range,
         default=None,
         help=(
             "Optional half-open revolution range used for all aeroacoustic calculations. "
-            "Default uses all samples. Examples: 0-2 or 1-3 select the first two revolutions; "
+            "Measured from each observer's active signal after any skipped steps. "
+            "Default uses all active samples. Examples: 0-2 or 1-3 select the first two revolutions; "
             "zero:1-3 forces zero-based indexing."
         ),
     )
@@ -2635,6 +2872,12 @@ def main() -> None:
     if args.combine_csv and args.legend_labels is not None:
         raise ValueError("Use --legend-label for the combined dataset, rather than --legend-labels.")
     global APPLY_A_WEIGHTING_TO_SPECTRA, FLOW360_OBSERVER_NUMBERING_OFFSET, LEGEND_LABEL_OVERRIDE, LEGEND_LABELS_BY_FILE
+    global NPERSEG, SPECTROGRAM_WINDOW_S
+    NPERSEG = args.nperseg
+    _nperseg(8)
+    SPECTROGRAM_WINDOW_S = args.spectrogram_window_s
+    if SPECTROGRAM_WINDOW_S is not None and (not np.isfinite(SPECTROGRAM_WINDOW_S) or SPECTROGRAM_WINDOW_S <= 0):
+        raise ValueError("--spectrogram-window-s must be finite and positive.")
     APPLY_A_WEIGHTING_TO_SPECTRA = args.apply_a_weighting_to_spectra
     FLOW360_OBSERVER_NUMBERING_OFFSET = args.csv_observer_offset
     LEGEND_LABEL_OVERRIDE = args.legend_label
