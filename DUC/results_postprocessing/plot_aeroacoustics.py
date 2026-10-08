@@ -749,10 +749,10 @@ def spl_spectrum_db(
 ) -> tuple[np.ndarray, np.ndarray]:
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
-    _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
+    _validate_frequency_interval(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ, sample_rate_hz)
     # Keep amplitude-normalized narrowband peaks separate from additive power.
     frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
-    mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    mask = (frequencies >= SPECTRUM_MIN_FREQUENCY_HZ) & (frequencies <= SPECTRUM_MAX_FREQUENCY_HZ)
     if not np.any(mask):
         raise ValueError("No frequencies remain inside the configured frequency band.")
     frequencies, mean_square_by_bin = frequencies[mask], mean_square_by_bin[mask]
@@ -768,9 +768,9 @@ def psd_spectrum_db(
     """Return density levels in dB re (20 microPa)^2/Hz for bandwidth-independent comparisons."""
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
-    _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
+    _validate_frequency_interval(SPECTRUM_MIN_FREQUENCY_HZ, SPECTRUM_MAX_FREQUENCY_HZ, sample_rate_hz)
     frequencies, density = _welch_spectrum(pressure, sample_rate_hz, scaling="density")
-    mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    mask = (frequencies >= SPECTRUM_MIN_FREQUENCY_HZ) & (frequencies <= SPECTRUM_MAX_FREQUENCY_HZ)
     if not np.any(mask):
         raise ValueError("No frequencies remain inside the configured frequency band.")
     frequencies, density = frequencies[mask], density[mask]
@@ -957,8 +957,8 @@ def third_octave_spectrum_db(
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
     center_frequencies = _third_octave_centers(
-        OASPL_MIN_FREQUENCY_HZ,
-        OASPL_MAX_FREQUENCY_HZ,
+        SPECTRUM_MIN_FREQUENCY_HZ,
+        SPECTRUM_MAX_FREQUENCY_HZ,
     )
     return center_frequencies, third_octave_spectrum_at_centers_db(
         pressure, sample_rate_hz, center_frequencies, apply_a_weighting,
@@ -1953,9 +1953,10 @@ def render_surface_pair_oaspl_plots(
                     **style,
                 )
 
-        if all_values:
-            y_min = min(all_values)
-            y_max = max(all_values)
+        finite_values = [value for value in all_values if np.isfinite(value)]
+        if finite_values:
+            y_min = min(finite_values)
+            y_max = max(finite_values)
             padding = max(3.0, 0.2 * (y_max - y_min)) if y_max > y_min else 3.0
             ax.set_ylim(y_min - padding, y_max + padding)
         ax.set_title(title)

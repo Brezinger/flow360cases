@@ -165,6 +165,37 @@ class ResolutionRendererTests(unittest.TestCase):
         for width in mesh_widths:
             self.assertGreater(width, 0)
 
+    def test_cancelling_surface_pair_has_finite_oaspl_axis_limits(self):
+        pressure = np.cos(2 * np.pi * 1000 * np.arange(32000) / 32000.0)
+        total = make_dataset(pressure)
+        first = make_dataset(pressure)
+        opposite = make_dataset(-pressure)
+        surfaces = [
+            a.SurfaceResolvedDataset("blade1", first, total.source_file),
+            a.SurfaceResolvedDataset("blade3", opposite, total.source_file),
+        ]
+        captured = []
+
+        def capture(fig, filename):
+            captured.append([
+                (ax.get_ylim(), np.asarray(ax.lines[0].get_ydata()))
+                for ax in fig.axes
+            ])
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(a, "load_surface_resolved_datasets", return_value=surfaces):
+                with patch.object(a, "_save_figure", side_effect=capture):
+                    output_file = a.render_surface_pair_oaspl_plots(
+                        [(total, {})], (1,), Path(directory),
+                        (("blade1+blade3", ("blade1", "blade3")),),
+                    )
+        self.assertIsNotNone(output_file)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(len(captured[0]), 2)
+        for limits, levels in captured[0]:
+            self.assertTrue(np.all(np.isfinite(limits)))
+            self.assertTrue(np.all(np.isneginf(levels)))
+
     def test_metadata_discloses_segment_bandwidth_and_two_time_scales(self):
         signal = np.cos(2 * np.pi * 1000 * np.arange(4096) / 32000.0)
         padded = np.concatenate((np.zeros(7), signal, np.zeros(12)))

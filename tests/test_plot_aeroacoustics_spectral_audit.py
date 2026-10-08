@@ -90,6 +90,17 @@ class SpectralAuditTests(unittest.TestCase):
             with self.subTest(evaluator=evaluator.__name__), self.assertRaisesRegex(ValueError, 'No frequencies'):
                 evaluator(np.ones(8), 100000)
 
+    def test_display_frequency_range_is_independent_of_literal_oaspl_interval(self):
+        pressure = self.tone(13000)
+        with patch.object(a, "SPECTRUM_MIN_FREQUENCY_HZ", 12000), patch.object(a, "SPECTRUM_MAX_FREQUENCY_HZ", 14000):
+            for evaluator in (a.spl_spectrum_db, a.psd_spectrum_db):
+                frequencies, _ = evaluator(pressure, self.fs, False)
+                self.assertTrue(np.all((frequencies >= 12000) & (frequencies <= 14000)))
+            centers, levels = a.third_octave_spectrum_db(pressure, self.fs, False)
+            self.assertEqual(len(centers), 1)
+            self.assertAlmostEqual(levels[0], a._db_from_power(1), places=8)
+        self.assertLess(a.oaspl_unweighted_db(pressure, self.fs), -100)
+
     def test_measurement_matched_overall_uses_full_test_bandwidth(self):
         pressure = self.tone(10500, rms=.8) + self.tone(1000, rms=.6)
         nominal = np.array([50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630,
