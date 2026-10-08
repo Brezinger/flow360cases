@@ -42,6 +42,12 @@ FLOW360_OBSERVER_NUMBERING_OFFSET = -1
 PUSHER_OBSERVER_ANGLES_DEG = (20, 45, 90, 135, 160)
 DEFAULT_RPM = 1063.677
 POC2_RPM = 1000.0
+PUSHER_RPM = 2186.0
+PUSHER_REFERENCE_DENSITY_KG_M3 = 1.1839124829
+PUSHER_REFERENCE_TEMPERATURE_K = 298.15
+PUSHER_PROPELLER_RADIUS_M = 1.06
+PUSHER_STEPS_PER_REVOLUTION = {"step0": 54, "step1": 329, "step2": 878, "step3": 1756, "step3b": 1756, "step4": 3660}
+PUSHER_OBSERVER_RADIUS_M = 304.8
 Q40LT_RPM = 1002.0
 POC2_PROPELLER_RADIUS_M = 1.4
 STEP3_TIME_STEPS_PER_REVOLUTION = 120 * 32
@@ -163,12 +169,31 @@ class AcousticDataset:
     l_grid_unit_m: float
     revolution_range: RevolutionRange | None = None
     source_files: tuple[Path, ...] = ()
+    selection_windows_by_observer: dict[int, tuple[int, int]] | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("rpm", "time_steps_per_revolution", "reference_density_kg_m3",
+                     "reference_temperature_k", "l_grid_unit_m"):
+            value = getattr(self, name)
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive for {self.source_file}.")
+        if not np.isfinite(self.reference_velocity_m_s) or self.reference_velocity_m_s < 0:
+            raise ValueError("Reference velocity must be finite and nonnegative.")
+        _validated_time_spacing(self.time, self.source_file)
+        observers = set(self.pressure_by_observer)
+        if not observers:
+            raise ValueError("At least one observer is required.")
+        for component in (self.pressure_by_observer, self.thickness_by_observer, self.loading_by_observer):
+            if set(component) != observers:
+                raise ValueError("Pressure, thickness and loading must have matching observer columns.")
+            for observer, values in component.items():
+                values = np.asarray(values)
+                if values.ndim != 1 or len(values) != len(self.time) or not np.all(np.isfinite(values)):
+                    raise ValueError(f"Invalid pressure samples for observer {observer} in {self.source_file}.")
 
     @property
     def sample_spacing_s(self) -> float:
-        if len(self.time) < 2:
-            raise ValueError("At least two time samples are required to compute the acoustic sample spacing.")
-        return float(np.mean(np.diff(self.time * (self.l_grid_unit_m / self.speed_of_sound_m_s))))
+        return _validated_time_spacing(self.time, self.source_file) * self.l_grid_unit_m / self.speed_of_sound_m_s
 
     @property
     def sample_rate_hz(self) -> float:
@@ -207,6 +232,17 @@ class PlotDefinition:
 class MeasurementSpectrum:
     frequencies_hz: np.ndarray
     spl_db: np.ndarray
+    weighting: str = "A"
+    band_base: str = "10"
+
+    def __post_init__(self) -> None:
+        if self.weighting not in ("A", "Z") or self.band_base != "10":
+            raise ValueError("Measurements require explicit A/Z weighting and IEC base-10 bands.")
+        frequencies, levels = np.asarray(self.frequencies_hz), np.asarray(self.spl_db)
+        if (frequencies.ndim != 1 or levels.shape != frequencies.shape or not frequencies.size
+                or not np.all(np.isfinite(frequencies)) or not np.all(np.isfinite(levels))
+                or np.any(frequencies <= 0) or np.any(np.diff(frequencies) <= 0)):
+            raise ValueError("Measurement frequencies and levels must be finite, ordered, matching arrays.")
 
 
 @dataclass(frozen=True)
@@ -244,6 +280,20 @@ def _speed_of_sound_m_s(reference_temperature_k: float) -> float:
             * reference_temperature_k
         )
     )
+
+
+def _validated_time_spacing(time: np.ndarray, source_file: Path) -> float:
+    """Allow CSV rounding (0.1% interval variation), reject missing or irregular samples."""
+    time = np.asarray(time, dtype=float)
+    if time.ndim != 1 or len(time) < 2 or not np.all(np.isfinite(time)):
+        raise ValueError(f"At least two finite acoustic timestamps are required in {source_file}.")
+    intervals = np.diff(time)
+    spacing = float(np.mean(intervals))
+    if spacing <= 0 or np.any(intervals <= 0):
+        raise ValueError(f"Acoustic timestamps must strictly increase in {source_file}.")
+    if np.max(np.abs(intervals - spacing)) > spacing * 1e-3:
+        raise ValueError(f"Acoustic timestamps are irregular in {source_file}; resample explicitly before analysis.")
+    return spacing
 
 
 def _samples_per_revolution(
@@ -286,15 +336,21 @@ def _slice_revolutions(
 def load_acoustic_dataset(
     csv_file: Path | None = None,
     observers: tuple[int, ...] = DEFAULT_OBSERVERS,
-    rpm: float = DEFAULT_RPM,
-    time_steps_per_revolution: float = DEFAULT_TIME_STEPS_PER_REVOLUTION,
-    reference_density_kg_m3: float = LOCAL_RESULTS_REFERENCE_DENSITY_KG_M3,
-    reference_velocity_m_s: float = LOCAL_RESULTS_REFERENCE_VELOCITY_M_S,
-    reference_temperature_k: float = LOCAL_RESULTS_REFERENCE_TEMPERATURE_K,
-    l_grid_unit_m: float = LOCAL_RESULTS_L_GRID_UNIT_M,
+    rpm: float | None = None,
+    time_steps_per_revolution: float | None = None,
+    reference_density_kg_m3: float | None = None,
+    reference_velocity_m_s: float | None = None,
+    reference_temperature_k: float | None = None,
+    l_grid_unit_m: float | None = None,
     revolution_range: RevolutionRange | None = None,
 ) -> AcousticDataset:
     csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
+    if not observers or len(set(observers)) != len(observers) or any(_csv_observer_index(o) < 0 for o in observers):
+        raise ValueError("Observer indices must be unique and map to nonnegative CSV columns.")
+    rpm, time_steps_per_revolution = _timing_for_file(csv_file, rpm, time_steps_per_revolution)
+    reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m = _reference_values_for_file(
+        csv_file, reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m,
+    )
     pressure_columns = {
         observer: f"observer_{_csv_observer_index(observer)}_pressure"
         for observer in observers
@@ -315,11 +371,12 @@ def load_acoustic_dataset(
     with csv_file.open(newline="") as file:
         reader = csv.DictReader(file, skipinitialspace=True)
         required_columns = [
+            "time",
             *pressure_columns.values(),
             *thickness_columns.values(),
             *loading_columns.values(),
         ]
-        missing_columns = [column for column in required_columns if column not in reader.fieldnames]
+        missing_columns = [column for column in required_columns if column not in (reader.fieldnames or ())]
         if missing_columns:
             raise KeyError(f"Missing acoustic pressure columns in {csv_file}: {missing_columns}")
 
@@ -349,33 +406,7 @@ def load_acoustic_dataset(
         for observer, values in loading_values.items()
     }
 
-    if revolution_range is not None:
-        samples_per_revolution = _samples_per_revolution(
-            time_array,
-            rpm,
-            reference_temperature_k,
-            l_grid_unit_m,
-        )
-        time_array = _slice_revolutions(
-            time_array,
-            revolution_range,
-            samples_per_revolution,
-            csv_file,
-        )
-        pressure_arrays = {
-            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
-            for observer, values in pressure_arrays.items()
-        }
-        thickness_arrays = {
-            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
-            for observer, values in thickness_arrays.items()
-        }
-        loading_arrays = {
-            observer: _slice_revolutions(values, revolution_range, samples_per_revolution, csv_file)
-            for observer, values in loading_arrays.items()
-        }
-
-    return AcousticDataset(
+    dataset = AcousticDataset(
         source_file=csv_file,
         time=time_array,
         pressure_by_observer=pressure_arrays,
@@ -387,8 +418,8 @@ def load_acoustic_dataset(
         reference_velocity_m_s=reference_velocity_m_s,
         reference_temperature_k=reference_temperature_k,
         l_grid_unit_m=l_grid_unit_m,
-        revolution_range=revolution_range,
     )
+    return prepare_acoustic_dataset(dataset, revolution_range=revolution_range) if revolution_range else dataset
 
 
 def combine_acoustic_datasets(datasets: list[AcousticDataset]) -> AcousticDataset:
@@ -463,7 +494,7 @@ def prepare_acoustic_dataset(
         skip_samples = int(round(n_timesteps_skip * cfd_spacing / dataset.sample_spacing_s))
     components = ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
     prepared = {component: {} for component in components}
-    samples_per_revolution = int(round(dataset.sample_rate_hz * 60.0 / dataset.rpm))
+    windows = {}
     print(f"Skipping {n_timesteps_skip} {skip_unit} steps = {skip_samples} acoustic samples per observer.")
     for observer in dataset.pressure_by_observer:
         active = np.flatnonzero(np.any([
@@ -473,8 +504,12 @@ def prepare_acoustic_dataset(
             raise ValueError(f"Observer {observer} has no nonzero acoustic signal.")
         start, stop = int(active[0]) + skip_samples, int(active[-1]) + 1
         if revolution_range is not None:
-            end = start + revolution_range.end_index * samples_per_revolution
-            start += revolution_range.start_index * samples_per_revolution
+            if revolution_range.start_index < 0 or revolution_range.end_index <= revolution_range.start_index:
+                raise ValueError("Revolution range must be increasing and nonnegative.")
+            # Convert each boundary independently to avoid accumulated rounding drift.
+            samples_per_revolution = dataset.sample_rate_hz * 60.0 / dataset.rpm
+            end = start + int(round(revolution_range.end_index * samples_per_revolution))
+            start += int(round(revolution_range.start_index * samples_per_revolution))
             if end > stop:
                 raise ValueError(f"Observer {observer} has too few retained revolutions.")
             stop = end
@@ -485,9 +520,10 @@ def prepare_acoustic_dataset(
             values[:start] = 0
             values[stop:] = 0
             prepared[component][observer] = values
+        windows[observer] = (start, stop)
         print(f"  Observer {observer}: {stop - start} retained samples, "
               f"{(stop - start) * dataset.sample_spacing_s:.6f} s")
-    return replace(dataset, **prepared, revolution_range=revolution_range)
+    return replace(dataset, **prepared, revolution_range=revolution_range, selection_windows_by_observer=windows)
 
 
 def load_surface_resolved_datasets(
@@ -514,8 +550,9 @@ def load_surface_resolved_datasets(
                 reference_velocity_m_s=total_dataset.reference_velocity_m_s,
                 reference_temperature_k=total_dataset.reference_temperature_k,
                 l_grid_unit_m=total_dataset.l_grid_unit_m,
-                revolution_range=total_dataset.revolution_range,
             )
+            if total_dataset.selection_windows_by_observer is not None:
+                surface_dataset = _apply_total_selection(surface_dataset, total_dataset)
             surface_datasets.append(
                 SurfaceResolvedDataset(
                     group_name=group_name,
@@ -524,6 +561,28 @@ def load_surface_resolved_datasets(
                 )
             )
     return surface_datasets
+
+
+def _apply_total_selection(surface: AcousticDataset, total: AcousticDataset) -> AcousticDataset:
+    """Use the total's selected physical timestamps for every coherent surface contribution."""
+    if not np.isclose(surface.sample_spacing_s, total.sample_spacing_s, rtol=1e-5, atol=0):
+        raise ValueError("Surface and total sampling intervals differ.")
+    prepared = {component: {} for component in ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")}
+    windows = {}
+    for observer, (start, stop) in total.selection_windows_by_observer.items():
+        first = total.time_seconds[start]
+        index = int(round((first - surface.time_seconds[0]) / surface.sample_spacing_s))
+        end = index + stop - start
+        if (index < 0 or end > len(surface.time) or not np.isclose(
+                surface.time_seconds[index], first, rtol=0, atol=total.sample_spacing_s * .01)):
+            raise ValueError(f"Surface file does not cover total's selected time window: {surface.source_file}")
+        for component in prepared:
+            values = getattr(surface, component)[observer].copy()
+            values[:index] = 0
+            values[end:] = 0
+            prepared[component][observer] = values
+        windows[observer] = (index, end)
+    return replace(surface, **prepared, revolution_range=total.revolution_range, selection_windows_by_observer=windows)
 
 
 def _fluctuating_pressure(pressure: np.ndarray) -> np.ndarray:
@@ -542,7 +601,8 @@ def _pressure_time_history(dataset: AcousticDataset, observer: int) -> tuple[np.
     """Clip edge padding together with its timestamps; retain interior zeros."""
     pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
     nonzero_indices = np.flatnonzero(pressure_pa != 0.0)
-    valid = (
+    windows = getattr(dataset, "selection_windows_by_observer", None)
+    valid = slice(*windows[observer]) if windows is not None else (
         slice(nonzero_indices[0], nonzero_indices[-1] + 1)
         if nonzero_indices.size else slice(None)
     )
@@ -551,20 +611,50 @@ def _pressure_time_history(dataset: AcousticDataset, observer: int) -> tuple[np.
 
 
 def _db_from_power(mean_square_pressure: np.ndarray | float) -> np.ndarray | float:
+    """Convert nonnegative power to dB; zero is -inf and unavailable is NaN."""
     mean_square_pressure = np.asarray(mean_square_pressure, dtype=float)
-    spl_db = 10.0 * np.log10(
-        np.maximum(mean_square_pressure, np.finfo(float).tiny)
-        / ACOUSTIC_PRESSURE_REFERENCE_PA**2
-    )
+    if np.any(mean_square_pressure < 0.0) or np.any(np.isinf(mean_square_pressure)):
+        raise ValueError("Acoustic power must be nonnegative and finite (or NaN for unavailable bands).")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        spl_db = 10.0 * np.log10(mean_square_pressure / ACOUSTIC_PRESSURE_REFERENCE_PA**2)
     if spl_db.ndim == 0:
         return float(spl_db)
     return spl_db
 
 
 def _nperseg(sample_count: int) -> int:
+    if sample_count < 8:
+        raise ValueError("At least eight samples are required for spectral analysis.")
     if isinstance(NPERSEG, str) and NPERSEG.strip().lower() == "all":
         return sample_count
-    return min(int(NPERSEG), sample_count)
+    try:
+        segment_count = int(NPERSEG)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("NPERSEG must be 'All' or an integer of at least eight.") from error
+    if isinstance(NPERSEG, (bool, np.bool_)) or segment_count < 8 or float(NPERSEG) != segment_count:
+        raise ValueError("NPERSEG must be 'All' or an integer of at least eight.")
+    return min(segment_count, sample_count)
+
+
+def _validate_spectral_input(pressure: np.ndarray, sample_rate_hz: float) -> np.ndarray:
+    pressure = np.asarray(pressure, dtype=float)
+    if pressure.ndim != 1 or pressure.size < 8 or not np.all(np.isfinite(pressure)):
+        raise ValueError("Spectral pressure must be a finite, one-dimensional array of at least eight samples.")
+    if not np.isfinite(sample_rate_hz) or sample_rate_hz <= 0.0:
+        raise ValueError("Sample rate must be finite and positive.")
+    pressure = _filter_zero_signal_edges(pressure)
+    if pressure.size < 8:
+        raise ValueError("Too few active samples for spectral analysis after clipping zero padding.")
+    return pressure
+
+
+def _validate_frequency_interval(lower_hz: float, upper_hz: float, sample_rate_hz: float) -> None:
+    if not np.all(np.isfinite([lower_hz, upper_hz])) or not 0.0 <= lower_hz < upper_hz:
+        raise ValueError("Frequency interval must have finite, increasing nonnegative edges.")
+    if upper_hz > sample_rate_hz / 2.0 * (1.0 + 1.0e-12):
+        raise ValueError(
+            f"Requested upper frequency {upper_hz:g} Hz exceeds Nyquist {sample_rate_hz / 2.0:g} Hz."
+        )
 
 
 def oaspl_unweighted_db(pressure: np.ndarray, sample_rate_hz: float) -> float:
@@ -607,10 +697,10 @@ def _welch_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> 
 def _welch_spectrum(
     pressure: np.ndarray, sample_rate_hz: float, *, scaling: str,
 ) -> tuple[np.ndarray, np.ndarray]:
-    pressure = _filter_zero_signal_edges(pressure)
+    pressure = _validate_spectral_input(pressure, sample_rate_hz)
     sample_count = len(pressure)
-    if sample_count < 8:
-        raise ValueError("Too few samples for Welch calculation.")
+    if scaling not in {"density", "spectrum"}:
+        raise ValueError("Welch scaling must be 'density' or 'spectrum'.")
 
     nperseg = _nperseg(sample_count)
     frequencies, mean_square_by_bin = welch(
@@ -625,6 +715,7 @@ def _welch_spectrum(
 
 
 def _band_limited_mean_square_spectrum(pressure: np.ndarray, sample_rate_hz: float) -> tuple[np.ndarray, np.ndarray]:
+    _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
     frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
     frequency_mask = (
         (frequencies >= OASPL_MIN_FREQUENCY_HZ)
@@ -649,6 +740,7 @@ def spl_spectrum_db(
 ) -> tuple[np.ndarray, np.ndarray]:
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
+    _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
     # Keep amplitude-normalized narrowband peaks separate from additive power.
     frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
     mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
@@ -657,14 +749,63 @@ def spl_spectrum_db(
     return frequencies, _db_from_power(mean_square_by_bin * linear_weight)
 
 
+def psd_spectrum_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    apply_a_weighting: bool | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return density levels in dB re (20 microPa)^2/Hz for bandwidth-independent comparisons."""
+    if apply_a_weighting is None:
+        apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
+    _validate_frequency_interval(OASPL_MIN_FREQUENCY_HZ, OASPL_MAX_FREQUENCY_HZ, sample_rate_hz)
+    frequencies, density = _welch_spectrum(pressure, sample_rate_hz, scaling="density")
+    mask = (frequencies >= OASPL_MIN_FREQUENCY_HZ) & (frequencies <= OASPL_MAX_FREQUENCY_HZ)
+    frequencies, density = frequencies[mask], density[mask]
+    return frequencies, _db_from_power(density * 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0))
+
+
+def fitted_tone_spl_db(
+    pressure: np.ndarray, sample_rate_hz: float, target_frequencies_hz: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Joint stationary sinusoidal regression, including DC, at known physical frequencies.
+
+    The fitted RMS levels are coherent tone estimates, not broadband or band powers.
+    A short/nonstationary record still limits the physical interpretation of this fit.
+    """
+    pressure = _validate_spectral_input(pressure, sample_rate_hz)
+    targets = np.atleast_1d(np.asarray(target_frequencies_hz, dtype=float))
+    if (targets.ndim != 1 or targets.size == 0 or not np.all(np.isfinite(targets))
+            or np.any(targets <= 0.0) or np.any(targets >= sample_rate_hz / 2.0)
+            or np.unique(targets).size != targets.size):
+        raise ValueError("Tone frequencies must be unique, finite, positive and below Nyquist.")
+    if pressure.size <= 2 * targets.size + 1:
+        raise ValueError("Too few samples to fit the requested tones and a DC component.")
+    time = np.arange(pressure.size, dtype=float) / sample_rate_hz
+    phase = 2.0 * np.pi * time[:, None] * targets[None, :]
+    design = np.column_stack((np.cos(phase), np.sin(phase), np.ones(pressure.size)))
+    coefficients, _, rank, singular_values = np.linalg.lstsq(design, pressure, rcond=None)
+    if rank < design.shape[1] or singular_values[0] / singular_values[-1] > 1.0e8:
+        raise ValueError("Requested tones are not distinguishable over this record duration.")
+    mean_square = (coefficients[:targets.size] ** 2 + coefficients[targets.size:2 * targets.size] ** 2) / 2.0
+    return targets, _db_from_power(mean_square)
+
+
 def tone_spl_db(pressure: np.ndarray, sample_rate_hz: float, target_frequency_hz: float) -> tuple[float, float]:
-    frequencies, mean_square_by_bin = _welch_spectrum(pressure, sample_rate_hz, scaling="spectrum")
-    valid_frequency_mask = frequencies > 0.0
-    frequencies = frequencies[valid_frequency_mask]
-    mean_square_by_bin = mean_square_by_bin[valid_frequency_mask]
-    nearest_index = int(np.argmin(np.abs(frequencies - target_frequency_hz)))
-    spl_db = _db_from_power(mean_square_by_bin[nearest_index])
-    return float(frequencies[nearest_index]), float(spl_db)
+    frequencies, levels = fitted_tone_spl_db(pressure, sample_rate_hz, np.asarray([target_frequency_hz]))
+    return float(frequencies[0]), float(levels[0])
+
+
+def harmonic_tone_spl_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    fundamental_frequency_hz: float,
+    harmonic_indices: tuple[int, ...] = HARMONIC_INDICES,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit isolated harmonic amplitudes jointly, avoiding overlapping band attribution."""
+    indices = np.asarray(harmonic_indices, dtype=float)
+    if indices.ndim != 1 or np.any(indices < 1) or np.any(indices != np.floor(indices)):
+        raise ValueError("Harmonic indices must be positive integers.")
+    return fitted_tone_spl_db(pressure, sample_rate_hz, fundamental_frequency_hz * indices)
 
 
 def harmonic_third_octave_spl_db(
@@ -672,30 +813,122 @@ def harmonic_third_octave_spl_db(
     sample_rate_hz: float,
     target_frequency_hz: float,
 ) -> float:
-    frequencies, mean_square_by_bin = _welch_mean_square_spectrum(pressure, sample_rate_hz)
-    band_factor = 2.0 ** (1.0 / 6.0)
-    band_mask = (
-        (frequencies >= target_frequency_hz / band_factor)
-        & (frequencies < target_frequency_hz * band_factor)
-    )
-    return float(_db_from_power(np.sum(mean_square_by_bin[band_mask])))
+    """Power in an IEC-width neighbourhood; neighbouring harmonic bands can overlap."""
+    return float(third_octave_spectrum_at_centers_db(
+        pressure, sample_rate_hz, np.asarray([target_frequency_hz]), False,
+    )[0])
 
 
 def _third_octave_centers(fmin_hz: float, fmax_hz: float) -> np.ndarray:
-    centers = []
-    k_min = int(np.floor(3.0 * np.log2(max(fmin_hz, 1.0e-12) / 1000.0)))
-    k_max = int(np.ceil(3.0 * np.log2(fmax_hz / 1000.0)))
-    for k in range(k_min, k_max + 1):
-        center_frequency = 1000.0 * (2.0 ** (k / 3.0))
-        if center_frequency >= fmin_hz:
-            centers.append(center_frequency)
-    return np.asarray(centers, dtype=float)
+    """IEC 61260-1 base-10 exact centres within the requested display interval."""
+    if not np.all(np.isfinite([fmin_hz, fmax_hz])) or not 0.0 < fmin_hz <= fmax_hz:
+        raise ValueError("Third-octave centre limits must be positive, finite and increasing.")
+    k_min = int(np.ceil(10.0 * np.log10(fmin_hz / 1000.0) - 1.0e-12))
+    k_max = int(np.floor(10.0 * np.log10(fmax_hz / 1000.0) + 1.0e-12))
+    return 1000.0 * 10.0 ** (np.arange(k_min, k_max + 1, dtype=float) / 10.0)
+
+
+def exact_third_octave_centers(nominal_centers_hz: np.ndarray) -> np.ndarray:
+    """Map preferred nominal centre labels (e.g. 63 Hz) to IEC exact centres."""
+    nominal = np.asarray(nominal_centers_hz, dtype=float)
+    if np.any(~np.isfinite(nominal)) or np.any(nominal <= 0.0):
+        raise ValueError("Nominal third-octave centres must be positive and finite.")
+    exact = 1000.0 * 10.0 ** (np.round(10.0 * np.log10(nominal / 1000.0)) / 10.0)
+    if np.any(np.abs(nominal / exact - 1.0) > 0.05):
+        raise ValueError("Centres do not match preferred nominal IEC third-octave labels.")
+    return exact
+
+
+nominal_to_exact_centers = exact_third_octave_centers
+
+
+def third_octave_band_edges(centers_hz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    centers = np.asarray(centers_hz, dtype=float)
+    if centers.ndim != 1 or centers.size == 0 or np.any(~np.isfinite(centers)) or np.any(centers <= 0.0):
+        raise ValueError("Third-octave centres must be a nonempty one-dimensional positive finite array.")
+    factor = 10.0 ** 0.05
+    return centers / factor, centers * factor
 
 
 def _third_octave_bands(fmin_hz: float, fmax_hz: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     centers = _third_octave_centers(fmin_hz, fmax_hz)
-    factor = 2.0 ** (1.0 / 6.0)
-    return centers, centers / factor, centers * factor
+    lower, upper = third_octave_band_edges(centers)
+    return centers, lower, upper
+
+
+def third_octave_spectrum_at_centers_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    centers_hz: np.ndarray,
+    apply_a_weighting: bool = False,
+    *,
+    centers_are_nominal: bool = False,
+    require_complete: bool = True,
+) -> np.ndarray:
+    """Integrate full IEC-width bands from the unfiltered additive PSD spectrum.
+
+    Empty bands are unavailable (NaN), rather than fabricated low levels. Frequency
+    support and spectral resolution are different: even fully sampled bands may
+    contain no FFT bins when a record is too short.
+    """
+    import warnings
+
+    centers = exact_third_octave_centers(centers_hz) if centers_are_nominal else np.asarray(centers_hz, dtype=float)
+    lower, upper = third_octave_band_edges(centers)
+    frequencies, powers = _welch_mean_square_spectrum(pressure, sample_rate_hz)
+    unsupported = upper > sample_rate_hz / 2.0 * (1.0 + 1.0e-12)
+    if require_complete and np.any(unsupported):
+        raise ValueError(
+            f"Full third-octave bands at {centers[unsupported].tolist()} Hz exceed Nyquist "
+            f"{sample_rate_hz / 2.0:g} Hz."
+        )
+    weighted = powers * 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
+    band_powers = np.full(centers.shape, np.nan, dtype=float)
+    unresolved = []
+    for index, (lower_edge, upper_edge) in enumerate(zip(lower, upper)):
+        if unsupported[index]:
+            continue
+        mask = (frequencies >= lower_edge) & (frequencies < upper_edge)
+        if not np.any(mask):
+            unresolved.append(float(centers[index]))
+            continue
+        band_powers[index] = float(np.sum(weighted[mask]))
+    if unresolved or np.any(unsupported):
+        warnings.warn(
+            f"Unavailable third-octave bands: no FFT bins at {unresolved} Hz; "
+            f"incomplete Nyquist support at {centers[unsupported].tolist()} Hz. "
+            f"Frequency spacing is {frequencies[1] - frequencies[0]:g} Hz; longer records improve band resolution.",
+            RuntimeWarning, stacklevel=2,
+        )
+    return _db_from_power(band_powers)
+
+
+third_octave_levels_for_centers = third_octave_spectrum_at_centers_db
+
+
+def measurement_matched_oaspl_db(
+    pressure: np.ndarray,
+    sample_rate_hz: float,
+    nominal_centers_hz: np.ndarray,
+    apply_a_weighting: bool = True,
+) -> float:
+    """Sum the same complete non-overlapping IEC bands as a measurement analyser.
+
+    This is deliberately separate from the literal 40-10000 Hz OASPL quantity.
+    An unresolved band makes this comparison unavailable instead of silently
+    changing its bandwidth.
+    """
+    exact = exact_third_octave_centers(nominal_centers_hz)
+    if exact.ndim != 1 or np.unique(exact).size != exact.size:
+        raise ValueError("Measurement band centres must be a one-dimensional list of distinct IEC bands.")
+    levels = third_octave_spectrum_at_centers_db(pressure, sample_rate_hz, exact, apply_a_weighting)
+    if np.any(np.isnan(levels)):
+        raise ValueError("Measurement-matched OASPL is unavailable because one or more bands contain no FFT bins.")
+    power = np.sum(10.0 ** (levels / 10.0)) * ACOUSTIC_PRESSURE_REFERENCE_PA**2
+    return float(_db_from_power(power))
+
+
+matched_oaspl_db = measurement_matched_oaspl_db
 
 
 def third_octave_spectrum_db(
@@ -705,19 +938,13 @@ def third_octave_spectrum_db(
 ) -> tuple[np.ndarray, np.ndarray]:
     if apply_a_weighting is None:
         apply_a_weighting = APPLY_A_WEIGHTING_TO_SPECTRA
-    frequencies, mean_square_by_bin = _band_limited_mean_square_spectrum(pressure, sample_rate_hz)
-    linear_weight = 10.0 ** (_weighting_db(frequencies, apply_a_weighting) / 10.0)
-    center_frequencies, lower_band_edges, upper_band_edges = _third_octave_bands(
+    center_frequencies = _third_octave_centers(
         OASPL_MIN_FREQUENCY_HZ,
         OASPL_MAX_FREQUENCY_HZ,
     )
-    mean_square_by_band = []
-
-    for lower_edge, upper_edge in zip(lower_band_edges, upper_band_edges):
-        band_mask = (frequencies >= lower_edge) & (frequencies < upper_edge)
-        mean_square_by_band.append(float(np.sum(mean_square_by_bin[band_mask] * linear_weight[band_mask])))
-
-    return center_frequencies, _db_from_power(np.asarray(mean_square_by_band, dtype=float))
+    return center_frequencies, third_octave_spectrum_at_centers_db(
+        pressure, sample_rate_hz, center_frequencies, apply_a_weighting,
+    )
 
 
 PLOTS = (
@@ -821,7 +1048,7 @@ def _case_id(source_file: Path) -> str:
 def _step_label(source_file: Path) -> str:
     for path_part in reversed(source_file.resolve().parts):
         path_part_lower = path_part.lower()
-        if path_part_lower in CASE_TIMING_BY_PREFIX:
+        if path_part_lower in CASE_TIMING_BY_PREFIX or path_part_lower in PUSHER_STEPS_PER_REVOLUTION:
             return path_part_lower
 
     case_label = _case_label(source_file)
@@ -900,6 +1127,11 @@ def _timing_for_file(csv_file: Path, rpm: float | None, time_steps_per_revolutio
         default_rpm = POC2_RPM
     elif "q40lt" in {part.lower() for part in csv_file.resolve().parts}:
         default_rpm = Q40LT_RPM
+    elif "pusher" in {part.lower() for part in csv_file.resolve().parts}:
+        default_rpm = PUSHER_RPM
+        if step_label not in PUSHER_STEPS_PER_REVOLUTION and time_steps_per_revolution is None:
+            raise ValueError(f"Unknown Pusher step {step_label!r}; provide --steps-per-rev.")
+        default_steps_per_revolution = PUSHER_STEPS_PER_REVOLUTION.get(step_label, default_steps_per_revolution)
     return (
         default_rpm if rpm is None else rpm,
         default_steps_per_revolution if time_steps_per_revolution is None else time_steps_per_revolution,
@@ -922,7 +1154,12 @@ def _reference_values_for_file(
         return reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m
 
     path_parts = {part.lower() for part in csv_file.resolve().parts}
-    if "q40lt" in path_parts:
+    if "pusher" in path_parts:
+        default_density = PUSHER_REFERENCE_DENSITY_KG_M3
+        default_velocity = 2.0 * np.pi * PUSHER_PROPELLER_RADIUS_M * PUSHER_RPM / 60.0
+        default_temperature = PUSHER_REFERENCE_TEMPERATURE_K
+        default_l_grid_unit_m = LOCAL_RESULTS_L_GRID_UNIT_M
+    elif "q40lt" in path_parts:
         default_density = Q40LT_REFERENCE_DENSITY_KG_M3
         default_velocity = Q40LT_REFERENCE_VELOCITY_M_S
         default_temperature = Q40LT_REFERENCE_TEMPERATURE_K
@@ -1960,19 +2197,9 @@ def make_plots(
         Path(csv_files[0]) if csv_files
         else _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
     )
-    rpm, time_steps_per_revolution = _timing_for_file(
-        resolved_csv_file,
-        rpm,
-        time_steps_per_revolution,
-    )
-    reference_density_kg_m3, reference_velocity_m_s, reference_temperature_k, l_grid_unit_m = _reference_values_for_file(
-        resolved_csv_file,
-        reference_density_kg_m3,
-        reference_velocity_m_s,
-        reference_temperature_k,
-        l_grid_unit_m,
-    )
     sources = csv_files or [resolved_csv_file]
+    if len({Path(source).resolve() for source in sources}) != len(sources):
+        raise ValueError("The same acoustic source was supplied more than once.")
     datasets = []
     for source in sources:
         source_rpm, source_steps = _timing_for_file(source, rpm, time_steps_per_revolution)
@@ -1984,10 +2211,9 @@ def make_plots(
             source, observers, rpm=source_rpm, time_steps_per_revolution=source_steps,
             reference_density_kg_m3=references[0], reference_velocity_m_s=references[1],
             reference_temperature_k=references[2], l_grid_unit_m=references[3],
-            revolution_range=revolution_range if not csv_files and not n_timesteps_skip else None,
         ))
     dataset = combine_acoustic_datasets(datasets) if csv_files else datasets[0]
-    if csv_files or n_timesteps_skip:
+    if csv_files or n_timesteps_skip or revolution_range is not None:
         print("Acoustic sources: " + ", ".join(str(source) for source in sources))
         dataset = prepare_acoustic_dataset(dataset, n_timesteps_skip, skip_unit, revolution_range)
     print(
