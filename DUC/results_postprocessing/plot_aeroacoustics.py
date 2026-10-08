@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
-from dataclasses import dataclass
+import subprocess
+import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -35,6 +38,7 @@ OBSERVER_ANGLES_DEG = {
     5: 180,
 }
 FLOW360_OBSERVER_NUMBERING_OFFSET = -1
+PUSHER_OBSERVER_ANGLES_DEG = (20, 45, 90, 135, 160)
 DEFAULT_RPM = 1063.677
 POC2_RPM = 1000.0
 Q40LT_RPM = 1002.0
@@ -131,6 +135,7 @@ class AcousticDataset:
     reference_temperature_k: float
     l_grid_unit_m: float
     revolution_range: RevolutionRange | None = None
+    source_files: tuple[Path, ...] = ()
 
     @property
     def sample_spacing_s(self) -> float:
@@ -185,6 +190,15 @@ class Poc2xMeasurementData:
 
 def _csv_observer_index(user_observer_index: int) -> int:
     return user_observer_index + FLOW360_OBSERVER_NUMBERING_OFFSET
+
+
+def _observer_angle_deg(source_file: Path, observer: int) -> int | None:
+    if "pusher" in {part.lower() for part in Path(source_file).parts}:
+        csv_index = _csv_observer_index(observer)
+        if 0 <= csv_index < len(PUSHER_OBSERVER_ANGLES_DEG):
+            return PUSHER_OBSERVER_ANGLES_DEG[csv_index]
+        return None
+    return OBSERVER_ANGLES_DEG.get(observer)
 
 
 def _default_acoustic_files() -> list[Path]:
@@ -350,6 +364,105 @@ def load_acoustic_dataset(
     )
 
 
+def combine_acoustic_datasets(datasets: list[AcousticDataset]) -> AcousticDataset:
+    """Sum continuation/contribution files on their original shared time grid."""
+    if not datasets:
+        raise ValueError("At least one acoustic dataset is required.")
+    first = datasets[0]
+    if len(first.time) < 2:
+        raise ValueError("At least two timestamps are required to combine acoustic data.")
+    spacing = float(np.mean(np.diff(first.time)))
+    if spacing <= 0 or not np.isfinite(spacing):
+        raise ValueError("Acoustic timestamps must increase.")
+    origin = min(float(dataset.time[0]) for dataset in datasets)
+    observers = set(first.pressure_by_observer)
+    attributes = (
+        "rpm", "time_steps_per_revolution", "reference_density_kg_m3",
+        "reference_velocity_m_s", "reference_temperature_k", "l_grid_unit_m",
+    )
+    components = ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
+    grids = []
+    for dataset in datasets:
+        if any(not np.isclose(getattr(dataset, name), getattr(first, name), rtol=1e-9)
+               for name in attributes):
+            raise ValueError("Combined files require matching RPM and reference quantities.")
+        if any(set(getattr(dataset, component)) != observers for component in components):
+            raise ValueError("Combined files require matching observer columns.")
+        if len(dataset.time) < 2 or not np.all(np.diff(dataset.time) > 0):
+            raise ValueError(f"Non-increasing acoustic timestamps in {dataset.source_file}")
+        if not np.isclose(np.mean(np.diff(dataset.time)), spacing, rtol=1e-5, atol=0):
+            raise ValueError("Combined files have incompatible acoustic sampling intervals.")
+        grid = np.rint((dataset.time - origin) / spacing).astype(int)
+        if (
+            np.any(np.diff(grid) != 1)
+            or np.max(np.abs(dataset.time - (origin + grid * spacing))) > spacing * 0.01
+        ):
+            raise ValueError(f"Acoustic timestamps do not align to the common grid: {dataset.source_file}")
+        grids.append(grid)
+    count = max(int(grid[-1]) for grid in grids) + 1
+    summed = {component: {observer: np.zeros(count) for observer in observers} for component in components}
+    coverage = {observer: np.zeros(count, dtype=bool) for observer in observers}
+    for dataset, grid in zip(datasets, grids):
+        for observer in observers:
+            active = np.flatnonzero(np.any([
+                getattr(dataset, component)[observer] != 0 for component in components
+            ], axis=0))
+            if active.size:
+                coverage[observer][grid[active[0]:active[-1] + 1]] = True
+            for component in components:
+                summed[component][observer][grid] += getattr(dataset, component)[observer]
+    for observer, covered in coverage.items():
+        active = np.flatnonzero(covered)
+        if active.size and not np.all(covered[active[0]:active[-1] + 1]):
+            raise ValueError(f"Observer {observer} has a gap between acoustic signal windows.")
+    return replace(
+        first, time=origin + np.arange(count) * spacing,
+        **summed, source_files=tuple(dataset.source_file for dataset in datasets),
+    )
+
+
+def prepare_acoustic_dataset(
+    dataset: AcousticDataset,
+    n_timesteps_skip: int = 0,
+    skip_unit: str = "cfd",
+    revolution_range: RevolutionRange | None = None,
+) -> AcousticDataset:
+    """Cut each observer's initial signal interval, keeping components aligned."""
+    if n_timesteps_skip < 0 or skip_unit not in ("cfd", "acoustic"):
+        raise ValueError("Skip count must be nonnegative and units must be cfd or acoustic.")
+    skip_samples = n_timesteps_skip
+    if skip_unit == "cfd":
+        cfd_spacing = 60.0 / (dataset.rpm * dataset.time_steps_per_revolution)
+        skip_samples = int(round(n_timesteps_skip * cfd_spacing / dataset.sample_spacing_s))
+    components = ("pressure_by_observer", "thickness_by_observer", "loading_by_observer")
+    prepared = {component: {} for component in components}
+    samples_per_revolution = int(round(dataset.sample_rate_hz * 60.0 / dataset.rpm))
+    print(f"Skipping {n_timesteps_skip} {skip_unit} steps = {skip_samples} acoustic samples per observer.")
+    for observer in dataset.pressure_by_observer:
+        active = np.flatnonzero(np.any([
+            getattr(dataset, component)[observer] != 0 for component in components
+        ], axis=0))
+        if not active.size:
+            raise ValueError(f"Observer {observer} has no nonzero acoustic signal.")
+        start, stop = int(active[0]) + skip_samples, int(active[-1]) + 1
+        if revolution_range is not None:
+            end = start + revolution_range.end_index * samples_per_revolution
+            start += revolution_range.start_index * samples_per_revolution
+            if end > stop:
+                raise ValueError(f"Observer {observer} has too few retained revolutions.")
+            stop = end
+        if stop - start < 8:
+            raise ValueError(f"Observer {observer} has fewer than eight samples after the cut.")
+        for component in components:
+            values = getattr(dataset, component)[observer].copy()
+            values[:start] = 0
+            values[stop:] = 0
+            prepared[component][observer] = values
+        print(f"  Observer {observer}: {stop - start} retained samples, "
+              f"{(stop - start) * dataset.sample_spacing_s:.6f} s")
+    return replace(dataset, **prepared, revolution_range=revolution_range)
+
+
 def load_surface_resolved_datasets(
     results_by_case: list[tuple[AcousticDataset, dict[str, dict[int, float]]]],
     groups: tuple[str, ...] = SURFACE_TIME_HISTORY_GROUPS,
@@ -357,6 +470,9 @@ def load_surface_resolved_datasets(
 ) -> list[SurfaceResolvedDataset]:
     surface_datasets = []
     for total_dataset, _ in results_by_case:
+        if len(total_dataset.source_files) > 1:
+            print("Skipping surface-resolved plots: combined total files have no combined surface dataset.")
+            continue
         for group_name in groups:
             surface_file = _surface_file_for_case(total_dataset.source_file, group_name)
             if surface_file is None:
@@ -393,6 +509,18 @@ def _filter_zero_signal_edges(pressure: np.ndarray) -> np.ndarray:
     if nonzero_indices.size == 0:
         return pressure
     return pressure[nonzero_indices[0]:nonzero_indices[-1] + 1]
+
+
+def _pressure_time_history(dataset: AcousticDataset, observer: int) -> tuple[np.ndarray, np.ndarray]:
+    """Clip edge padding together with its timestamps; retain interior zeros."""
+    pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+    nonzero_indices = np.flatnonzero(pressure_pa != 0.0)
+    valid = (
+        slice(nonzero_indices[0], nonzero_indices[-1] + 1)
+        if nonzero_indices.size else slice(None)
+    )
+    time_seconds = dataset.time_seconds[valid]
+    return time_seconds - time_seconds[0], pressure_pa[valid]
 
 
 def _db_from_power(mean_square_pressure: np.ndarray | float) -> np.ndarray | float:
@@ -817,6 +945,12 @@ def render_bar_plot(
             )
             ax.legend(loc="upper right")
     ax.set_xlabel("Observer")
+    if "pusher" in {part.lower() for part in Path(source_file).parts}:
+        ax.set_xticks(range(len(observers)), labels=[
+            f"{observer}\n{angle}°" if (angle := _observer_angle_deg(source_file, observer)) is not None
+            else str(observer)
+            for observer in observers
+        ])
     ax.set_ylabel(plot.ylabel)
     ax.set_title(f"{plot.title} - {_case_label(source_file)}")
     ax.grid(axis="y", alpha=0.3)
@@ -885,7 +1019,8 @@ def render_comparison_plot(
 
         angle_label_y = y_lower + 0.28 * (y_upper - y_lower)
         for observer in observers:
-            angle = OBSERVER_ANGLES_DEG.get(observer)
+            angles = {_observer_angle_deg(dataset.source_file, observer) for dataset, _ in results_by_case}
+            angle = next(iter(angles)) if len(angles) == 1 else None
             if angle is None:
                 continue
             ax.vlines(observer, y_lower, angle_label_y - 0.02 * (y_upper - y_lower), colors="black", linewidth=1.2)
@@ -1501,16 +1636,10 @@ def render_pressure_time_history_plots(
         all_pressure_values = []
 
         for index, (dataset, _) in enumerate(results_by_case):
-            time_seconds = dataset.time_seconds
-            time_span = time_seconds[-1] - time_seconds[0]
-            if time_span <= 0.0:
-                raise ValueError(f"Non-positive acoustic time span in {dataset.source_file}")
-
-            time_fraction = (time_seconds - time_seconds[0]) / time_span
-            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            time_seconds, pressure_pa = _pressure_time_history(dataset, observer)
             all_pressure_values.extend(pressure_pa)
             ax.plot(
-                time_fraction,
+                time_seconds,
                 pressure_pa,
                 label=_legend_label(dataset.source_file),
                 color=_line_color(dataset.source_file, index),
@@ -1519,9 +1648,9 @@ def render_pressure_time_history_plots(
             )
 
         ax.set_title(f"Pressure-time History for observer ID: {observer}")
-        ax.set_xlabel("Time Fraction")
+        ax.set_xlabel("Elapsed time [s]")
         ax.set_ylabel("Pressure [Pa]")
-        ax.set_xlim(0.0, 1.0)
+        ax.margins(x=0)
         if all_pressure_values:
             pressure_min = min(all_pressure_values)
             pressure_max = max(all_pressure_values)
@@ -1573,20 +1702,14 @@ def render_surface_pressure_time_history_plots(
                 len(case_indices),
             )
             dataset = surface_dataset.dataset
-            time_seconds = dataset.time_seconds
-            time_span = time_seconds[-1] - time_seconds[0]
-            if time_span <= 0.0:
-                raise ValueError(f"Non-positive acoustic time span in {dataset.source_file}")
-
-            time_fraction = (time_seconds - time_seconds[0]) / time_span
-            pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            time_seconds, pressure_pa = _pressure_time_history(dataset, observer)
             all_pressure_values.extend(pressure_pa)
             style = line_styles.get(
                 (surface_dataset.group_name, case_index),
                 {"color": _line_color(surface_dataset.case_source_file, case_index), "linewidth": 1.2},
             )
             ax.plot(
-                time_fraction,
+                time_seconds,
                 pressure_pa,
                 label=_surface_legend_label(surface_dataset, case_index),
                 linestyle="-",
@@ -1594,9 +1717,9 @@ def render_surface_pressure_time_history_plots(
             )
 
         ax.set_title(f"Pressure-time History for observer ID: {observer}")
-        ax.set_xlabel("Time Fraction")
+        ax.set_xlabel("Elapsed time [s]")
         ax.set_ylabel("Pressure [Pa]")
-        ax.set_xlim(0.1, 1.0)
+        ax.margins(x=0)
         if all_pressure_values:
             pressure_min = min(all_pressure_values)
             pressure_max = max(all_pressure_values)
@@ -1647,15 +1770,23 @@ def render_average_pressure_time_history_plots(
 
         for index, (dataset, _) in enumerate(results_by_case):
             pressure_pa = dataset.pressure_by_observer[observer] * dataset.pressure_scale_pa
+            pressure_pa = _filter_zero_signal_edges(pressure_pa)
+            samples_per_revolution = int(round(dataset.sample_rate_hz * 60.0 / dataset.rpm))
+            complete_revolutions = len(pressure_pa) // samples_per_revolution
+            average_count = min(
+                _average_revolution_count(dataset, revolution_count), complete_revolutions,
+            )
+            if average_count < 1:
+                raise ValueError(f"Observer {observer} has less than one complete acoustic revolution.")
             averaged_pressure_pa = _average_revolutions(
-                pressure_pa,
-                revolution_count=_average_revolution_count(dataset, revolution_count),
+                pressure_pa[:average_count * samples_per_revolution],
+                revolution_count=average_count,
             )
             all_pressure_values.extend(averaged_pressure_pa)
-            time_fraction = np.linspace(0.0, 1.0, len(averaged_pressure_pa))
+            time_seconds = np.arange(len(averaged_pressure_pa)) * dataset.sample_spacing_s
 
             ax.plot(
-                time_fraction,
+                time_seconds,
                 averaged_pressure_pa,
                 label=_legend_label(dataset.source_file),
                 color=_line_color(dataset.source_file, index),
@@ -1664,9 +1795,9 @@ def render_average_pressure_time_history_plots(
             )
 
         ax.set_title(f"Average Pressure-time History for observer ID: {observer}")
-        ax.set_xlabel("Time Fraction")
+        ax.set_xlabel("Elapsed time [s]")
         ax.set_ylabel("Pressure [Pa]")
-        ax.set_xlim(0.0, 1.0)
+        ax.margins(x=0)
         if all_pressure_values:
             pressure_min = min(all_pressure_values)
             pressure_max = max(all_pressure_values)
@@ -1783,8 +1914,14 @@ def make_plots(
     revolution_range: RevolutionRange | None = None,
     measurement_data: Poc2xMeasurementData | None = None,
     measurement_label: str = MEASUREMENT_LABEL,
+    csv_files: list[Path] | None = None,
+    n_timesteps_skip: int = 0,
+    skip_unit: str = "cfd",
 ) -> list[Path]:
-    resolved_csv_file = _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
+    resolved_csv_file = (
+        Path(csv_files[0]) if csv_files
+        else _default_acoustic_files()[-1] if csv_file is None else Path(csv_file)
+    )
     rpm, time_steps_per_revolution = _timing_for_file(
         resolved_csv_file,
         rpm,
@@ -1797,17 +1934,24 @@ def make_plots(
         reference_temperature_k,
         l_grid_unit_m,
     )
-    dataset = load_acoustic_dataset(
-        resolved_csv_file,
-        observers,
-        rpm=rpm,
-        time_steps_per_revolution=time_steps_per_revolution,
-        reference_density_kg_m3=reference_density_kg_m3,
-        reference_velocity_m_s=reference_velocity_m_s,
-        reference_temperature_k=reference_temperature_k,
-        l_grid_unit_m=l_grid_unit_m,
-        revolution_range=revolution_range,
-    )
+    sources = csv_files or [resolved_csv_file]
+    datasets = []
+    for source in sources:
+        source_rpm, source_steps = _timing_for_file(source, rpm, time_steps_per_revolution)
+        references = _reference_values_for_file(
+            source, reference_density_kg_m3, reference_velocity_m_s,
+            reference_temperature_k, l_grid_unit_m,
+        )
+        datasets.append(load_acoustic_dataset(
+            source, observers, rpm=source_rpm, time_steps_per_revolution=source_steps,
+            reference_density_kg_m3=references[0], reference_velocity_m_s=references[1],
+            reference_temperature_k=references[2], l_grid_unit_m=references[3],
+            revolution_range=revolution_range if not csv_files and not n_timesteps_skip else None,
+        ))
+    dataset = combine_acoustic_datasets(datasets) if csv_files else datasets[0]
+    if csv_files or n_timesteps_skip:
+        print("Acoustic sources: " + ", ".join(str(source) for source in sources))
+        dataset = prepare_acoustic_dataset(dataset, n_timesteps_skip, skip_unit, revolution_range)
     print(
         f"Loaded {dataset.source_file.name}: "
         f"{len(dataset.time)} samples, "
@@ -1842,6 +1986,35 @@ def make_plots(
         print(f"Wrote {output_file}")
     if all(plot.name in values_by_plot for plot in PLOTS):
         print_oaspl_values(dataset, values_by_plot, observers)
+    if csv_files or n_timesteps_skip:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        skipped_samples = (
+            n_timesteps_skip if skip_unit == "acoustic"
+            else int(round(n_timesteps_skip * 60.0 / (
+                dataset.rpm * dataset.time_steps_per_revolution * dataset.sample_spacing_s
+            )))
+        )
+        observer_windows = {}
+        for observer in observers:
+            elapsed, _ = _pressure_time_history(dataset, observer)
+            observer_windows[str(observer)] = {
+                "retained_samples": len(elapsed),
+                "elapsed_span_s": float(elapsed[-1]),
+                "skipped_acoustic_samples": skipped_samples,
+            }
+        manifest = {
+            "sources": [str(source.resolve()) for source in sources],
+            "n_timesteps_skip": n_timesteps_skip, "skip_unit": skip_unit,
+            "sample_spacing_s": dataset.sample_spacing_s,
+            "rpm": dataset.rpm, "solver_steps_per_revolution": dataset.time_steps_per_revolution,
+            "density_kg_m3": dataset.reference_density_kg_m3,
+            "temperature_k": dataset.reference_temperature_k,
+            "reference_velocity_m_s": dataset.reference_velocity_m_s,
+            "grid_unit_m": dataset.l_grid_unit_m,
+            "observers": observer_windows,
+            "oaspl": values_by_plot,
+        }
+        (output_dir / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if measurement_data is not None and "oaspl_a_weighted" in values_by_plot:
         print_oaspl_differences(
             dataset,
@@ -1856,6 +2029,14 @@ def make_plots(
                 measurement_data.oaspl_dba_by_observer,
                 output_dir,
             )
+    for spectrum_output_file in render_spectrum_plots([(dataset, values_by_plot)], observers, output_dir):
+        output_files.append(spectrum_output_file)
+        print(f"Wrote {spectrum_output_file}")
+    for harmonic_output_file in render_harmonic_content_plots(
+        [(dataset, values_by_plot)], observers, output_dir,
+    ):
+        output_files.append(harmonic_output_file)
+        print(f"Wrote {harmonic_output_file}")
     for third_octave_output_file in render_third_octave_plots(
         [(dataset, values_by_plot)],
         observers,
@@ -2097,6 +2278,9 @@ def parse_args() -> argparse.Namespace:
         help="Path to *_results_total_acoustics_v*.csv. Can be passed more than once.",
     )
     parser.add_argument("--output-dir", type=Path, default=PLOTS_DIR)
+    parser.add_argument("--combine-csv", action="store_true", help="Sum --csv files aligned by acoustic timestamps.")
+    parser.add_argument("--n-timesteps-skip", type=int, default=0, help="Initial signal steps to remove per observer.")
+    parser.add_argument("--skip-unit", choices=("cfd", "acoustic"), default="cfd")
     parser.add_argument("--observers", type=_parse_observers, default=DEFAULT_OBSERVERS)
     parser.add_argument(
         "--revolutions",
@@ -2177,6 +2361,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.n_timesteps_skip < 0:
+        raise ValueError("--n-timesteps-skip must be nonnegative.")
+    if args.combine_csv and not args.csv:
+        raise ValueError("--combine-csv requires explicit --csv files.")
+    if args.n_timesteps_skip and args.csv and len(args.csv) > 1 and not args.combine_csv:
+        raise ValueError("Multiple files with an initial cut require --combine-csv.")
+    if args.combine_csv and args.legend_labels is not None:
+        raise ValueError("Use --legend-label for the combined dataset, rather than --legend-labels.")
     global APPLY_A_WEIGHTING_TO_SPECTRA, FLOW360_OBSERVER_NUMBERING_OFFSET, LEGEND_LABEL_OVERRIDE, LEGEND_LABELS_BY_FILE
     APPLY_A_WEIGHTING_TO_SPECTRA = args.apply_a_weighting_to_spectra
     FLOW360_OBSERVER_NUMBERING_OFFSET = args.csv_observer_offset
@@ -2196,14 +2388,16 @@ def main() -> None:
         else None
     )
     if (
-        args.rpm is not None
+        args.combine_csv
+        or args.n_timesteps_skip
+        or args.rpm is not None
         or args.steps_per_rev is not None
         or args.rho is not None
         or args.temperature_k is not None
         or args.u_ref is not None
         or args.l_grid_unit is not None
     ):
-        if args.csv is not None and len(args.csv) > 1:
+        if args.csv is not None and len(args.csv) > 1 and not args.combine_csv:
             raise ValueError(
                 "Manual --rpm/--steps-per-rev/--rho/--temperature-k/--u-ref/--l-grid-unit overrides "
                 "are only supported for one CSV."
@@ -2221,6 +2415,9 @@ def main() -> None:
             revolution_range=args.revolutions,
             measurement_data=measurement_data,
             measurement_label=args.measurement_label,
+            csv_files=args.csv if args.combine_csv else None,
+            n_timesteps_skip=args.n_timesteps_skip,
+            skip_unit=args.skip_unit,
         )
     else:
         make_comparison_plot(
@@ -2231,6 +2428,10 @@ def main() -> None:
             measurement_data=measurement_data,
             measurement_label=args.measurement_label,
         )
+    if args.combine_csv or args.n_timesteps_skip:
+        command = subprocess.list2cmdline([sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
+        with (args.output_dir / "commands.txt").open("a", encoding="utf-8") as file:
+            file.write(command + "\n")
 
 
 if __name__ == "__main__":

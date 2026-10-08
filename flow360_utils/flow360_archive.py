@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import subprocess
@@ -231,7 +232,18 @@ def download_resumable_file(case, remote_file: str, local_file: Path, progress_f
     if total == 0 and not partial.exists():
         partial.touch()
     offset = partial.stat().st_size if partial.exists() else 0
-    _atomic_json_write(progress_file, {"downloaded": offset, "total": total})
+    initial_offset = offset
+    transfer_started = time.monotonic()
+
+    def report_progress() -> None:
+        elapsed = time.monotonic() - transfer_started
+        average_bytes_s = (offset - initial_offset) / elapsed if elapsed > 0 else 0.0
+        _atomic_json_write(
+            progress_file,
+            {"downloaded": offset, "total": total, "average_bytes_s": average_bytes_s},
+        )
+
+    report_progress()
 
     if offset < total:
         response = client.get_object(
@@ -257,7 +269,7 @@ def download_resumable_file(case, remote_file: str, local_file: Path, progress_f
                         raise IOError(f"Short local write for {remote_file}")
                     offset += len(chunk)
                     if time.monotonic() - last_report >= 0.5 or offset == total:
-                        _atomic_json_write(progress_file, {"downloaded": offset, "total": total})
+                        report_progress()
                         last_report = time.monotonic()
                 output.flush()
                 os.fsync(output.fileno())
@@ -442,12 +454,45 @@ def case_destination(target_dir: Path, project_ref: ProjectRef, case_name: str) 
     return target_dir.joinpath(*path_parts)
 
 
-def _read_progress(progress_file: Path) -> tuple[int, int]:
+def _read_progress(progress_file: Path) -> tuple[int, int, float]:
     try:
         progress = json.loads(progress_file.read_text(encoding="utf-8"))
-        return int(progress.get("downloaded", 0)), int(progress.get("total", 0))
+        return (
+            int(progress.get("downloaded", 0)),
+            int(progress.get("total", 0)),
+            float(progress.get("average_bytes_s", 0)),
+        )
     except (OSError, ValueError, TypeError):
-        return 0, 0
+        return 0, 0, 0.0
+
+
+def _format_download_progress(downloaded: int, total: int, average_bytes_s: float) -> str:
+    """Format sizes, average rate, and estimated remaining time for this file."""
+    divisor, unit = (
+        (1_000_000_000, "GB")
+        if max(total, downloaded) > 1_000_000_000
+        else (1_000_000, "MB")
+    )
+    if total:
+        size = (
+            f"{downloaded / total * 100:5.1f}% "
+            f"({downloaded / divisor:.2f}/{total / divisor:.2f} {unit})"
+        )
+    else:
+        size = f"{downloaded / divisor:.2f} {unit}"
+    if total > 0 and downloaded >= total:
+        remaining = "00:00:00"
+    elif total > 0 and average_bytes_s > 0:
+        seconds = math.ceil((total - downloaded) / average_bytes_s)
+        hours, seconds = divmod(seconds, 3600)
+        minutes, seconds = divmod(seconds, 60)
+        remaining = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    else:
+        remaining = "calculating"
+    return (
+        f"{size} | average: {average_bytes_s * 8 / 1_000_000:.2f} Mbit/s "
+        f"({average_bytes_s / 1_000_000:.2f} MByte/s) | remaining: {remaining}"
+    )
 
 
 def _remove_if_exists(path: Path) -> None:
@@ -508,21 +553,17 @@ def download_file_with_watchdog(
 
         while process.poll() is None:
             time.sleep(check_interval_seconds)
-            downloaded, total = _read_progress(progress_file)
+            downloaded, total, average_bytes_s = _read_progress(progress_file)
             if downloaded > last_downloaded:
                 last_downloaded = downloaded
                 last_progress_time = time.monotonic()
-                if total:
-                    percent = downloaded / total * 100
-                    print(f"      progress: {percent:5.1f}% ({downloaded}/{total} bytes)")
-                else:
-                    print(f"      progress: {downloaded} bytes")
+                print(f"      progress: {_format_download_progress(downloaded, total, average_bytes_s)}")
                 continue
 
             if time.monotonic() - last_progress_time >= stall_timeout_seconds:
                 last_error = (
                     f"stalled for {stall_timeout_seconds:g}s at "
-                    f"{max(last_downloaded, 0)} bytes"
+                    f"{_format_download_progress(max(last_downloaded, 0), total, average_bytes_s)}"
                 )
                 print(f"      {last_error}; restarting")
                 watchdog_kills += 1
@@ -537,7 +578,7 @@ def download_file_with_watchdog(
         else:
             return_code = process.returncode
             if return_code == 0:
-                downloaded, total = _read_progress(progress_file)
+                downloaded, total, average_bytes_s = _read_progress(progress_file)
                 if (
                     not progress_file.exists()
                     or not local_file.exists()
@@ -548,6 +589,7 @@ def download_file_with_watchdog(
                     print(f"      {last_error}")
                     _remove_progress_files(progress_file)
                     continue
+                print(f"      progress: {_format_download_progress(downloaded, total, average_bytes_s)}")
                 _remove_progress_files(progress_file)
                 return str(local_file), watchdog_kills
             _, stderr = process.communicate(timeout=10)
@@ -981,7 +1023,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--download-watchdog-interval",
         type=float,
         default=20.0,
-        help="Seconds between watchdog checks during file downloads. Default: 10.",
+        help="Seconds between watchdog checks during file downloads. Default: 20.",
     )
     parser.add_argument(
         "--download-retries",

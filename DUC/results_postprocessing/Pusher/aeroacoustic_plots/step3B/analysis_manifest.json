@@ -1,0 +1,125 @@
+{
+  "sources": [
+    "C:\\git\\flow360cases\\DUC\\results_postprocessing\\Pusher\\aeroacoustics\\step3\\case-ed80b35a-78a0-413a-a8a5-5c158fb87127_total_acoustics_v3.csv",
+    "C:\\git\\flow360cases\\DUC\\results_postprocessing\\Pusher\\aeroacoustics\\step3B\\total_acoustics_v3.csv"
+  ],
+  "n_timesteps_skip": 150,
+  "skip_unit": "cfd",
+  "sample_spacing_s": 3.126126871380137e-05,
+  "rpm": 2186.0,
+  "solver_steps_per_revolution": 1756.0,
+  "density_kg_m3": 1.1839124828745407,
+  "temperature_k": 298.15,
+  "reference_velocity_m_s": 242.65242777307085,
+  "grid_unit_m": 0.001,
+  "oaspl": {
+    "oaspl_unweighted": {
+      "1": 64.55946030541043,
+      "2": 67.13064964082034,
+      "3": 77.47893958479662,
+      "4": 73.65214794863056,
+      "5": 62.187467739582885
+    },
+    "oaspl_a_weighted": {
+      "1": 64.98630101830044,
+      "2": 64.1071142822092,
+      "3": 67.25180609729983,
+      "4": 64.51730691360638,
+      "5": 62.04612302877612
+    }
+  },
+  "comparison_with_step3": [
+    {
+      "observer": 1,
+      "original_oaspl_db": 64.62328479320341,
+      "original_oaspl_dba": 65.06222520990113,
+      "original_band_2_10_khz_db": 63.302075369601,
+      "processed_oaspl_db": 64.55946030541043,
+      "processed_oaspl_dba": 64.98630101830044,
+      "processed_band_2_10_khz_db": 63.20171462374709,
+      "change_oaspl_db": -0.063824487792985,
+      "change_oaspl_dba": -0.07592419160069142,
+      "change_band_2_10_khz_db": -0.10036074585391219
+    },
+    {
+      "observer": 2,
+      "original_oaspl_db": 67.13626826683635,
+      "original_oaspl_dba": 64.12895497034003,
+      "original_band_2_10_khz_db": 62.35193638047989,
+      "processed_oaspl_db": 67.13064964082034,
+      "processed_oaspl_dba": 64.1071142822092,
+      "processed_band_2_10_khz_db": 62.3777641308896,
+      "change_oaspl_db": -0.005618626016016037,
+      "change_oaspl_dba": -0.02184068813083684,
+      "change_band_2_10_khz_db": 0.02582775040971086
+    },
+    {
+      "observer": 3,
+      "original_oaspl_db": 77.48410974917068,
+      "original_oaspl_dba": 67.25310703803513,
+      "original_band_2_10_khz_db": 61.93419119123044,
+      "processed_oaspl_db": 77.47893958479662,
+      "processed_oaspl_dba": 67.25180609729983,
+      "processed_band_2_10_khz_db": 61.93865133638965,
+      "change_oaspl_db": -0.005170164374064257,
+      "change_oaspl_dba": -0.0013009407352910785,
+      "change_band_2_10_khz_db": 0.004460145159207229
+    },
+    {
+      "observer": 4,
+      "original_oaspl_db": 73.6515254480801,
+      "original_oaspl_dba": 64.5414644168226,
+      "original_band_2_10_khz_db": 61.61558100548545,
+      "processed_oaspl_db": 73.65214794863056,
+      "processed_oaspl_dba": 64.51730691360638,
+      "processed_band_2_10_khz_db": 61.62574318022302,
+      "change_oaspl_db": 0.0006225005504632009,
+      "change_oaspl_dba": -0.024157503216230225,
+      "change_band_2_10_khz_db": 0.010162174737565977
+    },
+    {
+      "observer": 5,
+      "original_oaspl_db": 62.01871790897894,
+      "original_oaspl_dba": 61.880781866929,
+      "original_band_2_10_khz_db": 60.28541576962846,
+      "processed_oaspl_db": 62.187467739582885,
+      "processed_oaspl_dba": 62.04612302877612,
+      "processed_band_2_10_khz_db": 60.418662074911715,
+      "change_oaspl_db": 0.168749830603943,
+      "change_oaspl_dba": 0.16534116184712389,
+      "change_band_2_10_khz_db": 0.13324630528325798
+    }
+  ],
+  "observers": {
+    "1": {
+      "retained_samples": 1757,
+      "elapsed_span_s": 0.0548947878614352,
+      "skipped_acoustic_samples": 75,
+      "join_spacing_samples": 1
+    },
+    "2": {
+      "retained_samples": 1757,
+      "elapsed_span_s": 0.0548947878614352,
+      "skipped_acoustic_samples": 75,
+      "join_spacing_samples": 1
+    },
+    "3": {
+      "retained_samples": 1763,
+      "elapsed_span_s": 0.05508235547371809,
+      "skipped_acoustic_samples": 75,
+      "join_spacing_samples": 1
+    },
+    "4": {
+      "retained_samples": 1760,
+      "elapsed_span_s": 0.05498857166757687,
+      "skipped_acoustic_samples": 75,
+      "join_spacing_samples": 1
+    },
+    "5": {
+      "retained_samples": 1756,
+      "elapsed_span_s": 0.05486352659272131,
+      "skipped_acoustic_samples": 75,
+      "join_spacing_samples": 1
+    }
+  }
+}

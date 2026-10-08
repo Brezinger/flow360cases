@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import math
+import sys
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,11 @@ from flow360.cloud.rest_api import RestApi
 from flow360.component.interfaces import CaseInterfaceV2
 from flow360.component.simulation.folder import ROOT_FOLDER
 from flow360.environment import current_environment
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+from flow360_utils.flow360_tools import cgns_surfaces_inside_rotation_region
 
 
 SURFACE_MESH_FILE = Path(__file__).resolve().with_name("Pusher.cgns")
@@ -64,6 +70,7 @@ class StepSettings:
     include_aeroacoustic_output: bool = False
     aeroacoustic_solver_start_time_s: float = 0.0
     aeroacoustic_force_clean_start: bool = False
+    make_render_output: bool = False
 
     @property
     def physical_steps(self) -> int:
@@ -71,7 +78,7 @@ class StepSettings:
 
 
 # Change this one value to select the active simulation stage.
-step_selector = 0
+step_selector = 3
 
 final_timesteps_per_rev = 3660
 
@@ -91,7 +98,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     1: StepSettings(
         step_number=1,
-        parent_case_id="",
+        parent_case_id="case-62098822-d756-4abe-b1f3-d3fa440bb775",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25 * 1/2 * 6/16),
         num_revolutions=5,
         max_pseudo_steps=15,
@@ -99,15 +106,16 @@ STEP_SETTINGS: dict[int, StepSettings] = {
     ),
     2: StepSettings(
         step_number=2,
-        parent_case_id="",
+        parent_case_id="case-b23e2038-baf4-4a72-a52a-429faf23f56f",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25 * 1/2),
         num_revolutions=2,
         max_pseudo_steps=12,
         numerical_dissipation_factor=0.5,
+        include_aeroacoustic_output=True,
     ),
     3: StepSettings(
         step_number=3,
-        parent_case_id="",
+        parent_case_id="case-259bfe57-12d2-401f-866e-5dea5dffcf78",
         time_steps_per_revolution=int(final_timesteps_per_rev * 12/25),
         num_revolutions=2,
         max_pseudo_steps=8,
@@ -115,6 +123,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
         adaptive_cfl_max=1.0e2,
         adaptive_cfl_convergence_limiting_factor=0.5,
         include_aeroacoustic_output=True,
+        make_render_output = True,
     ),
     4: StepSettings(
         step_number=4,
@@ -129,6 +138,7 @@ STEP_SETTINGS: dict[int, StepSettings] = {
         adaptive_cfl_convergence_limiting_factor=0.5,
         include_aeroacoustic_output=True,
         aeroacoustic_force_clean_start=True,
+        make_render_output = True,
     ),
 }
 
@@ -166,7 +176,12 @@ class CaseSetup:
 
     step: StepSettings = field(default_factory=lambda: select_step(step_selector))
 
+    include_aeroacoustic_observer_group_1: bool = False
     include_aeroacoustic_observer_group_2: bool = True
+    aeroacoustic_centerline_arc_radius_ft: float = 1000.0
+    aeroacoustic_centerline_arc_angles_deg: tuple[float, ...] = (20.0, 45.0, 90.0, 135.0, 160.0)
+    # Lower centerline semicircle. Angles start along rotation_axis (upstream).
+    aeroacoustic_centerline_arc_direction: tuple[float, float, float] = (0.0, 0.0, -1.0)
 
 
     # Volume-mesh settings for the Gmsh surface mesh.
@@ -329,6 +344,17 @@ def _wall_entities(geometry) -> dict[str, list]:
         for wall_name, prefixes in SURFACE_MESH_WALL_PREFIXES.items()
     }
     if any(wall_entities.values()):
+        assigned_names = {
+            entity.name for entities in wall_entities.values() for entity in entities
+        }
+        other_walls = [
+            geometry[name] for name in boundary_names
+            if name not in assigned_names
+            and "farfield" not in name.lower()
+            and "interface" not in name.lower()
+        ]
+        if other_walls:
+            wall_entities["other"] = other_walls
         return wall_entities
 
     wall_boundary_names = [
@@ -719,21 +745,51 @@ def _make_models_from_volume_mesh(volume_mesh, cfg: CaseSetup):
     return models, _all_walls(wall_entities)
 
 
-def _make_aeroacoustic_output(cfg: CaseSetup, source_file: Path = AEROACOUSTIC_SOURCE_FILE):
+def _make_centerline_arc_observers(cfg: CaseSetup):
+    """Observers about the hub, from the upstream axis toward the lower arc."""
+    axis, _, _ = _rotation_frame(cfg)
+    direction = cfg.aeroacoustic_centerline_arc_direction
+    projection = sum(a * b for a, b in zip(axis, direction))
+    radial = tuple(d - projection * a for d, a in zip(direction, axis))
+    magnitude = math.sqrt(sum(component**2 for component in radial))
+    if magnitude <= 1e-12:
+        raise ValueError("The observer arc direction must not be parallel to rotation_axis.")
+    if cfg.aeroacoustic_centerline_arc_radius_ft <= 0:
+        raise ValueError("The observer arc radius must be positive.")
+    radial = tuple(component / magnitude for component in radial)
+    radius_m = float((cfg.aeroacoustic_centerline_arc_radius_ft * u.ft).to("m").value)
+    observers = []
+    for angle_deg in cfg.aeroacoustic_centerline_arc_angles_deg:
+        if not 0 <= angle_deg <= 180:
+            raise ValueError("Centerline emission angles must lie between 0 and 180 degrees.")
+        angle = math.radians(angle_deg)
+        position = tuple(
+            center + radius_m * (math.cos(angle) * axial + math.sin(angle) * transverse)
+            for center, axial, transverse in zip(cfg.rotation_center, axis, radial)
+        )
+        observers.append(fl.Observer(position=position * u.m, group_name="centerline_arc"))
+    return observers
+
+
+def _make_aeroacoustic_output(
+    cfg: CaseSetup,
+    source_file: Path = AEROACOUSTIC_SOURCE_FILE,
+):
     with source_file.open(encoding="utf-8") as file:
         source = json.load(file)
 
+    observers = _make_centerline_arc_observers(cfg)
+
     if "aeroacousticOutput" in source:
         aeroacoustic_output = source["aeroacousticOutput"]
-        observers = [
+        # Legacy files have no group IDs; treat their observer list as group 1.
+        observers.extend([
             fl.Observer(
                 position=position * u.m,
                 group_name=f"observer_{index:03d}",
             )
             for index, position in enumerate(aeroacoustic_output["observers"], start=1)
-        ]
-        write_per_surface_output = aeroacoustic_output["writePerSurfaceOutput"]
-        patch_type = aeroacoustic_output["patchType"]
+        ] if cfg.include_aeroacoustic_observer_group_1 else [])
     else:
         aeroacoustic_outputs = [
             output for output in source.get("outputs", [])
@@ -745,8 +801,9 @@ def _make_aeroacoustic_output(cfg: CaseSetup, source_file: Path = AEROACOUSTIC_S
                 f"found {len(aeroacoustic_outputs)}"
             )
         aeroacoustic_output = aeroacoustic_outputs[0]
-        observers = []
-        included_groups = {"1"}
+        included_groups = set()
+        if cfg.include_aeroacoustic_observer_group_1:
+            included_groups.add("1")
         if cfg.include_aeroacoustic_observer_group_2:
             included_groups.add("2")
         for observer in aeroacoustic_output["observers"]:
@@ -762,20 +819,66 @@ def _make_aeroacoustic_output(cfg: CaseSetup, source_file: Path = AEROACOUSTIC_S
                 ) from exc
             observers.append(
                 fl.Observer(
-                    position=position["value"] * position_unit,
+                    position=(position["value"] * position_unit).to("m"),
                     group_name=observer["group_name"],
                 )
             )
-        write_per_surface_output = aeroacoustic_output["write_per_surface_output"]
-        patch_type = aeroacoustic_output["patch_type"]
 
     return fl.AeroAcousticOutput(
         name="AeroAcousticOutput",
         observers=observers,
-        write_per_surface_output=write_per_surface_output,
-        patch_type=patch_type,
+        write_per_surface_output=False,
+        patch_type="solid",
         aeroacoustic_solver_start_time=cfg.step.aeroacoustic_solver_start_time_s * u.s,
         force_clean_start=cfg.step.aeroacoustic_force_clean_start,
+    )
+
+
+def _make_render_output(wall_surfaces: list, cfg: CaseSetup):
+    # Target 2 seconds per revolution when played at 48 fps (96 frames/rev).
+    # Flow360 requires a whole physical-step interval, so timing is approximate.
+    render_frequency = max(1, round(cfg.step.time_steps_per_revolution / (2.0 * 48)))
+    structural_surfaces = [
+        surface for surface in wall_surfaces
+        if not getattr(surface, "private_attribute_is_interface", False)
+        and not any(
+            excluded in str(getattr(surface, "full_name", surface.name)).lower()
+            for excluded in ("interface", "inverted", "farfield")
+        )
+    ]
+    if not structural_surfaces:
+        raise ValueError("Render output requires at least one structural surface.")
+
+    colormap = [(0, 0, 255), (0, 255, 255), (0, 255, 0)]
+    render_output_1_camera = fl.render_config.Camera(
+        position=(-0.617042045143, -0.732898677141, 0.286563507047),
+        look_at=(1163.34074092, -1877.94150843, 1146.90520487),
+        pan_target=(1163.34074092, -1877.94150843, 1146.90520487),
+        up=(0.183698898514, 0.219942098007, 0.958060639108),
+        dimension=10499.0268044,
+        dimension_dir="width",
+    )
+    return fl.RenderOutput(
+        name="Render output 1",
+        frequency=render_frequency,
+        frequency_offset=0,
+        camera=render_output_1_camera,
+        groups=[
+            fl.RenderOutputGroup(
+                surfaces=structural_surfaces,
+                material=fl.render_config.FieldMaterial(
+                    output_field="CfVec", min=0.0, max=0.002, colormap=colormap,
+                ),
+            ),
+            fl.RenderOutputGroup(
+                isosurfaces=[
+                    fl.Isosurface(name="q_criterion", field="qcriterion", iso_value=2.50e-8),
+                ],
+                material=fl.render_config.FieldMaterial(
+                    output_field="Mach", min=0.0, max=0.5, colormap=colormap,
+                ),
+            ),
+        ],
     )
 
 
@@ -804,24 +907,15 @@ def _make_outputs(wall_surfaces: list, cfg: CaseSetup):
             output_fields=[
                 "primitiveVars",
                 "Cp",
-                "Cf",
                 "CfVec",
                 "yPlus",
-                "nodeForcesPerUnitArea",
-                "nodeNormals",
             ],
             write_single_file=True,
         ),
-        fl.TimeAverageSurfaceOutput(
-            name="TimeAverageSurfacePressure",
-            surfaces=wall_surfaces,
-            output_format=["paraview"],
-            frequency=-1,
-            start_step=-1,
-            output_fields=["pressure_pa"],
-            write_single_file=True,
-        ),
     ]
+
+    if cfg.step.make_render_output:
+        outputs.append(_make_render_output(wall_surfaces, cfg))
 
     if cfg.step.include_aeroacoustic_output:
         outputs.append(_make_aeroacoustic_output(cfg))
@@ -834,6 +928,7 @@ def build_params(
     cfg: CaseSetup = CONFIG,
     *,
     include_volume_refinements: bool = True,
+    surface_mesh_file: Path = SURFACE_MESH_FILE,
 ):
     root_type_name = _project_root_type_name(project)
     if root_type_name == "VOLUME_MESH":
@@ -844,11 +939,17 @@ def build_params(
         wall_entities = _wall_entities(surface_mesh)
         wall_surfaces = _all_walls(wall_entities)
         rotation_volume = _rotation_volume(cfg)
+        enclosed_surfaces = cgns_surfaces_inside_rotation_region(
+            surface_mesh_file,
+            wall_surfaces,
+            rotation_volume,
+            mesh_length_unit=cfg.surface_mesh_length_unit,
+        )
         farfield, mesh_params = _make_meshing_params(
             rotation_volume,
             cfg,
             include_volume_refinements=include_volume_refinements,
-            enclosed_entities=wall_surfaces,
+            enclosed_entities=enclosed_surfaces,
         )
         models, wall_surfaces = _make_models(surface_mesh, farfield, rotation_volume, cfg, wall_entities)
     else:
@@ -947,6 +1048,7 @@ def define_and_run(
         project,
         cfg,
         include_volume_refinements=generate_volume_mesh,
+        surface_mesh_file=surface_mesh_file,
     )
 
     warning_context = (
@@ -1011,7 +1113,7 @@ def define_and_run(
 def main():
     # Continue from the existing Flow360 case; meshing is handled separately.
     use_beta_mesher = True
-    generate_volume_mesh = True
+    generate_volume_mesh = False
     run_case = False
 
     folder = _get_or_create_flow360_folder(CONFIG.flow360_folder_path)

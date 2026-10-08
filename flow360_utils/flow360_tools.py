@@ -7,6 +7,152 @@ import flow360 as fl
 from flow360 import u
 
 
+def cgns_surfaces_inside_rotation_region(
+        cgns_file, surfaces, rotation_region, *, mesh_length_unit="mm",
+        tolerance=1e-9):
+    """Return supplied Flow360 surfaces wholly inside a solid rotation cylinder.
+
+    Reads HDF5 CGNS unstructured surface meshes (triangles/quadrilaterals),
+    including Gmsh's BC -> family -> physical-group name mapping. Coordinates
+    use ``mesh_length_unit``; cylinder dimensions and tolerance are in metres.
+    All vertices must lie inside the cylinder, including its axial end planes.
+    Outside and partly enclosed surfaces are excluded. Duplicate family names
+    are aggregated across patches/zones, so every part must be enclosed.
+    Unknown surface names and unsupported connectivity fail explicitly.
+    """
+    import h5py
+
+    center = np.asarray(rotation_region.center.to("m").value, dtype=float)
+    axis = np.asarray(rotation_region.axis, dtype=float)
+    height = float(rotation_region.height.to("m").value)
+    radius = float(rotation_region.outer_radius.to("m").value)
+    inner_radius = getattr(rotation_region, "inner_radius", None)
+    if inner_radius is not None and float(inner_radius.to("m").value) != 0:
+        raise ValueError("Only solid rotation cylinders are supported.")
+    if not np.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("tolerance must be finite and nonnegative (metres).")
+    if not np.all(np.isfinite(axis)) or np.linalg.norm(axis) == 0:
+        raise ValueError("rotation_region.axis must be finite and nonzero.")
+    axis = axis / np.linalg.norm(axis)
+    coordinate_scale = float((1 * getattr(u, mesh_length_unit)).to("m").value)
+
+    def text(value):
+        if isinstance(value, bytes):
+            return value.decode().rstrip("\x00")
+        if isinstance(value, str):
+            return value
+        return np.asarray(value).tobytes().decode().rstrip("\x00")
+
+    def children(node, label):
+        return [child for child in node.values()
+                if isinstance(child, h5py.Group)
+                and text(child.attrs.get("label", b"")) == label]
+
+    def data(node):
+        return node[" data"][()]
+
+    # CGNS surface element IDs and nodes per element (including higher order).
+    surface_node_counts = {5: 3, 6: 6, 7: 4, 8: 8, 9: 9}
+    inside_by_name = {}
+    with h5py.File(cgns_file, "r") as mesh:
+        for base in children(mesh, "CGNSBase_t"):
+            family_aliases = {}
+            for family in children(base, "Family_t"):
+                family_name = family.name.rsplit("/", 1)[-1]
+                family_aliases[family_name] = {
+                    text(data(child)) for child in children(family, "FamilyName_t")
+                }
+            for zone in children(base, "Zone_t"):
+                zone_name = zone.name.rsplit("/", 1)[-1]
+                zone_types = children(zone, "ZoneType_t")
+                if zone_types and text(data(zone_types[0])) != "Unstructured":
+                    raise ValueError(f"Unsupported structured CGNS zone: {zone_name}")
+                grids = children(zone, "GridCoordinates_t")
+                if len(grids) != 1:
+                    raise ValueError(f"Expected one coordinate grid in {zone_name}.")
+                coordinates = np.column_stack([
+                    data(grids[0][f"Coordinate{component}"]).ravel()
+                    for component in "XYZ"
+                ]) * coordinate_scale
+                relative = coordinates - center
+                axial = relative @ axis
+                radial = np.linalg.norm(relative - axial[:, None] * axis, axis=1)
+                vertex_inside = (
+                    np.all(np.isfinite(coordinates), axis=1)
+                    & (np.abs(axial) <= height / 2 + tolerance)
+                    & (radial <= radius + tolerance)
+                )
+                sections = []
+                for section in children(zone, "Elements_t"):
+                    kind = int(np.asarray(data(section)).ravel()[0])
+                    first, last = data(section["ElementRange"]).ravel()
+                    sections.append((int(first), int(last), kind, section))
+                sections.sort(key=lambda item: item[0])
+                section_starts = np.array([first for first, _, _, _ in sections])
+
+                for zone_bc in children(zone, "ZoneBC_t"):
+                    for bc in children(zone_bc, "BC_t"):
+                        index_name = next((name for name in (
+                            "PointList", "PointRange", "ElementList", "ElementRange"
+                        ) if name in bc), None)
+                        if index_name is None:
+                            raise ValueError(f"No point/element indices for {bc.name}.")
+                        indices = data(bc[index_name]).ravel().astype(np.int64)
+                        if index_name.endswith("Range"):
+                            indices = np.arange(indices[0], indices[1] + 1)
+                        locations = children(bc, "GridLocation_t")
+                        location = text(data(locations[0])) if locations else "Vertex"
+                        if index_name.startswith("Element"):
+                            location = "FaceCenter"
+                        if location == "Vertex":
+                            node_ids = indices
+                        elif location in ("FaceCenter", "CellCenter", "EdgeCenter"):
+                            parts = []
+                            section_ids = np.searchsorted(section_starts, indices, side="right") - 1
+                            if np.any(section_ids < 0):
+                                raise ValueError(f"Unresolved element indices in {bc.name}.")
+                            for section_id in np.unique(section_ids):
+                                first, last, kind, section = sections[section_id]
+                                selected = indices[section_ids == section_id]
+                                if np.any(selected > last):
+                                    raise ValueError(f"Unresolved element indices in {bc.name}.")
+                                if kind in (2, 3, 4):  # Gmsh point/edge BCs are not surfaces.
+                                    continue
+                                if kind not in surface_node_counts:
+                                    raise ValueError(
+                                        f"Unsupported CGNS surface element type {kind} in {bc.name}."
+                                    )
+                                connectivity = data(section["ElementConnectivity"]).reshape(
+                                    last - first + 1, surface_node_counts[kind]
+                                )
+                                parts.append(connectivity[selected - first].ravel())
+                            if not parts:
+                                continue
+                            node_ids = np.concatenate(parts)
+                        else:
+                            raise ValueError(f"Unsupported grid location {location!r} in {bc.name}.")
+                        if not len(node_ids) or np.any(node_ids < 1) or np.any(node_ids > len(coordinates)):
+                            raise ValueError(f"Invalid or empty vertex indices in {bc.name}.")
+                        inside = bool(np.all(vertex_inside[node_ids - 1]))
+                        aliases = {bc.name.rsplit("/", 1)[-1]}
+                        for family in children(bc, "FamilyName_t"):
+                            family_name = text(data(family))
+                            aliases.add(family_name)
+                            aliases.update(family_aliases.get(family_name, set()))
+                        for alias in aliases:
+                            for name in (alias, f"{zone_name}/{alias}"):
+                                inside_by_name[name] = inside_by_name.get(name, True) and inside
+
+    selected = []
+    for surface in surfaces:
+        name = surface.name
+        if name not in inside_by_name:
+            raise ValueError(f"Surface {name!r} could not be resolved in CGNS file {cgns_file}.")
+        if inside_by_name[name]:
+            selected.append(surface)
+    return selected
+
+
 def calculate_flat_plate_turbulent_y1(
         freestream_velocity=55.0,
         density=1.225,
