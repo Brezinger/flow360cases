@@ -1,0 +1,176 @@
+Skipping 0 cfd steps = 0 acoustic samples per observer.
+  Observer 1: 23891 retained samples, 0.179183 s
+  Observer 2: 22932 retained samples, 0.171991 s
+  Observer 3: 22968 retained samples, 0.172261 s
+  Observer 4: 23243 retained samples, 0.174323 s
+  Observer 5: 23891 retained samples, 0.179183 s
+Loaded case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: 23937 samples, revolutions=all, rpm=1000.000, steps/rev=8000, sample_rate=133332.924 Hz, a=349.110789 m/s, L_grid_unit=0.001 m, pressure_scale=gamma*p_inf=129690.623 Pa
+OASPL values for case-fb40c043-c99a-4cce-95cf-de9630dba98d (40–10000 Hz):
+  Observer 1: 65.44 dB, 60.96 dBA
+  Observer 2: 62.42 dB, 56.89 dBA
+  Observer 3: 65.13 dB, 61.06 dBA
+  Observer 4: 64.49 dB, 59.92 dBA
+  Observer 5: 65.60 dB, 60.26 dBA
+Skipping 0 cfd steps = 0 acoustic samples per observer.
+  Observer 1: 11521 retained samples, 0.169240 s
+  Observer 2: 11520 retained samples, 0.169225 s
+  Observer 3: 11521 retained samples, 0.169240 s
+  Observer 4: 11521 retained samples, 0.169240 s
+  Observer 5: 11520 retained samples, 0.169225 s
+Loaded case-cf29e49e-da21-43ad-80e2-61a6f97bec80_results_total_acoustics_v3.csv: 11780 samples, revolutions=all, rpm=1063.677, steps/rev=8000, sample_rate=68075.120 Hz, a=349.110789 m/s, L_grid_unit=0.001 m, pressure_scale=gamma*p_inf=129690.623 Pa
+OASPL values for case-cf29e49e-da21-43ad-80e2-61a6f97bec80 (40–10000 Hz):
+  Observer 1: 66.17 dB, 63.40 dBA
+  Observer 2: 64.38 dB, 59.28 dBA
+  Observer 3: 67.27 dB, 62.78 dBA
+  Observer 4: 66.07 dB, 62.52 dBA
+  Observer 5: 65.84 dB, 62.36 dBA
+Skipping 0 cfd steps = 0 acoustic samples per observer.
+  Observer 1: 23908 retained samples, 0.178952 s
+  Observer 2: 22889 retained samples, 0.171325 s
+  Observer 3: 22924 retained samples, 0.171587 s
+  Observer 4: 23206 retained samples, 0.173698 s
+  Observer 5: 23908 retained samples, 0.178952 s
+Loaded total_acoustics_v3.csv: 23944 samples, revolutions=all, rpm=1002.000, steps/rev=8000, sample_rate=133599.994 Hz, a=337.403116 m/s, L_grid_unit=1 m, pressure_scale=gamma*p_inf=130803.151 Pa
+OASPL values for total_acoustics_v3.csv (40–10000 Hz):
+  Observer 1: 66.08 dB, 64.03 dBA
+  Observer 2: 64.72 dB, 58.32 dBA
+  Observer 3: 67.10 dB, 61.93 dBA
+  Observer 4: 66.21 dB, 63.75 dBA
+  Observer 5: 66.48 dB, 64.74 dBA
+  Observer 1 analysis: 2.99 rev, df=5.581 Hz, ENBW=8.371 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 2 analysis: 2.87 rev, df=5.814 Hz, ENBW=8.721 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 3 analysis: 2.87 rev, df=5.805 Hz, ENBW=8.708 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 4 analysis: 2.91 rev, df=5.736 Hz, ENBW=8.605 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 5 analysis: 2.99 rev, df=5.581 Hz, ENBW=8.371 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 1 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.863 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 2 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.864 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 3 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.863 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 4 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.863 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 5 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.864 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 1 analysis: 2.99 rev, df=5.588 Hz, ENBW=8.382 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 2 analysis: 2.86 rev, df=5.837 Hz, ENBW=8.755 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 3 analysis: 2.87 rev, df=5.828 Hz, ENBW=8.742 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 4 analysis: 2.90 rev, df=5.757 Hz, ENBW=8.636 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+  Observer 5 analysis: 2.99 rev, df=5.588 Hz, ENBW=8.382 Hz, 1 Welch segment(s); 0 empty and 1 sparsely sampled third-octave bands.
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\oaspl_observers_1_5_comparison.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrum_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\psd_spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\psd_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\psd_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\psd_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\psd_spectrum_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\third_octave_spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\third_octave_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\third_octave_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\third_octave_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\third_octave_spectrum_observer_5.png
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade3
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade2
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade4
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade3
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade2
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade4
+Skipping blade1+blade3 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\surface_pair_third_octave_spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\surface_pair_third_octave_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\surface_pair_third_octave_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\surface_pair_third_octave_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\surface_pair_third_octave_spectrum_observer_5.png
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade3
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade2
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade4
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade3
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade2
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade4
+Skipping blade1+blade3 OASPL for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 OASPL for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 OASPL for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 OASPL for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 OASPL for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 OASPL for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Skipping blade1+blade3 OASPL for total_acoustics_v3.csv; missing ['blade1', 'blade3'].
+Skipping blade2+blade4 OASPL for total_acoustics_v3.csv; missing ['blade2', 'blade4'].
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pair_oaspl_observers_1_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\thickness_loading_first_bpf.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\thickness_loading_second_bpf.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\harmonic_content_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\harmonic_content_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\harmonic_content_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\harmonic_content_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\harmonic_content_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\pressure_time_history_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\pressure_time_history_observer_5.png
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv: blade2
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade1
+Skipping missing surface-resolved file for total_acoustics_v3.csv: blade2
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pressure_time_history_blade1_blade2_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pressure_time_history_blade1_blade2_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pressure_time_history_blade1_blade2_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pressure_time_history_blade1_blade2_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\surface_pressure_time_history_blade1_blade2_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\average_pressure_time_history_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\average_pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\average_pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\average_pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\average_pressure_time_history_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_1_flow360_wmles_poc2_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_1_flow360_wmles_poc2_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_1_flow360_wmles_poc2_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_1_flow360_wmles_poc2_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_1_flow360_wmles_poc2_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_1_flow360_wmles_poc2_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_1_flow360_wmles_poc2_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_1_flow360_wmles_poc2_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_1_flow360_wmles_poc2_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_1_flow360_wmles_poc2_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_2_flow360_wmles_lifter4b_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_2_flow360_wmles_lifter4b_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_2_flow360_wmles_lifter4b_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_2_flow360_wmles_lifter4b_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_2_flow360_wmles_lifter4b_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_2_flow360_wmles_lifter4b_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_2_flow360_wmles_lifter4b_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_2_flow360_wmles_lifter4b_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_2_flow360_wmles_lifter4b_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_2_flow360_wmles_lifter4b_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_3_flow360_wmles_q40lt_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_3_flow360_wmles_q40lt_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_3_flow360_wmles_q40lt_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_3_flow360_wmles_q40lt_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_3_flow360_wmles_q40lt_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_3_flow360_wmles_q40lt_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_3_flow360_wmles_q40lt_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_3_flow360_wmles_q40lt_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_total_pressure_3_flow360_wmles_q40lt_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\comparison_POC2_Lifter4B_Q40LT\unweighted\spectrogram_loading_pressure_3_flow360_wmles_q40lt_observer_5.png

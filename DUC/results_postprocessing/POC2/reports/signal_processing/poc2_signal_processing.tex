@@ -1,0 +1,198 @@
+% Compile twice using XeLaTeX, with this folder as working directory.
+\documentclass[english]{achleitner-report}
+\input{numbers}
+\input{observer_table}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\renewcommand{\reporttitle}{\texorpdfstring{Acoustic signal processing\newline POC2 worked example}{Acoustic signal processing: POC2 worked example}}
+\renewcommand{\reportshorttitle}{Pressure history to spectra and OASPL}
+\renewcommand{\reportid}{POC2-ACOUSTICS-2026-02}
+\renewcommand{\reportrevision}{A}
+\renewcommand{\reportdate}{08 October 2026}
+\renewcommand{\reportauthor}{Engineering analysis draft (AI-assisted)}
+\renewcommand{\reportproject}{DUC noise study; second technical note}
+\renewcommand{\reportconfiguration}{POC2 step4; four blades; plot observer 3 / CSV observer2}
+\renewcommand{\reportoperatingpoint}{1000 RPM; density 1.064099 kg/m$^3$; temperature 303.275 K}
+\renewcommand{\reportmethod}{Reproduction of pressure preprocessing and Welch spectral calculations using real CFD data}
+\renewcommand{\reportrecipients}{DUC noise study team}
+\renewcommand{\reportpurpose}{Explain narrowband, third-octave and OASPL processing; compare the former and corrected power calculations.}
+\renewcommand{\reportstatus}{Draft; not yet reviewed}
+\renewcommand{\reportclassification}{Internal}
+\let\reportcoverimage\empty
+\newcommand{\reportfigure}[3]{\begin{figure}[ht]\centering\includegraphics[width=\linewidth,height=#2,keepaspectratio]{figures/#1.pdf}\caption{#3}\end{figure}}
+\begin{document}
+\makereportcover
+\reportdocumentcontrol
+\pagenumbering{arabic}
+
+\section{Real input signal and preprocessing}
+This report traces the implemented calculation in \texttt{plot\_aeroacoustics.py}, using the original POC2 step4 CFD pressure record. Figures are calculated from actual CSV samples. The detailed example is plot observer 3, CSV column \texttt{observer\_2\_pressure}, with the script's $105^\circ$ angle label. Results for all five observers are also reproduced. No synthetic replacement signal, measurement calibration or distance adjustment is applied.
+
+The input is case \texttt{fb40c043-c99a-4cce-95cf-de9630dba98d}; its location and hashes are provided with the reproducibility files. The script treats CSV pressure and time as nondimensional:
+\begin{equation*}
+ p_n=p_{\mathrm{CSV},n}\rho a^2,\qquad
+ t_n=t_{\mathrm{CSV},n}\frac{L_{\mathrm{grid}}}{a},\qquad
+ a=\sqrt{\gamma R T}.
+\end{equation*}
+Here $\gamma=1.4$, $R=287.05287$ J/(kg K), $a=\SpeedSound$ m/s and $L_{\mathrm{grid}}=0.001$ m. The pressure factor is $\PressureScale$ Pa. This factor is $\rho a^2=\gamma p_\infty$, not the aerodynamic dynamic pressure $\rho U_{\mathrm{ref}}^2/2$.
+
+\begin{reporttable}{|Y|Y|}
+\reporttablehead\headcell{Observer 3 record} & \headcell{Measured from CSV}\\\hline
+Downloaded / retained samples & \RawSamples\ / \SignalSamples\\\hline
+Removed leading / trailing zero padding & \LeadPadding\ / \TailPadding\ samples\\\hline
+Retained time span / mean interval & \SignalSpan\ s / \SampleInterval\ $\mu$s\\\hline
+Sampling rate / Nyquist frequency & \SampleRate\ Hz / approximately 66.67 kHz\\\hline
+\end{reporttable}
+
+\reportfigure{01_pressure_time}{85mm}{Actual POC2 pressure samples: downloaded record, retained signal and a one-revolution detail after mean removal. Shading marks the retained arrival-time interval.}
+
+Leading and trailing exact zeros are clipped separately for each observer. Interior zeros remain. The retained mean is $\MeanPressure$ Pa; the acoustic fluctuation is $p'_n=p_n-\overline p$. Plotting time is rebased to zero; frequency spacing uses the dimensional CSV timestamps. No samples are skipped or interpolated in this example.
+\clearpage
+
+\section{Hann window and Fourier transform}
+The retained signal has $N=\SignalSamples$ samples. The current setting \texttt{NPERSEG="All"} uses one full-length segment. A 50\% overlap is configured, but a second segment cannot fit; consequently this is a single windowed periodogram evaluated through Welch's interface. Shorter segments would allow averaged periodograms, trading frequency resolution for statistical averaging.
+
+The periodic Hann window and windowed discrete Fourier transform (DFT) are
+\begin{equation*}
+ w_n=\tfrac12\left[1-\cos(2\pi n/N)\right],\qquad
+ X_k=\sum_{n=0}^{N-1}w_np'_n\exp(-\mathrm{i}2\pi kn/N).
+\end{equation*}
+Mean removal precedes windowing. SciPy also applies its default constant detrend; for this one segment it only removes any residual numerical mean. The record duration for the DFT is $N/f_s=\RecordDuration$ s. This differs by one sample interval from the plotted first-to-last time span, $(N-1)/f_s$.
+
+\reportfigure{02_hann_window}{78mm}{The same POC2 fluctuation before and after Hann tapering, and the corresponding window weights. The centre of the record receives more weight than its edges.}
+
+Frequency bins are $f_k=kf_s/N$ and $\Delta f=f_s/N=\FrequencySpacing$ Hz. There is no FFT zero padding. For a real pressure record, the negative-frequency power is folded into positive frequencies. Let $c_k=2$ for positive interior bins and $c_k=1$ for DC and the Nyquist bin (when present). The two SciPy normalizations are [1]
+\begin{equation*}
+ G_k=\frac{c_k|X_k|^2}{f_s\sum_nw_n^2}\quad[\mathrm{Pa}^2/\mathrm{Hz}],\qquad
+ S_k=\frac{c_k|X_k|^2}{(\sum_nw_n)^2}\quad[\mathrm{Pa}^2].
+\end{equation*}
+$G_k$ is power spectral density (PSD); $S_k$ is the amplitude-normalized squared spectrum. The window reduces boundary leakage but spreads tones across neighbouring bins. It also changes the time weighting of a transient record. Window normalization compensates its power gain; it does not restore information suppressed at the edges.
+\clearpage
+
+\section{What the narrowband plot represents}
+The main script deliberately retains \texttt{scaling="spectrum"} for its narrowband display and nearest-bin tone estimate. The displayed level is $10\log_{10}(S_k/p_0^2)$, with $p_0=20\,\mu$Pa. It is an amplitude-normalized spectrum, not a PSD and not additive acoustic power per bin.
+
+\begin{reporttable}{|>{\raggedright\arraybackslash}m{36mm}|Y|Y|}
+\reporttablehead\headcell{Quantity} & \headcell{Units / level reference} & \headcell{Use}\\\hline
+Amplitude spectrum $S_k$ & Pa$^2$ / $p_0^2$ & Tone-amplitude display; do not directly sum.\\\hline
+PSD $G_k$ & Pa$^2$/Hz / $p_0^2$/Hz & Density of acoustic power; integrate over frequency.\\\hline
+Bin power $P_k=G_k\Delta f$ & Pa$^2$ / $p_0^2$ & Additive contribution to band power and OASPL.\\\hline
+\end{reporttable}
+
+\reportfigure{03_narrowband}{96mm}{POC2 observer 3: amplitude-normalized narrowband levels and additive bin-power levels from the same FFT. The second panel resolves the blade-passing-frequency region. Their constant separation is a normalization difference, not two different pressure signals.}
+
+At 1000 RPM and four blades, the blade-passing frequency is 66.67 Hz. It lies between this record's FFT bins; leakage and peak reduction are therefore expected. For a well-isolated, bin-centred stationary tone, the amplitude-normalized peak estimates its mean-square pressure. That statement does not guarantee the same accuracy for an off-bin tone or overlapping components. Integrating a suitable tone band is generally more robust.
+
+For this Hann window, $S_k=1.5P_k$. Every finite bin therefore differs by 1.7609 dB. The narrowband display is retained with its amplitude interpretation; the correction changes how bins are added for integrated quantities. A-weighted narrowband displays multiply $S_k$ by $10^{A(f_k)/10}$ before converting to dB.
+\clearpage
+
+\section{Third-octave bands and overall levels}
+The script uses exact binary third-octave centres $f_{c,m}=1000\times2^{m/3}$ Hz and edges $f_{l,m}=f_{c,m}2^{-1/6}$, $f_{u,m}=f_{c,m}2^{1/6}$. For every band, select bins with $f_{l,m}\le f_k<f_{u,m}$, also restricted to the global 40--10\,000 Hz interval. Correct band power and level are
+\begin{equation*}
+ P_m=\sum_{k\in m}G_k\Delta f,\qquad
+ L_m=10\log_{10}\left(P_m/p_0^2\right).
+\end{equation*}
+For A-weighting, multiply each bin by $W_k=10^{A(f_k)/10}$ before summation. The script normalizes its analytical A-weighting curve to 0 dB at 1 kHz; evaluating weighting at every bin avoids approximating an entire band by its centre-frequency weight.
+
+\reportfigure{04_third_octave}{102mm}{Real POC2 observer 3 third-octave spectra, unweighted and A-weighted. The original summation shifts every populated band upward by 1.7609 dB. The corrected curves preserve the spectral shape.}
+
+OASPL in this script means \emph{band-limited} overall level over 40--10\,000 Hz:
+\begin{equation*}
+ L_{\mathrm{OA}}=10\log_{10}\frac{\sum_{40\le f_k\le10000}G_k\Delta f}{p_0^2},\quad
+ L_{\mathrm{OA,A}}=10\log_{10}\frac{\sum_{40\le f_k\le10000}G_k\Delta f\,W_k}{p_0^2}.
+\end{equation*}
+\textbf{Band-edge detail.} The displayed bands begin at 49.6063 Hz, with lower edge \FirstEdge\ Hz. Bins below that edge are not in their sum. The last centre is \LastCenter\ Hz and its upper half-band is truncated at 10 kHz. These are the current script's bin-based bands, not a claim of standards-compliant filter-bank processing. Summing them gives \ThirdSumDB\ dB, versus \CorrectDB\ dB OASPL; the small difference comes from the omitted low-frequency bin coverage. A-weighted sums are \ThirdSumDBA\ and \CorrectDBA\ dBA respectively.
+\clearpage
+
+\section{Erroneous and corrected calculations}
+The original \texttt{spl\_spectra\_calculator.py} and the former plotting script used the amplitude-normalized $S_k$ both for the narrowband display and for summed levels. The display interpretation was valid, but the direct power summation was not window-energy normalized:
+\begin{equation*}
+ P_{\mathrm{wrong},m}=\sum_{k\in m}S_k,\qquad
+ L_{\mathrm{wrong},m}=10\log_{10}(P_{\mathrm{wrong},m}/p_0^2).
+\end{equation*}
+The same error affected weighted and unweighted OASPL and integrated harmonic bands. A-weighting does not remove it because the normalization factor is constant and multiplies every bin.
+
+The equivalent noise bandwidth is
+\begin{equation*}
+ B_e=f_s\frac{\sum_nw_n^2}{(\sum_nw_n)^2},\qquad
+ S_k=G_kB_e.
+\end{equation*}
+For the periodic Hann window, $\sum w_n=N/2$, $\sum w_n^2=3N/8$, so $B_e=1.5\Delta f$. In this real record $B_e=\ENBW$ Hz, hence
+\begin{equation*}
+ \frac{P_{\mathrm{wrong},m}}{P_{\mathrm{correct},m}}=1.5,\qquad
+ \Delta L=10\log_{10}(1.5)=1.76091259\ \mathrm{dB}.
+\end{equation*}
+This ratio is exact for matching bins and processing settings, apart from floating-point roundoff. It is frequency independent. Other errors, including band-edge leakage, limited temporal resolution or nonstationarity, need separate assessment.
+
+\subsection*{Code comparison for a frequency-band sum}
+\begingroup\small
+\begin{verbatim}
+# Former calculation: amplitude spectrum used as additive power
+f, S = welch(p_prime, fs=fs, window="hann", nperseg=N,
+             noverlap=N//2, scaling="spectrum")
+P_wrong = S[band_mask].sum()
+
+# Correct power calculation
+f, G = welch(p_prime, fs=fs, window="hann", nperseg=N,
+             noverlap=N//2, scaling="density")
+df = f[1] - f[0]
+P_correct = (G[band_mask] * df).sum()
+L_correct = 10 * log10(P_correct / (20e-6)**2)
+\end{verbatim}
+\endgroup
+For A-weighted sums, use $G_k\Delta f\,10^{A(f_k)/10}$ inside the sum. Decibels must not be added directly. If combining already integrated band levels with identical coverage, their energy sum is $10\log_{10}(\sum_m10^{L_m/10})$.
+
+The implemented helper \texttt{\_welch\_mean\_square\_spectrum} now returns $G_k\Delta f$. Narrowband amplitude plots and nearest-bin tone extraction use a separate \texttt{scaling="spectrum"} call. There is therefore no blanket subtraction from individual tone peaks.
+\clearpage
+
+\section{Numerical effect on real POC2 results}
+The complete CSV was processed for all five observers. Each observer's own padded edges were clipped. Both calculations use the same pressure scaling, mean removal, Hann window, segment length, frequency bins and A-weighting. Only the additive-power normalization differs.
+
+\reportfigure{05_oaspl}{80mm}{Original and corrected POC2 step4 OASPLs for all five observers, over 40--10\,000 Hz. Every pair differs by 1.7609 dB, including A-weighted levels.}
+
+\begin{table}[ht]
+\caption{POC2 step4 overall levels. Plot observer / zero-based CSV index are shown explicitly.}
+\centering\small
+\begin{reporttable}{|c|c|C|C|C|C|}
+\reporttablehead\headcell{Plot / CSV} & \headcell{Angle} & \headcell{Old dB} & \headcell{New dB} & \headcell{Old dBA} & \headcell{New dBA}\\\hline
+\ObserverRows
+\end{reporttable}
+\end{table}
+
+For observer 3, integrated power in the selected band is \BandPower\ Pa$^2$. The original OASPL is \WrongDB\ dB and the corrected result is \CorrectDB\ dB. The corresponding A-weighted values are \WrongDBA\ and \CorrectDBA\ dBA.
+
+Third-octave and harmonic-band powers receive the same correction for identical bins. The spectral shape and comparisons between simulations processed with the same convention are preserved. Comparison against independent measurements changes because the measured levels do not contain this particular computational bias.
+
+These are direct recalculations from the CFD pressure file, not analytical values obtained only by subtracting 1.76 dB. The original $S_k$ and corrected $G_k$ arrays were generated independently and their ratio was checked. This verifies the normalization correction; it does not validate the CFD model, observer geometry or measurement propagation basis.
+\clearpage
+
+\section{Power checks and reproducibility}
+A full-frequency Parseval check distinguishes a numerical normalization error from the intended window weighting. For the one-segment, mean-removed signal,
+\begin{equation*}
+ \sum_{k=0}^{\mathrm{Nyquist}}G_k\Delta f
+ =\frac{\sum_nw_n^2(p'_n)^2}{\sum_nw_n^2}.
+\end{equation*}
+The frequency-domain result is \PowerFrequency\ Pa$^2$, and the corresponding time-domain result is \PowerTime\ Pa$^2$. They agree to numerical precision. This check includes DC and all frequencies up to Nyquist; the 40--10\,000 Hz OASPL intentionally excludes power outside that band.
+
+The unwindowed fluctuation RMS is \RawRMS\ Pa; the full-band Hann-normalized RMS is \WindowRMS\ Pa. Their small difference in this record is expected. Equality with \emph{unwindowed} RMS is not guaranteed for a transient signal, even after correct spectral normalization.
+
+CSV timestamps are approximately uniform. Their maximum step deviation from the mean is about 0.0253\%, consistent with finite timestamp precision; the implemented calculation uses the mean interval. The retained absolute interval is \SignalStart--\SignalStop\ s, with sample indices 501--23468 (zero-based CSV data rows). No resampling was performed.
+
+\subsection*{Reproduction package}
+The accompanying package includes the original CSV and \texttt{build\_figures.py}, LaTeX sources and corporate assets, \texttt{analysis\_results.json}, per-observer OASPL and per-band CSV tables, standalone vector figures, source-script snapshots and \texttt{poc2\_observer3\_processing.npz}. The NPZ contains the actual retained dimensional pressure, time, Hann weights, PSD, amplitude spectrum and additive bin powers. Results are generated using Python 3.11.9, SciPy \ScipyVersion\ and NumPy 2.4.4.
+
+Input CSV, relative to \texttt{DUC/results\_postprocessing}:\\
+\path{POC2/aeroacoustics/step4/}\newline
+\path{case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv}
+
+Run \texttt{build\_figures.py} with the project's configured Python interpreter.\newline Compile \texttt{poc2\_signal\_processing.tex} twice with XeLaTeX. SHA-256 hashes of the complete input CSV and current plotting script are recorded in \texttt{analysis\_results.json}. The earlier generic script is included as historical evidence of the same Hann summation error.
+
+\subsection*{References}
+\small
+[1] SciPy, \emph{scipy.signal.welch}: spectral scaling, detrending, windowing and one-sided processing. Accessed 08 October 2026.\\
+\url{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html}
+
+[2] SciPy, \emph{Signal Processing: Spectral Analysis}: interpretation of amplitude spectra and power spectral densities. Accessed 08 October 2026.\\
+\url{https://docs.scipy.org/doc/scipy/tutorial/signal.html#spectral-analysis}
+
+[3] Local sources: current \texttt{plot\_aeroacoustics.py}; original \texttt{spl\_spectra\_calculator.py} from the Downloads directory; POC2 step4 case identified above. Sources are preserved with this report. No simulation settings or production postprocessing code were changed for this report.
+\end{document}

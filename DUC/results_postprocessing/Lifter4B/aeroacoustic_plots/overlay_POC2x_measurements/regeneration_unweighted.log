@@ -1,0 +1,55 @@
+Skipping 0 cfd steps = 0 acoustic samples per observer.
+  Observer 2: 11520 retained samples, 0.169225 s
+  Observer 3: 11521 retained samples, 0.169240 s
+  Observer 4: 11521 retained samples, 0.169240 s
+Loaded case-cf29e49e-da21-43ad-80e2-61a6f97bec80_results_total_acoustics_v3.csv: 11780 samples, revolutions=all, rpm=1063.677, steps/rev=8000, sample_rate=68075.120 Hz, a=349.110789 m/s, L_grid_unit=0.001 m, pressure_scale=gamma*p_inf=129690.623 Pa
+OASPL values for case-cf29e49e-da21-43ad-80e2-61a6f97bec80 (40–10000 Hz):
+  Observer 2: 64.38 dB, 59.28 dBA
+  Observer 3: 67.27 dB, 62.78 dBA
+  Observer 4: 66.07 dB, 62.52 dBA
+  A-weighted OASPL using complete measurement bands (IEC base-10 assumed):
+    Observer 2: 59.55 dBA
+    Observer 3: 63.01 dBA
+    Observer 4: 62.73 dBA
+A-weighted OASPL differences for case-cf29e49e-da21-43ad-80e2-61a6f97bec80 (simulation - measurement):
+  Coverage: A-weighted OASPL (complete 50–10000 Hz band centres); IEC base-10 convention assumed.
+  Observer 2: simulation 59.55 dBA, measurement 55.87 dBA, difference +3.68 dBA
+  Observer 3: simulation 63.01 dBA, measurement 57.61 dBA, difference +5.40 dBA
+  Observer 4: simulation 62.73 dBA, measurement 61.68 dBA, difference +1.05 dBA
+  Observer 2 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.864 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 3 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.863 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+  Observer 4 analysis: 3.00 rev, df=5.909 Hz, ENBW=8.863 Hz, 1 Welch segment(s); 0 empty and 2 sparsely sampled third-octave bands.
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\oaspl_observers_1_5_comparison_measurement_matched.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\psd_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\psd_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\psd_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\third_octave_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\third_octave_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\third_octave_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\surface_pair_third_octave_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\surface_pair_third_octave_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\surface_pair_third_octave_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\surface_pair_oaspl_observers_1_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\thickness_loading_first_bpf.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\thickness_loading_second_bpf.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\harmonic_content_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\harmonic_content_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\harmonic_content_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\surface_pressure_time_history_blade1_blade2_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\surface_pressure_time_history_blade1_blade2_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\surface_pressure_time_history_blade1_blade2_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\average_pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\average_pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\average_pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_total_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_loading_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_total_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_loading_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_total_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B\aeroacoustic_plots\overlay_POC2x_measurements\unweighted\spectrogram_loading_pressure_case-cf29e49e-da21-43ad-80e2-61a6f97bec80_observer_4.png

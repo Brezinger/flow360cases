@@ -1,0 +1,4 @@
+Observer 2 (90°): measured 55.87, POC2 CFD 57.00, Lifter4B CFD 59.55, corrected 59.94 dBA
+Observer 3 (105°): measured 57.61, POC2 CFD 61.16, Lifter4B CFD 63.01, corrected 62.21 dBA
+Observer 4 (135°): measured 61.68, POC2 CFD 60.04, Lifter4B CFD 62.73, corrected 67.39 dBA
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Lifter4B_corrected

@@ -80,7 +80,11 @@ SPECTRUM_MAX_FREQUENCY_HZ = 10_000.0
 SPECTRUM_X_TICKS_HZ = (40, 60, 80, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000, 8000, 10000)
 SPECTRUM_Y_LIMITS_DB = (-20.0, 70.0)
 SPECTROGRAM_MAX_FREQUENCY_HZ = 5_000.0
-SPECTROGRAM_LIMITS_DB = (-40.0, 80.0)
+SPECTROGRAM_LIMITS_DB = (0.0, 120.0)
+SPECTROGRAM_NPERSEG = 512
+# The retained Pusher records have 1756–1763 samples: 78-sample windows
+# with 50% overlap give 44 frames, matching the Lifter4B display.
+PUSHER_SPECTROGRAM_NPERSEG = 78
 SPECTROGRAM_WINDOW_S: float | None = None
 HARMONIC_INDICES = tuple(range(1, 11))
 HARMONIC_Y_LIMITS_DB = (0.0, 110.0)
@@ -1553,8 +1557,11 @@ def spectral_analysis_metadata(dataset: AcousticDataset, observer: int) -> dict:
               "fft_bins": int(np.count_nonzero((frequencies >= lo) & (frequencies < hi))),
               "complete_nyquist_support": bool(hi <= fs/2)}
              for c, lo, hi in zip(centers, lower, upper)]
-    requested_window_s = SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/dataset.rpm
-    spectrogram_segment = min(count, max(8, int(round(requested_window_s * fs))))
+    requested_window_s = SPECTROGRAM_WINDOW_S
+    spectrogram_segment = _spectrogram_segment_samples(
+        count, fs, requested_window_s,
+        default_segment_samples=_spectrogram_default_segment_samples(dataset),
+    )
     return {
         "retained_samples": count, "duration_s": count/fs, "sample_rate_hz": fs,
         "resolution_hz": df, "equivalent_noise_bandwidth_hz": enbw,
@@ -1566,8 +1573,10 @@ def spectral_analysis_metadata(dataset: AcousticDataset, observer: int) -> dict:
         "band_resolution": bands,
         "spectrogram_requested_window_s": requested_window_s,
         "spectrogram_actual_window_s": spectrogram_segment/fs,
+        "spectrogram_segment_samples": spectrogram_segment,
         "spectrogram_resolution_hz": fs/spectrogram_segment,
         "spectrogram_frames": 1+(count-spectrogram_segment)//(spectrogram_segment-spectrogram_segment//2),
+        "spectrogram_scaling": "spectrum" if requested_window_s is None else "density",
         "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
     }
 
@@ -2308,18 +2317,37 @@ def render_average_pressure_time_history_plots(
     return output_files
 
 
+def _spectrogram_default_segment_samples(dataset: AcousticDataset) -> int:
+    if "pusher" in {part.lower() for part in dataset.source_file.parts}:
+        return PUSHER_SPECTROGRAM_NPERSEG
+    return SPECTROGRAM_NPERSEG
+
+
+def _spectrogram_segment_samples(sample_count: int, sample_rate_hz: float,
+                                window_duration_s: float | None = None, *,
+                                default_segment_samples: int = SPECTROGRAM_NPERSEG) -> int:
+    if window_duration_s is None:
+        window_duration_s = SPECTROGRAM_WINDOW_S
+    if window_duration_s is None:
+        return min(sample_count, default_segment_samples)
+    if not np.isfinite(window_duration_s) or window_duration_s <= 0:
+        raise ValueError("Spectrogram window duration must be finite and positive.")
+    return min(sample_count, max(8, int(round(window_duration_s * sample_rate_hz))))
+
+
 def _spectrogram_spl_db(
     pressure_pa: np.ndarray,
     sample_rate_hz: float,
     *,
     window_duration_s: float | None = None,
+    default_segment_samples: int = SPECTROGRAM_NPERSEG,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     pressure_pa = _validate_spectral_input(pressure_pa, sample_rate_hz)
-    if window_duration_s is None:
-        window_duration_s = SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/DEFAULT_RPM
-    if not np.isfinite(window_duration_s) or window_duration_s <= 0:
-        raise ValueError("Spectrogram window duration must be finite and positive.")
-    nperseg = min(len(pressure_pa), max(8, int(round(window_duration_s * sample_rate_hz))))
+    legacy_settings = window_duration_s is None and SPECTROGRAM_WINDOW_S is None
+    nperseg = _spectrogram_segment_samples(
+        len(pressure_pa), sample_rate_hz, window_duration_s,
+        default_segment_samples=default_segment_samples,
+    )
 
     frequencies, times, power_by_time = spectrogram(
         _fluctuating_pressure(pressure_pa),
@@ -2327,8 +2355,8 @@ def _spectrogram_spl_db(
         window=WINDOW,
         nperseg=nperseg,
         noverlap=nperseg // 2,
-        scaling="density",
-        detrend=False,
+        scaling="spectrum" if legacy_settings else "density",
+        detrend="constant" if legacy_settings else False,
         mode="psd",
     )
     spl_db = _db_from_power(power_by_time)
@@ -2360,7 +2388,8 @@ def render_spectrogram_plots(
                 frequencies, times, spl_db = _spectrogram_spl_db(
                     pressure_pa,
                     dataset.sample_rate_hz,
-                    window_duration_s=SPECTROGRAM_WINDOW_S if SPECTROGRAM_WINDOW_S is not None else 60.0/dataset.rpm,
+                    window_duration_s=SPECTROGRAM_WINDOW_S,
+                    default_segment_samples=_spectrogram_default_segment_samples(dataset),
                 )
 
                 frequency_step = frequencies[1]-frequencies[0]
@@ -2372,23 +2401,33 @@ def render_spectrogram_plots(
                 frequency_edges = np.concatenate(([0.0], frequencies[:-1]+frequency_step/2, [frequencies[-1]+frequency_step/2]))
 
                 fig, ax = plt.subplots(figsize=(10.5, 6.0))
+                legacy_settings = SPECTROGRAM_WINDOW_S is None
+                if legacy_settings:
+                    # Match the historical normalized time axis and nearest-cell rendering.
+                    time_edges = times / times[-1]
+                    frequency_edges = frequencies
+                    if len(times) == 1:
+                        time_edges = np.asarray([0.0, 1.0])
+                        frequency_edges = np.concatenate(([0.0], frequencies[:-1]+frequency_step/2,
+                                                          [frequencies[-1]+frequency_step/2]))
                 mesh = ax.pcolormesh(
                     time_edges,
                     frequency_edges,
                     spl_db,
-                    shading="flat",
+                    shading="nearest" if legacy_settings and len(times) > 1 else "flat",
                     cmap="jet",
                     vmin=SPECTROGRAM_LIMITS_DB[0],
                     vmax=SPECTROGRAM_LIMITS_DB[1],
                 )
                 colorbar = fig.colorbar(mesh, ax=ax, pad=0.10)
-                colorbar.set_label("Pressure PSD [dB re (20 µPa)²/Hz]")
+                colorbar.set_label("SPL [dB]" if legacy_settings else "Pressure PSD [dB re (20 µPa)²/Hz]")
 
                 frame_count = len(times)
-                ax.set_title(f"{component_title} - Observer {observer}; df={frequency_step:.1f} Hz, {frame_count} frames")
-                ax.set_xlabel("Elapsed time [s]")
+                ax.set_title(f"{component_title} - Spectrogram for Observer ID: {observer}" if legacy_settings else
+                             f"{component_title} - Observer {observer}; df={frequency_step:.1f} Hz, {frame_count} frames")
+                ax.set_xlabel("Time Fraction" if legacy_settings else "Elapsed time [s]")
                 ax.set_ylabel("Frequency [Hz]")
-                ax.set_xlim(0.0, duration_s)
+                ax.set_xlim(0.0, 1.0 if legacy_settings else duration_s)
                 ax.set_ylim(0.0, SPECTROGRAM_MAX_FREQUENCY_HZ)
                 ax.grid(True, color="white", linewidth=0.5, alpha=0.5)
                 fig.tight_layout()
@@ -2783,7 +2822,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nperseg", default=NPERSEG,
                         help="Welch segment samples (integer >=8), or All for one full-record periodogram.")
     parser.add_argument("--spectrogram-window-s", type=float, default=None,
-                        help="Spectrogram window duration in seconds; default is one propeller revolution.")
+                        help="Opt into a physical-window PSD spectrogram; default restores 512-sample SPL spectrograms.")
     parser.add_argument(
         "--revolutions",
         type=_parse_revolution_range,

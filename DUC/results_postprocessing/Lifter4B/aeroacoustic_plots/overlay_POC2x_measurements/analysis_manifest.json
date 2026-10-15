@@ -1,0 +1,623 @@
+{
+  "sources": [
+    "C:\\git\\flow360cases\\DUC\\results_postprocessing\\Lifter4B\\aeroacoustics\\step4\\case-cf29e49e-da21-43ad-80e2-61a6f97bec80_results_total_acoustics_v3.csv"
+  ],
+  "n_timesteps_skip": 0,
+  "skip_unit": "cfd",
+  "sample_spacing_s": 1.468965464679986e-05,
+  "rpm": 1063.677,
+  "solver_steps_per_revolution": 8000.0,
+  "density_kg_m3": 1.064099,
+  "temperature_k": 303.275,
+  "reference_velocity_m_s": 155.9432,
+  "grid_unit_m": 0.001,
+  "revolution_range": "all",
+  "selection_origin": "Each observer's common active pressure/thickness/loading window",
+  "observers": {
+    "2": {
+      "retained_samples": 11520,
+      "duration_s": 0.16922482153113436,
+      "sample_rate_hz": 68075.11980670356,
+      "resolution_hz": 5.909298594331906,
+      "equivalent_noise_bandwidth_hz": 8.863947891497858,
+      "welch_segment_samples": 11520,
+      "window": "hann",
+      "welch_segments": 1,
+      "retained_revolutions": 3.000009174862873,
+      "cfd_samples_per_10khz_period": 14.182360000000001,
+      "acoustic_samples_per_10khz_period": 6.8075119806703555,
+      "band_resolution": [
+        {
+          "center_hz": 50.11872336272722,
+          "lower_hz": 44.66835921509631,
+          "upper_hz": 56.2341325190349,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 63.09573444801933,
+          "lower_hz": 56.234132519034915,
+          "upper_hz": 70.7945784384138,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 79.43282347242814,
+          "lower_hz": 70.7945784384138,
+          "upper_hz": 89.12509381337453,
+          "fft_bins": 4,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 100.0,
+          "lower_hz": 89.12509381337456,
+          "upper_hz": 112.20184543019633,
+          "fft_bins": 3,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 125.89254117941672,
+          "lower_hz": 112.20184543019636,
+          "upper_hz": 141.25375446227542,
+          "fft_bins": 5,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 158.48931924611134,
+          "lower_hz": 141.25375446227542,
+          "upper_hz": 177.82794100389225,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 199.526231496888,
+          "lower_hz": 177.8279410038923,
+          "upper_hz": 223.87211385683398,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 251.188643150958,
+          "lower_hz": 223.87211385683398,
+          "upper_hz": 281.83829312644536,
+          "fft_bins": 10,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 316.22776601683796,
+          "lower_hz": 281.8382931264454,
+          "upper_hz": 354.81338923357544,
+          "fft_bins": 13,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 398.1071705534972,
+          "lower_hz": 354.81338923357544,
+          "upper_hz": 446.683592150963,
+          "fft_bins": 15,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 501.18723362727224,
+          "lower_hz": 446.68359215096314,
+          "upper_hz": 562.3413251903489,
+          "fft_bins": 20,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 630.9573444801932,
+          "lower_hz": 562.3413251903492,
+          "upper_hz": 707.9457843841378,
+          "fft_bins": 24,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 794.3282347242815,
+          "lower_hz": 707.9457843841379,
+          "upper_hz": 891.2509381337454,
+          "fft_bins": 31,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1000.0,
+          "lower_hz": 891.2509381337456,
+          "upper_hz": 1122.0184543019634,
+          "fft_bins": 39,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1258.9254117941673,
+          "lower_hz": 1122.0184543019636,
+          "upper_hz": 1412.5375446227542,
+          "fft_bins": 50,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1584.8931924611136,
+          "lower_hz": 1412.5375446227545,
+          "upper_hz": 1778.2794100389228,
+          "fft_bins": 61,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1995.2623149688795,
+          "lower_hz": 1778.2794100389228,
+          "upper_hz": 2238.7211385683395,
+          "fft_bins": 78,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 2511.8864315095802,
+          "lower_hz": 2238.72113856834,
+          "upper_hz": 2818.382931264454,
+          "fft_bins": 98,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3162.2776601683795,
+          "lower_hz": 2818.3829312644543,
+          "upper_hz": 3548.1338923357544,
+          "fft_bins": 124,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3981.0717055349724,
+          "lower_hz": 3548.133892335755,
+          "upper_hz": 4466.835921509631,
+          "fft_bins": 155,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 5011.872336272722,
+          "lower_hz": 4466.835921509631,
+          "upper_hz": 5623.41325190349,
+          "fft_bins": 196,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 6309.573444801933,
+          "lower_hz": 5623.413251903492,
+          "upper_hz": 7079.457843841379,
+          "fft_bins": 247,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 7943.282347242815,
+          "lower_hz": 7079.45784384138,
+          "upper_hz": 8912.509381337455,
+          "fft_bins": 310,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 10000.0,
+          "lower_hz": 8912.509381337457,
+          "upper_hz": 11220.184543019634,
+          "fft_bins": 390,
+          "complete_nyquist_support": true
+        }
+      ],
+      "spectrogram_requested_window_s": 0.056408101331513236,
+      "spectrogram_actual_window_s": 0.05640827384371146,
+      "spectrogram_resolution_hz": 17.72789578299572,
+      "spectrogram_frames": 5,
+      "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
+      "angle_deg": 90,
+      "elapsed_span_s": 0.1692101318764876,
+      "skipped_acoustic_samples": 0
+    },
+    "3": {
+      "retained_samples": 11521,
+      "duration_s": 0.16923951118578118,
+      "sample_rate_hz": 68075.11980670356,
+      "resolution_hz": 5.90878567890839,
+      "equivalent_noise_bandwidth_hz": 8.863178518362584,
+      "welch_segment_samples": 11521,
+      "window": "hann",
+      "welch_segments": 1,
+      "retained_revolutions": 3.0002695923259695,
+      "cfd_samples_per_10khz_period": 14.182360000000001,
+      "acoustic_samples_per_10khz_period": 6.8075119806703555,
+      "band_resolution": [
+        {
+          "center_hz": 50.11872336272722,
+          "lower_hz": 44.66835921509631,
+          "upper_hz": 56.2341325190349,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 63.09573444801933,
+          "lower_hz": 56.234132519034915,
+          "upper_hz": 70.7945784384138,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 79.43282347242814,
+          "lower_hz": 70.7945784384138,
+          "upper_hz": 89.12509381337453,
+          "fft_bins": 4,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 100.0,
+          "lower_hz": 89.12509381337456,
+          "upper_hz": 112.20184543019633,
+          "fft_bins": 3,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 125.89254117941672,
+          "lower_hz": 112.20184543019636,
+          "upper_hz": 141.25375446227542,
+          "fft_bins": 5,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 158.48931924611134,
+          "lower_hz": 141.25375446227542,
+          "upper_hz": 177.82794100389225,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 199.526231496888,
+          "lower_hz": 177.8279410038923,
+          "upper_hz": 223.87211385683398,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 251.188643150958,
+          "lower_hz": 223.87211385683398,
+          "upper_hz": 281.83829312644536,
+          "fft_bins": 10,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 316.22776601683796,
+          "lower_hz": 281.8382931264454,
+          "upper_hz": 354.81338923357544,
+          "fft_bins": 13,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 398.1071705534972,
+          "lower_hz": 354.81338923357544,
+          "upper_hz": 446.683592150963,
+          "fft_bins": 15,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 501.18723362727224,
+          "lower_hz": 446.68359215096314,
+          "upper_hz": 562.3413251903489,
+          "fft_bins": 20,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 630.9573444801932,
+          "lower_hz": 562.3413251903492,
+          "upper_hz": 707.9457843841378,
+          "fft_bins": 24,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 794.3282347242815,
+          "lower_hz": 707.9457843841379,
+          "upper_hz": 891.2509381337454,
+          "fft_bins": 31,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1000.0,
+          "lower_hz": 891.2509381337456,
+          "upper_hz": 1122.0184543019634,
+          "fft_bins": 39,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1258.9254117941673,
+          "lower_hz": 1122.0184543019636,
+          "upper_hz": 1412.5375446227542,
+          "fft_bins": 50,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1584.8931924611136,
+          "lower_hz": 1412.5375446227545,
+          "upper_hz": 1778.2794100389228,
+          "fft_bins": 61,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1995.2623149688795,
+          "lower_hz": 1778.2794100389228,
+          "upper_hz": 2238.7211385683395,
+          "fft_bins": 78,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 2511.8864315095802,
+          "lower_hz": 2238.72113856834,
+          "upper_hz": 2818.382931264454,
+          "fft_bins": 98,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3162.2776601683795,
+          "lower_hz": 2818.3829312644543,
+          "upper_hz": 3548.1338923357544,
+          "fft_bins": 124,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3981.0717055349724,
+          "lower_hz": 3548.133892335755,
+          "upper_hz": 4466.835921509631,
+          "fft_bins": 155,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 5011.872336272722,
+          "lower_hz": 4466.835921509631,
+          "upper_hz": 5623.41325190349,
+          "fft_bins": 196,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 6309.573444801933,
+          "lower_hz": 5623.413251903492,
+          "upper_hz": 7079.457843841379,
+          "fft_bins": 247,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 7943.282347242815,
+          "lower_hz": 7079.45784384138,
+          "upper_hz": 8912.509381337455,
+          "fft_bins": 310,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 10000.0,
+          "lower_hz": 8912.509381337457,
+          "upper_hz": 11220.184543019634,
+          "fft_bins": 390,
+          "complete_nyquist_support": true
+        }
+      ],
+      "spectrogram_requested_window_s": 0.056408101331513236,
+      "spectrogram_actual_window_s": 0.05640827384371146,
+      "spectrogram_resolution_hz": 17.72789578299572,
+      "spectrogram_frames": 5,
+      "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
+      "angle_deg": 105,
+      "elapsed_span_s": 0.16922482153113438,
+      "skipped_acoustic_samples": 0
+    },
+    "4": {
+      "retained_samples": 11521,
+      "duration_s": 0.16923951118578118,
+      "sample_rate_hz": 68075.11980670356,
+      "resolution_hz": 5.90878567890839,
+      "equivalent_noise_bandwidth_hz": 8.863178518362584,
+      "welch_segment_samples": 11521,
+      "window": "hann",
+      "welch_segments": 1,
+      "retained_revolutions": 3.0002695923259695,
+      "cfd_samples_per_10khz_period": 14.182360000000001,
+      "acoustic_samples_per_10khz_period": 6.8075119806703555,
+      "band_resolution": [
+        {
+          "center_hz": 50.11872336272722,
+          "lower_hz": 44.66835921509631,
+          "upper_hz": 56.2341325190349,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 63.09573444801933,
+          "lower_hz": 56.234132519034915,
+          "upper_hz": 70.7945784384138,
+          "fft_bins": 2,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 79.43282347242814,
+          "lower_hz": 70.7945784384138,
+          "upper_hz": 89.12509381337453,
+          "fft_bins": 4,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 100.0,
+          "lower_hz": 89.12509381337456,
+          "upper_hz": 112.20184543019633,
+          "fft_bins": 3,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 125.89254117941672,
+          "lower_hz": 112.20184543019636,
+          "upper_hz": 141.25375446227542,
+          "fft_bins": 5,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 158.48931924611134,
+          "lower_hz": 141.25375446227542,
+          "upper_hz": 177.82794100389225,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 199.526231496888,
+          "lower_hz": 177.8279410038923,
+          "upper_hz": 223.87211385683398,
+          "fft_bins": 7,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 251.188643150958,
+          "lower_hz": 223.87211385683398,
+          "upper_hz": 281.83829312644536,
+          "fft_bins": 10,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 316.22776601683796,
+          "lower_hz": 281.8382931264454,
+          "upper_hz": 354.81338923357544,
+          "fft_bins": 13,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 398.1071705534972,
+          "lower_hz": 354.81338923357544,
+          "upper_hz": 446.683592150963,
+          "fft_bins": 15,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 501.18723362727224,
+          "lower_hz": 446.68359215096314,
+          "upper_hz": 562.3413251903489,
+          "fft_bins": 20,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 630.9573444801932,
+          "lower_hz": 562.3413251903492,
+          "upper_hz": 707.9457843841378,
+          "fft_bins": 24,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 794.3282347242815,
+          "lower_hz": 707.9457843841379,
+          "upper_hz": 891.2509381337454,
+          "fft_bins": 31,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1000.0,
+          "lower_hz": 891.2509381337456,
+          "upper_hz": 1122.0184543019634,
+          "fft_bins": 39,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1258.9254117941673,
+          "lower_hz": 1122.0184543019636,
+          "upper_hz": 1412.5375446227542,
+          "fft_bins": 50,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1584.8931924611136,
+          "lower_hz": 1412.5375446227545,
+          "upper_hz": 1778.2794100389228,
+          "fft_bins": 61,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 1995.2623149688795,
+          "lower_hz": 1778.2794100389228,
+          "upper_hz": 2238.7211385683395,
+          "fft_bins": 78,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 2511.8864315095802,
+          "lower_hz": 2238.72113856834,
+          "upper_hz": 2818.382931264454,
+          "fft_bins": 98,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3162.2776601683795,
+          "lower_hz": 2818.3829312644543,
+          "upper_hz": 3548.1338923357544,
+          "fft_bins": 124,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 3981.0717055349724,
+          "lower_hz": 3548.133892335755,
+          "upper_hz": 4466.835921509631,
+          "fft_bins": 155,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 5011.872336272722,
+          "lower_hz": 4466.835921509631,
+          "upper_hz": 5623.41325190349,
+          "fft_bins": 196,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 6309.573444801933,
+          "lower_hz": 5623.413251903492,
+          "upper_hz": 7079.457843841379,
+          "fft_bins": 247,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 7943.282347242815,
+          "lower_hz": 7079.45784384138,
+          "upper_hz": 8912.509381337455,
+          "fft_bins": 310,
+          "complete_nyquist_support": true
+        },
+        {
+          "center_hz": 10000.0,
+          "lower_hz": 8912.509381337457,
+          "upper_hz": 11220.184543019634,
+          "fft_bins": 390,
+          "complete_nyquist_support": true
+        }
+      ],
+      "spectrogram_requested_window_s": 0.056408101331513236,
+      "spectrogram_actual_window_s": 0.05640827384371146,
+      "spectrogram_resolution_hz": 17.72789578299572,
+      "spectrogram_frames": 5,
+      "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
+      "angle_deg": 135,
+      "elapsed_span_s": 0.16922482153113438,
+      "skipped_acoustic_samples": 0
+    }
+  },
+  "oaspl": {
+    "oaspl_unweighted": {
+      "2": 64.38453150098434,
+      "3": 67.26744462565105,
+      "4": 66.07062591322016
+    },
+    "oaspl_a_weighted": {
+      "2": 59.276911822365136,
+      "3": 62.783926341843554,
+      "4": 62.51725072983394
+    },
+    "oaspl_a_weighted_measurement_matched": {
+      "2": 59.55238178857595,
+      "3": 63.01015311178264,
+      "4": 62.7325151906125
+    }
+  },
+  "oaspl_literal_frequency_interval_hz": [
+    40.0,
+    10000.0
+  ],
+  "power_normalization": "Welch density times frequency-bin width",
+  "third_octave_convention": "IEC base-10 frequency definitions; full bands, FFT-bin integration",
+  "observer_radius_m": null,
+  "observer_geometry_basis": "See simulation input",
+  "measurement_comparison_basis": "IEC base-10 bands assumed; measurement distance and propagation normalization unverified",
+  "limitations": [
+    "FFT-bin integration is not a certified IEC filter bank",
+    "Few-bin bands and one-periodogram records have limited spectral resolution and statistical confidence",
+    "Nyquist support does not establish CFD temporal or spatial accuracy",
+    "Harmonic fits estimate stationary coherent tones; modulation and broadband remain in residuals"
+  ]
+}

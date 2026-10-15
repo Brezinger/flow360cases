@@ -23,7 +23,7 @@ apply another universal dB shift.
 | Nearest-bin tone scalloping | Fit cosine/sine and DC terms at known physical frequencies. Display per-case frequencies. |
 | Overlapping neighbourhoods presented as isolated harmonics | Fit harmonics jointly and plot their coherent stationary RMS amplitudes. The explicit band-neighbourhood helper retains its documented overlap limitation. |
 | Broadband amplitude levels depend on bandwidth | Add PSD plots in dB re (20 µPa)²/Hz; disclose df, ENBW and averaging. Amplitude spectra remain available for tone inspection. |
-| Short fixed spectrogram window suppresses BPF | Default to one revolution, remove the global mean once, show density versus seconds, and use explicit cell edges for single-frame plots. |
+| Spectrogram display | Restore the historical 512-sample, 50%-overlap SPL view with per-window mean removal, normalized time, and 0–120 dB colors. Explicit physical windows remain available for PSD diagnostics. |
 
 Low-level spectral helpers treat supplied arrays as authoritative. The dataset
 pipeline clips Flow360 padding once using a common observer window. Arrays passed
@@ -91,8 +91,14 @@ Pusher continuation, skipping the first 150 CFD steps:
 always report both literal unweighted and A-weighted values. `--revolutions
 zero:1-3` selects the second and third revolutions after the initial cut.
 `--nperseg All` is the default full-record periodogram; an integer enables shorter
-Welch segments and averaging when enough samples exist. `--spectrogram-window-s
-0.06` selects a 60 ms physical window independently of RPM and sample rate.
+Welch segments and averaging when enough samples exist. Spectrograms alone default
+to the historical 512-sample window, 50% overlap, spectrum scaling, per-window
+mean removal, time fraction axis, and 0–120 dB color range. `--spectrogram-window-s
+0.06` opts into a 60 ms physical-window PSD view independently of RPM and sample rate.
+Pusher spectrograms use 78 samples per window with 50% overlap, giving 44 frames
+for the current retained records, matching Lifter4B's normalized frame width.
+This affects only spectrograms; the shorter window gives coarser frequency bins
+(about 410 Hz). All other spectra and acoustic calculations retain their settings.
 
 ## Remaining physical and statistical limits
 

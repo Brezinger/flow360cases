@@ -197,14 +197,16 @@
           "complete_nyquist_support": true
         }
       ],
-      "spectrogram_requested_window_s": 0.027447392497712716,
-      "spectrogram_actual_window_s": 0.02744739393071761,
-      "spectrogram_resolution_hz": 36.43333143118025,
-      "spectrogram_frames": 3,
+      "spectrogram_requested_window_s": null,
+      "spectrogram_actual_window_s": 0.0024383789596765077,
+      "spectrogram_resolution_hz": 410.1085255971316,
+      "spectrogram_frames": 44,
       "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
       "angle_deg": 20,
       "elapsed_span_s": 0.054894787861435215,
-      "skipped_acoustic_samples": 75
+      "skipped_acoustic_samples": 75,
+      "spectrogram_scaling": "spectrum",
+      "spectrogram_segment_samples": 78
     },
     "2": {
       "retained_samples": 1757,
@@ -388,14 +390,16 @@
           "complete_nyquist_support": true
         }
       ],
-      "spectrogram_requested_window_s": 0.027447392497712716,
-      "spectrogram_actual_window_s": 0.02744739393071761,
-      "spectrogram_resolution_hz": 36.43333143118025,
-      "spectrogram_frames": 3,
+      "spectrogram_requested_window_s": null,
+      "spectrogram_actual_window_s": 0.0024383789596765077,
+      "spectrogram_resolution_hz": 410.1085255971316,
+      "spectrogram_frames": 44,
       "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
       "angle_deg": 45,
       "elapsed_span_s": 0.054894787861435215,
-      "skipped_acoustic_samples": 75
+      "skipped_acoustic_samples": 75,
+      "spectrogram_scaling": "spectrum",
+      "spectrogram_segment_samples": 78
     },
     "3": {
       "retained_samples": 1763,
@@ -579,14 +583,16 @@
           "complete_nyquist_support": true
         }
       ],
-      "spectrogram_requested_window_s": 0.027447392497712716,
-      "spectrogram_actual_window_s": 0.02744739393071761,
-      "spectrogram_resolution_hz": 36.43333143118025,
-      "spectrogram_frames": 3,
+      "spectrogram_requested_window_s": null,
+      "spectrogram_actual_window_s": 0.0024383789596765077,
+      "spectrogram_resolution_hz": 410.1085255971316,
+      "spectrogram_frames": 44,
       "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
       "angle_deg": 90,
       "elapsed_span_s": 0.05508235547371803,
-      "skipped_acoustic_samples": 75
+      "skipped_acoustic_samples": 75,
+      "spectrogram_scaling": "spectrum",
+      "spectrogram_segment_samples": 78
     },
     "4": {
       "retained_samples": 1760,
@@ -770,14 +776,16 @@
           "complete_nyquist_support": true
         }
       ],
-      "spectrogram_requested_window_s": 0.027447392497712716,
-      "spectrogram_actual_window_s": 0.02744739393071761,
-      "spectrogram_resolution_hz": 36.43333143118025,
-      "spectrogram_frames": 3,
+      "spectrogram_requested_window_s": null,
+      "spectrogram_actual_window_s": 0.0024383789596765077,
+      "spectrogram_resolution_hz": 410.1085255971316,
+      "spectrogram_frames": 44,
       "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
       "angle_deg": 135,
       "elapsed_span_s": 0.054988571667576626,
-      "skipped_acoustic_samples": 75
+      "skipped_acoustic_samples": 75,
+      "spectrogram_scaling": "spectrum",
+      "spectrogram_segment_samples": 78
     },
     "5": {
       "retained_samples": 1756,
@@ -961,14 +969,16 @@
           "complete_nyquist_support": true
         }
       ],
-      "spectrogram_requested_window_s": 0.027447392497712716,
-      "spectrogram_actual_window_s": 0.02744739393071761,
-      "spectrogram_resolution_hz": 36.43333143118025,
-      "spectrogram_frames": 3,
+      "spectrogram_requested_window_s": null,
+      "spectrogram_actual_window_s": 0.0024383789596765077,
+      "spectrogram_resolution_hz": 410.1085255971316,
+      "spectrogram_frames": 44,
       "tone_method": "joint stationary sinusoidal regression at known harmonic frequencies",
       "angle_deg": 160,
       "elapsed_span_s": 0.054863526592721416,
-      "skipped_acoustic_samples": 75
+      "skipped_acoustic_samples": 75,
+      "spectrogram_scaling": "spectrum",
+      "spectrogram_segment_samples": 78
     }
   },
   "oaspl": {

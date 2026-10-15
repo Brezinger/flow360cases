@@ -1,0 +1,100 @@
+% Compile twice with XeLaTeX. Uses the supplied Achleitner report class.
+\documentclass[english]{achleitner-report}
+\renewcommand{\reporttitle}{\texorpdfstring{Pusher aeroacoustics\newline Accuracy and mitigation}{Pusher aeroacoustics: accuracy and mitigation}}
+\renewcommand{\reportshorttitle}{Pusher aeroacoustic accuracy}
+\renewcommand{\reportid}{PUSHER-ACOUSTICS-2026-10-08}
+\renewcommand{\reportrevision}{A}
+\renewcommand{\reportdate}{08 October 2026}
+\renewcommand{\reportauthor}{Engineering analysis draft (AI-assisted)}
+\renewcommand{\reportproject}{DUC EVE Pusher study}
+\renewcommand{\reportconfiguration}{2.120 m diameter, four-blade Pusher; step3 and step3B}
+\renewcommand{\reportoperatingpoint}{2186 RPM; density 1.183912 kg/m$^3$; temperature 298.15 K}
+\renewcommand{\reportmethod}{Flow360 acoustic CSV review and spectral normalization analysis}
+\renewcommand{\reportrecipients}{Pusher study team}
+\renewcommand{\reportpurpose}{Identify the absolute SPL bias and define postprocessing corrections and simulation checks.}
+\renewcommand{\reportstatus}{Draft; not yet reviewed}
+\renewcommand{\reportclassification}{Internal}
+\let\reportcoverimage\empty
+\begin{document}
+\makereportcover
+% Compact front matter for this short technical note.
+\reportdocumentcontrol
+\pagenumbering{arabic}
+\section{Finding and scope}
+The current postprocessing overestimates integrated sound pressure levels by \textbf{1.7609 dB} relative to a bandwidth-corrected Hann-window power integral. This is a deterministic normalization issue in the plotting code. Separately, the available sampling and short signal duration limit confidence in high-frequency broadband predictions. Correcting the code cannot establish that the underlying simulation is converged.
+
+This review concerns \texttt{plot\_aeroacoustics.py} at repository commit \texttt{3aa4a6e}. No correction has been implemented in this report. The inputs are the step3 case\newline\texttt{ed80b35a-78a0-413a-a8a5-5c158fb87127}.\newline The step3 and step3B files are named \texttt{total\_acoustics\_v3.csv}. The Pusher configuration comes from \texttt{DUC\_EVE\_Pusher\_noise.py}.
+
+\begin{reporttable}{|Y|Y|}
+\reporttablehead\headcell{Reference} & \headcell{Current Pusher values}\\\hline
+Observer CSV indices & 0, 1, 2, 3, 4\\\hline
+Angles from upstream propeller axis & $20^\circ$, $45^\circ$, $90^\circ$, $135^\circ$, $160^\circ$\\\hline
+Observer radius from hub & 1000 ft = 304.8 m\\\hline
+Reported integration band & 40--10\,000 Hz; reference pressure $p_0=20\,\mu$Pa\\\hline
+\end{reporttable}
+
+The CLI numbering \texttt{--observers 1,2,3,4,5 --csv-observer-offset -1} selects the correct five CSV observers. Angle labels were corrected for this study. The pressure is evaluated at the actual observer positions; the script applies no distance correction. These results must therefore be reported at 304.8 m. POC2 experimental overlays must not be matched to the Pusher by observer number alone.
+
+\section{Origin and impact of the SPL bias}
+The script uses SciPy \texttt{welch} with a Hann window, \texttt{scaling="spectrum"}, and a segment length equal to the retained signal length. OASPL and band levels are then calculated by summing these spectrum values. With one full-length segment, the configured overlap produces no additional segment averaging.
+
+Let $S_k$ be the spectrum output (Pa$^2$), $G_k$ the power spectral density (Pa$^2$/Hz), $f_s$ the sample rate, and $w_n$ the window. SciPy defines [1]
+\begin{equation*}
+ S_k=G_k B_e,\qquad B_e=f_s\frac{\sum_n w_n^2}{(\sum_n w_n)^2}.
+\end{equation*}
+For a periodic Hann window with no FFT zero padding, $B_e=1.5\Delta f$. The band power is $\sum_k G_k\Delta f$, whereas the present calculation uses $\sum_k S_k$, which is 1.5 times larger for the same bins. Thus
+\begin{equation*}
+ L_{\mathrm{current}}-L_{\mathrm{corrected}}=10\log_{10}(1.5)=1.7609\ \mathrm{dB}.
+\end{equation*}
+\clearpage
+\section{Sampling and statistical limitations}
+At 2186 RPM and 1756 solver steps per revolution, the solver interval is $60/(2186\times1756)=15.63\,\mu$s. The acoustic timestamps give approximately $31.26\,\mu$s, twice the solver interval. The script derives its spectral frequency axis from these timestamps, so this difference is already accounted for in the frequency conversion.
+
+\begin{reporttable}{|Y|c|c|}
+\reporttablehead\headcell{Quantity} & \headcell{Solver} & \headcell{Acoustic CSV}\\\hline
+Interval & 15.63 $\mu$s & 31.26 $\mu$s\\\hline
+Sampling rate & 63.98 kHz & 31.99 kHz\\\hline
+Samples per 10 kHz period & 6.40 & 3.20\\\hline
+\end{reporttable}
+
+The acoustic Nyquist frequency is approximately 16 kHz. Although 10 kHz lies below this limit, that does not demonstrate adequate solver accuracy or exclude aliasing. The CSV interval is consistent with the earlier step2 acoustic sampling continuing across the fork; this should be checked against archived solver settings before designing a refinement run.
+
+The useful step3 signal spans approximately 0.055 s, or two revolutions. Zero values outside each observer's valid arrival-time interval are padding and are clipped before spectral analysis. For the combined step3/step3B analysis, the first 150 CFD steps correspond to 75 acoustic samples and are removed independently for each observer. Timestamp alignment is required; consecutive signal windows are extended, and any actual overlap is summed.
+
+Two revolutions provide limited broadband statistics. Hann tapering also reduces the influence of events near the record boundaries. Consequently, the small change after excluding the initial transient does not, by itself, rule out transient contamination. The nominal full-record frequency spacing is about 18 Hz, with a Hann equivalent noise bandwidth of about 27 Hz.
+
+\section{Mitigation and verification strategy}
+\begin{enumerate}
+\item \textbf{Correct integrated levels.} Use \texttt{scaling="density"}, retain the existing physical pressure and timestamp conversions, and compute band power as $\sum_k G_k\Delta f$. For A-weighting, multiply each PSD bin by $10^{A(f_k)/10}$ before integration. Apply this to OASPL, third-octave bands, and integrated harmonic bands.
+\item \textbf{Keep spectral quantities explicit.} Label PSD plots in dB re $(20\,\mu\mathrm{Pa})^2$/Hz, or explicitly define power-per-bin plots. Preserve a separate amplitude-normalized calculation if single-bin tone estimates are required; do not blindly subtract 1.76 dB from individual tone peaks. Prefer an integrated tone band where leakage is material. Audit spectrogram units at the same time.
+\item \textbf{Verify the implementation.} Use known-amplitude, bin-centred and off-bin sinusoids plus broadband noise. Compare full-band PSD power with the matching window-normalized time-domain power; verify A-weighting at 1 kHz and band-edge handling. Confirm the 1.7609 dB legacy-to-corrected shift with identical bins and settings.
+\end{enumerate}
+\clearpage
+\section{Release criteria and expected effect}
+\begin{enumerate}[start=4]
+\item \textbf{Regenerate and document results.} Save corrected plots, numerical levels, CSV observer mapping, analysis interval, sample rate, window, segment length, and command line. Keep legacy results clearly identified for traceability. Do not change observer-distance scaling unless a separate propagation correction is explicitly requested.
+\item \textbf{Assess simulation convergence.} Compare settled records at finer solver time steps and finer acoustic sampling, keeping the operating point, geometry, observer positions, and processing identical. Ensure the requested acoustic interval actually takes effect when restarting or forking. Compare OASPL, blade-passing harmonics, and upper-frequency band levels; mesh and model adequacy remain separate checks.
+\item \textbf{Extend the settled record.} Accumulate more revolutions and examine successive time blocks. Select a segment length that balances frequency resolution against statistical averaging. Agree convergence tolerances before interpreting the final absolute noise predictions.
+\end{enumerate}
+
+The current Hann integration bias affects unweighted and A-weighted OASPL, third-octave levels, and harmonic band sums. For illustration, the original step3 observer 3 (CSV observer2, $90^\circ$) changes as follows when only the normalization is corrected:
+
+\begin{reporttable}{|Y|c|c|}
+\reporttablehead\headcell{Quantity} & \headcell{Current} & \headcell{Expected corrected}\\\hline
+OASPL, 40--10\,000 Hz & 77.48 dB & 75.72 dB\\\hline
+A-weighted OASPL, same band & 67.25 dBA & 65.49 dBA\\\hline
+\end{reporttable}
+
+These corrected values are analytical expectations, not outputs from an updated script. They assume the same retained samples, frequency bins, Hann window, and detrending. A corrected Hann-weighted estimate can still differ from unwindowed time-domain RMS for a nonstationary record.
+
+\textbf{Recommended disposition.} Retain current results as legacy outputs. Correct and verify the integrated-power calculation before absolute SPL reporting or comparison with measurements. Existing comparisons processed identically retain their level differences because the common normalization offset cancels. Confidence in high-frequency broadband noise additionally requires time-step, acoustic-sampling, and record-length convergence evidence.
+
+\section*{Sources and traceability}
+\small
+[1] SciPy, \emph{scipy.signal.welch}: scaling definitions and window normalization ratio, accessed 08 October 2026.\\
+\url{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html}
+
+[2] Local code: \texttt{DUC/results\_postprocessing/plot\_aeroacoustics.py}; \texttt{DUC/Pusher/DUC\_EVE\_Pusher\_noise.py}, repository commit \texttt{3aa4a6e}.
+
+[3] Local analysis records: \texttt{Pusher/aeroacoustic\_plots/step3B/analysis\_manifest.json}, \texttt{commands.txt}, and the previously calculated original step3 levels. This note reviews postprocessing; it is not a validation of the complete Flow360 acoustic model.
+\end{document}

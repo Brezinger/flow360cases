@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-from scipy.signal import get_window
+from scipy.signal import get_window, spectrogram
 
 from DUC.results_postprocessing import plot_aeroacoustics as a
 
@@ -33,6 +33,19 @@ def make_dataset(pressure, sample_rate_hz=32000.0, rpm=1000.0):
 
 class SpectrogramResolutionTests(unittest.TestCase):
     fs = 32000.0
+
+    def test_default_restores_historical_spectrogram(self):
+        fs = 68075.11980670356
+        pressure = np.random.default_rng(42).normal(size=11520)
+        frequencies, times, levels = a._spectrogram_spl_db(pressure, fs)
+        expected_f, expected_t, expected_power = spectrogram(
+            pressure - pressure.mean(), fs=fs, window=a.WINDOW,
+            nperseg=512, noverlap=256, scaling="spectrum", detrend="constant", mode="psd",
+        )
+        self.assertEqual(len(times), 44)
+        np.testing.assert_array_equal(frequencies, expected_f)
+        np.testing.assert_array_equal(times, expected_t)
+        np.testing.assert_allclose(levels, a._db_from_power(expected_power))
 
     def power_from_levels(self, frequencies, levels):
         density = a.ACOUSTIC_PRESSURE_REFERENCE_PA**2 * 10.0**(levels / 10.0)
@@ -94,6 +107,28 @@ class SpectrogramResolutionTests(unittest.TestCase):
 
 
 class ResolutionRendererTests(unittest.TestCase):
+    def test_pusher_spectrograms_match_lifter_frame_count_without_changing_spectra(self):
+        from dataclasses import replace
+
+        for count in (1756, 1757, 1760, 1763):
+            pressure = np.random.default_rng(42).normal(size=count)
+            original = make_dataset(pressure)
+            pusher = replace(original, source_file=Path("Pusher/aeroacoustics/step3/test.csv"))
+            baseline = a.spectral_analysis_metadata(original, 1)
+            metadata = a.spectral_analysis_metadata(pusher, 1)
+            self.assertEqual(metadata["spectrogram_frames"], 44)
+            self.assertEqual(metadata["spectrogram_segment_samples"], 78)
+            for key in baseline:
+                if not key.startswith("spectrogram_"):
+                    self.assertEqual(metadata[key], baseline[key])
+            captured = []
+            with tempfile.TemporaryDirectory() as directory:
+                with patch.object(a, "_save_figure", side_effect=lambda fig, path:
+                                  captured.append(fig.axes[0].collections[0].get_array().size)):
+                    a.render_spectrogram_plots([(pusher, {})], (1,), Path(directory))
+            frequency_bins = np.count_nonzero(np.fft.rfftfreq(78, 1/32000.0) <= 5000)
+            self.assertEqual(captured, [frequency_bins * 44] * 2)
+
     def test_psd_spectrum_density_is_separate_from_amplitude_normalization(self):
         pressure = np.sqrt(2) * np.cos(2 * np.pi * 1000 * np.arange(32000) / 32000.0)
         for segment in (3200, 32000):
@@ -125,7 +160,7 @@ class ResolutionRendererTests(unittest.TestCase):
         self.assertRegex(captured[0][1].lower(), "density|psd")
         self.assertIn("Hz", captured[0][1])
 
-    def test_spectrogram_has_seconds_and_density_colorbar(self):
+    def test_default_spectrogram_restores_fraction_axis_and_spl_colorbar(self):
         pressure = np.cos(2 * np.pi * 1000 * np.arange(32000) / 32000.0)
         dataset = make_dataset(pressure)
         captured = []
@@ -136,6 +171,7 @@ class ResolutionRendererTests(unittest.TestCase):
                 "xlabel": fig.axes[0].get_xlabel(),
                 "colorbar_label": fig.axes[-1].get_ylabel(),
                 "xlim": fig.axes[0].get_xlim(),
+                "clim": fig.axes[0].collections[0].get_clim(),
             })
 
         with tempfile.TemporaryDirectory() as directory:
@@ -143,9 +179,10 @@ class ResolutionRendererTests(unittest.TestCase):
                 a.render_spectrogram_plots([(dataset, {})], (1,), Path(directory))
         self.assertEqual(len(captured), 2)
         for figure in captured:
-            self.assertRegex(figure["xlabel"].lower(), r"time.*\[s\]")
-            self.assertRegex(figure["colorbar_label"].lower(), "density|psd")
-            self.assertIn("Hz", figure["colorbar_label"])
+            self.assertEqual(figure["xlabel"], "Time Fraction")
+            self.assertEqual(figure["colorbar_label"], "SPL [dB]")
+            self.assertEqual(figure["xlim"], (0.0, 1.0))
+            self.assertEqual(figure["clim"], (0.0, 120.0))
 
     def test_single_frame_spectrogram_has_visible_time_width(self):
         # A physical window capped to a very short record yields one frame.

@@ -1,0 +1,554 @@
+    TECHNICAL REPORT
+
+
+
+
+    Acoustic signal processing
+    POC2 worked example
+    DUC noise study; second technical note
+
+
+
+
+    POC2-ACOUSTICS-2026-02 | Revision A | Draft; not yet reviewed
+
+    Engineering analysis draft (AI-assisted)
+    08 October 2026
+
+
+
+
+Achleitner Aerospace GmbH                                           Internal
+                                                                                 Pressure history to spectra and OASPL
+                                                                                   POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+Document control
+
+ Field                               Document information
+
+ Document ID                         POC2-ACOUSTICS-2026-02
+
+                                     Acoustic signal processing
+ Title
+                                     POC2 worked example
+
+ Project / customer                  DUC noise study; second technical note
+
+ Revision / issue date               A / 08 October 2026
+
+ Status / classification             Draft; not yet reviewed / Internal
+
+ Prepared by                         Engineering analysis draft (AI-assisted), Achleitner Aerospace GmbH
+
+ Reviewed by / date                  Not yet reviewed / –
+
+ Approved by / date                  Not yet approved / –
+
+ Distribution                        DUC noise study team
+
+ Configuration                       POC2 step4; four blades; plot observer 3 / CSV observer2
+
+ Operating point                     1000 RPM; density 1.064099 kg/m3 ; temperature 303.275 K
+
+                                     Reproduction of pressure preprocessing and Welch spectral calculations
+ Method
+                                     using real CFD data
+
+                                     Explain narrowband, third-octave and OASPL processing; compare the former
+ Purpose and scope
+                                     and corrected power calculations.
+
+
+Review and approval entries must reflect the actual release status.
+
+
+
+
+Internal | Draft; not yet reviewed                                                               08 October 2026 | ii
+                                                                                      Pressure history to spectra and OASPL
+                                                                                        POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+1 | Real input signal and preprocessing
+
+This report traces the implemented calculation in plot_aeroacoustics.py, using the original POC2
+step4 CFD pressure record. Figures are calculated from actual CSV samples. The detailed example
+is plot observer 3, CSV column observer_2_pressure, with the script’s 105∘ angle label. Results for
+all five observers are also reproduced. No synthetic replacement signal, measurement calibration
+or distance adjustment is applied.
+
+The input is case fb40c043-c99a-4cce-95cf-de9630dba98d; its location and hashes are provided
+with the reproducibility files. The script treats CSV pressure and time as nondimensional:
+
+                                                                         𝐿grid
+                                𝑝𝑛 = 𝑝CSV,𝑛 𝜌𝑎2 ,          𝑡𝑛 = 𝑡CSV,𝑛         ,   𝑎 = √𝛾𝑅𝑇 .
+                                                                          𝑎
+Here 𝛾 = 1.4, 𝑅 = 287.05287 J/(kg K), 𝑎 = 349.110789 m/s and 𝐿grid = 0.001 m. The pressure factor is
+129690.623 Pa. This factor is 𝜌𝑎2 = 𝛾𝑝∞ , not the aerodynamic dynamic pressure 𝜌𝑈ref
+                                                                                   2
+                                                                                     /2.
+
+ Observer 3 record                                                 Measured from CSV
+
+ Downloaded / retained samples                                     23937 / 22968
+
+ Removed leading / trailing zero padding                           501 / 468 samples
+
+ Retained time span / mean interval                                0.172253 s / 7.500023 𝜇s
+
+ Sampling rate / Nyquist frequency                                 133332.924 Hz / approximately 66.67 kHz
+
+                                Downloaded record: padded arrival-time interval
+  Pressure [Pa]
+
+
+
+
+                  0.1
+                  0.0
+                  0.1
+                        0.000   0.025       0.050           0.075     0.100     0.125           0.150        0.175
+                                                           CSV elapsed time [s]
+                                                Retained observer signal
+  Pressure [Pa]
+
+
+
+
+                  0.1
+                  0.0
+                  0.1
+                        0.000   0.025       0.050       0.075         0.100      0.125             0.150        0.175
+                                               Time since first retained sample [s]
+                                       Mean removed: first propeller revolution
+                  0.1
+  p [Pa]
+
+
+
+
+                  0.0
+                  0.1
+                        0.00         0.01           0.02           0.03            0.04         0.05            0.06
+                                                              Elapsed time [s]
+  Figure 1: Actual POC2 pressure samples: downloaded record, retained signal and a one-revolution detail
+                    after mean removal. Shading marks the retained arrival-time interval.
+
+Leading and trailing exact zeros are clipped separately for each observer. Interior zeros remain.
+The retained mean is −0.008004 Pa; the acoustic fluctuation is 𝑝𝑛′ = 𝑝𝑛 − 𝑝. Plotting time is rebased
+to zero; frequency spacing uses the dimensional CSV timestamps. No samples are skipped or in-
+terpolated in this example.
+
+
+
+
+Internal | Draft; not yet reviewed                                                                     08 October 2026 | 1
+                                                                                      Pressure history to spectra and OASPL
+                                                                                        POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+2 | Hann window and Fourier transform
+
+The retained signal has 𝑁 = 22968 samples. The current setting NPERSEG="All" uses one full-length
+segment. A 50% overlap is configured, but a second segment cannot fit; consequently this is a
+single windowed periodogram evaluated through Welch’s interface. Shorter segments would allow
+averaged periodograms, trading frequency resolution for statistical averaging.
+
+The periodic Hann window and windowed discrete Fourier transform (DFT) are
+                                                                       𝑁−1
+                               𝑤𝑛 = 21 [1 − cos(2𝜋𝑛/𝑁 )] ,       𝑋𝑘 = ∑ 𝑤𝑛 𝑝𝑛′ exp(−i2𝜋𝑘𝑛/𝑁 ).
+                                                                       𝑛=0
+
+Mean removal precedes windowing. SciPy also applies its default constant detrend; for this one
+segment it only removes any residual numerical mean. The record duration for the DFT is 𝑁 /𝑓𝑠 =
+0.172261 s. This differs by one sample interval from the plotted first-to-last time span, (𝑁 − 1)/𝑓𝑠 .
+
+
+                                                                                             Pressure fluctuation
+                 0.1                                                                         Hann-windowed fluctuation
+Pressure [Pa]
+
+
+
+
+                 0.0
+                 0.1
+
+                1.00
+                0.75
+ Hann weight
+
+
+
+
+                0.50
+                0.25
+                0.00
+                       0.000       0.025         0.050         0.075      0.100           0.125      0.150        0.175
+                                                               Elapsed time [s]
+          Figure 2: The same POC2 fluctuation before and after Hann tapering, and the corresponding window
+                         weights. The centre of the record receives more weight than its edges.
+
+Frequency bins are 𝑓𝑘 = 𝑘𝑓𝑠 /𝑁 and Δ𝑓 = 𝑓𝑠 /𝑁 = 5.805160 Hz. There is no FFT zero padding. For a
+real pressure record, the negative-frequency power is folded into positive frequencies. Let 𝑐𝑘 = 2
+for positive interior bins and 𝑐𝑘 = 1 for DC and the Nyquist bin (when present). The two SciPy
+normalizations are [1]
+
+                                            𝑐𝑘 |𝑋𝑘 |2      2                  𝑐𝑘 |𝑋𝑘 |2       2
+                                   𝐺𝑘 =                 [Pa /Hz],     𝑆𝑘 =                 [Pa ].
+                                           𝑓𝑠 ∑𝑛 𝑤𝑛2                         (∑𝑛 𝑤𝑛 )2
+
+𝐺𝑘 is power spectral density (PSD); 𝑆𝑘 is the amplitude-normalized squared spectrum. The window
+reduces boundary leakage but spreads tones across neighbouring bins. It also changes the time
+weighting of a transient record. Window normalization compensates its power gain; it does not
+restore information suppressed at the edges.
+
+
+
+
+Internal | Draft; not yet reviewed                                                                     08 October 2026 | 2
+                                                                                                                       Pressure history to spectra and OASPL
+                                                                                                                         POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+       3 | What the narrowband plot represents
+
+       The main script deliberately retains scaling="spectrum" for its narrowband display and nearest-bin
+       tone estimate. The displayed level is 10 log10 (𝑆𝑘 /𝑝02 ), with 𝑝0 = 20 𝜇Pa. It is an amplitude-normalized
+       spectrum, not a PSD and not additive acoustic power per bin.
+
+                         Quantity                                          Units / level reference               Use
+
+                         Amplitude spectrum                                                                      Tone-amplitude display; do not
+                                                                           Pa2 / 𝑝02
+                         𝑆𝑘                                                                                      directly sum.
+
+                                                                                                                 Density of acoustic power;
+                         PSD 𝐺𝑘                                            Pa2 /Hz / 𝑝02 /Hz
+                                                                                                                 integrate over frequency.
+
+                                                                                                                 Additive contribution to band
+                         Bin power 𝑃𝑘 = 𝐺𝑘 Δ𝑓                              Pa2 / 𝑝02
+                                                                                                                 power and OASPL.
+
+                                                                                   Same FFT, two normalizations
+Level re (20 microPa)2 [dB] Level re (20 microPa)2 [dB]
+
+
+
+
+                                                          75
+                                                          50
+                                                          25
+                                                           0                                                       Amplitude-normalized spectrum S
+                                                                                                                   Additive bin power G x df
+                                                                     102                                   103                                         104
+                                                                                               Frequency [Hz]
+                                                                           Blade-passing-frequency region: 66.67 Hz
+                                                          60
+                                                          40
+                                                          20
+                                                           0
+                                                               50   55            60           65          70            75             80             85
+                                                                                               Frequency [Hz]
+          Figure 3: POC2 observer 3: amplitude-normalized narrowband levels and additive bin-power levels from the
+            same FFT. The second panel resolves the blade-passing-frequency region. Their constant separation is a
+                                normalization difference, not two different pressure signals.
+
+       At 1000 RPM and four blades, the blade-passing frequency is 66.67 Hz. It lies between this record’s
+       FFT bins; leakage and peak reduction are therefore expected. For a well-isolated, bin-centred sta-
+       tionary tone, the amplitude-normalized peak estimates its mean-square pressure. That statement
+       does not guarantee the same accuracy for an off-bin tone or overlapping components. Integrating
+       a suitable tone band is generally more robust.
+
+       For this Hann window, 𝑆𝑘 = 1.5𝑃𝑘 . Every finite bin therefore differs by 1.7609 dB. The narrowband
+       display is retained with its amplitude interpretation; the correction changes how bins are added for
+       integrated quantities. A-weighted narrowband displays multiply 𝑆𝑘 by 10𝐴(𝑓𝑘 )/10 before converting
+       to dB.
+
+
+
+
+       Internal | Draft; not yet reviewed                                                                                              08 October 2026 | 3
+                                                                                        Pressure history to spectra and OASPL
+                                                                                          POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+   4 | Third-octave bands and overall levels
+
+   The script uses exact binary third-octave centres 𝑓𝑐,𝑚 = 1000 × 2𝑚/3 Hz and edges 𝑓𝑙,𝑚 = 𝑓𝑐,𝑚 2−1/6 ,
+   𝑓𝑢,𝑚 = 𝑓𝑐,𝑚 21/6 . For every band, select bins with 𝑓𝑙,𝑚 ≤ 𝑓𝑘 < 𝑓𝑢,𝑚 , also restricted to the global
+   40–10 000 Hz interval. Correct band power and level are
+
+                                          𝑃𝑚 = ∑ 𝐺𝑘 Δ𝑓,           𝐿𝑚 = 10 log10 (𝑃𝑚 /𝑝02 ) .
+                                                  𝑘∈𝑚
+
+
+   For A-weighting, multiply each bin by 𝑊𝑘 = 10𝐴(𝑓𝑘 )/10 before summation. The script normalizes its
+   analytical A-weighting curve to 0 dB at 1 kHz; evaluating weighting at every bin avoids approximating
+   an entire band by its centre-frequency weight.
+
+                                                              Unweighted
+                   60
+Band level [dB]
+
+
+
+
+                   50
+
+                   40                                                           Erroneous: summed amplitude spectrum
+                                                                                Correct: integrated PSD
+
+                                                              A-weighted
+Band level [dBA]
+
+
+
+
+                   40
+
+                   20
+
+                               102                                      103                                            104
+                                            Exact binary third-octave center frequency [Hz]
+        Figure 4: Real POC2 observer 3 third-octave spectra, unweighted and A-weighted. The original summation
+           shifts every populated band upward by 1.7609 dB. The corrected curves preserve the spectral shape.
+
+
+   OASPL in this script means band-limited overall level over 40–10 000 Hz:
+
+                                         ∑40≤𝑓 ≤10000 𝐺𝑘 Δ𝑓                          ∑40≤𝑓 ≤10000 𝐺𝑘 Δ𝑓 𝑊𝑘
+                        𝐿OA = 10 log10        𝑘
+                                                              ,   𝐿OA,A = 10 log10         𝑘
+                                                                                                              .
+                                                  𝑝02                                          𝑝02
+
+   Band-edge detail. The displayed bands begin at 49.6063 Hz, with lower edge 44.1942 Hz. Bins
+   below that edge are not in their sum. The last centre is 10079.3684 Hz and its upper half-band
+   is truncated at 10 kHz. These are the current script’s bin-based bands, not a claim of standards-
+   compliant filter-bank processing. Summing them gives 65.1083 dB, versus 65.1281 dB OASPL; the
+   small difference comes from the omitted low-frequency bin coverage. A-weighted sums are 61.0585
+   and 61.0585 dBA respectively.
+
+
+
+
+   Internal | Draft; not yet reviewed                                                                   08 October 2026 | 4
+                                                                                    Pressure history to spectra and OASPL
+                                                                                      POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+5 | Erroneous and corrected calculations
+
+The original spl_spectra_calculator.py and the former plotting script used the amplitude-
+normalized 𝑆𝑘 both for the narrowband display and for summed levels. The display interpretation
+was valid, but the direct power summation was not window-energy normalized:
+
+                             𝑃wrong,𝑚 = ∑ 𝑆𝑘 ,         𝐿wrong,𝑚 = 10 log10 (𝑃wrong,𝑚 /𝑝02 ).
+                                         𝑘∈𝑚
+
+The same error affected weighted and unweighted OASPL and integrated harmonic bands. A-
+weighting does not remove it because the normalization factor is constant and multiplies every
+bin.
+
+The equivalent noise bandwidth is
+
+                                                    ∑𝑛 𝑤𝑛2
+                                        𝐵𝑒 = 𝑓 𝑠             ,     𝑆 𝑘 = 𝐺 𝑘 𝐵𝑒 .
+                                                   (∑𝑛 𝑤𝑛 )2
+
+For the periodic Hann window, ∑ 𝑤𝑛 = 𝑁 /2, ∑ 𝑤𝑛2 = 3𝑁 /8, so 𝐵𝑒 = 1.5Δ𝑓. In this real record
+𝐵𝑒 = 8.707741 Hz, hence
+
+                             𝑃wrong,𝑚
+                                        = 1.5,      Δ𝐿 = 10 log10 (1.5) = 1.76091259 dB.
+                             𝑃correct,𝑚
+
+This ratio is exact for matching bins and processing settings, apart from floating-point roundoff. It
+is frequency independent. Other errors, including band-edge leakage, limited temporal resolution
+or nonstationarity, need separate assessment.
+
+
+Code comparison for a frequency-band sum
+
+# Former calculation: amplitude spectrum used as additive power
+f, S = welch(p_prime, fs=fs, window="hann", nperseg=N,
+             noverlap=N//2, scaling="spectrum")
+P_wrong = S[band_mask].sum()
+
+# Correct power calculation
+f, G = welch(p_prime, fs=fs, window="hann", nperseg=N,
+             noverlap=N//2, scaling="density")
+df = f[1] - f[0]
+P_correct = (G[band_mask] * df).sum()
+L_correct = 10 * log10(P_correct / (20e-6)**2)
+
+
+For A-weighted sums, use 𝐺𝑘 Δ𝑓 10𝐴(𝑓𝑘 )/10 inside the sum. Decibels must not be added di-
+rectly. If combining already integrated band levels with identical coverage, their energy sum is
+10 log10 (∑𝑚 10𝐿𝑚 /10 ).
+
+The implemented helper _welch_mean_square_spectrum now returns 𝐺𝑘 Δ𝑓. Narrowband ampli-
+tude plots and nearest-bin tone extraction use a separate scaling="spectrum" call. There is there-
+fore no blanket subtraction from individual tone peaks.
+
+
+
+
+Internal | Draft; not yet reviewed                                                                  08 October 2026 | 5
+                                                                                                                     Pressure history to spectra and OASPL
+                                                                                                                       POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+    6 | Numerical effect on real POC2 results
+
+    The complete CSV was processed for all five observers. Each observer’s own padded edges were
+    clipped. Both calculations use the same pressure scaling, mean removal, Hann window, segment
+    length, frequency bins and A-weighting. Only the additive-power normalization differs.
+
+                        70            Erroneous
+                                      Correct
+                                                                                                    64
+                        68
+
+
+
+
+                                                                           A-weighted OASPL [dBA]
+Unweighted OASPL [dB]
+
+
+
+
+                                                                                                    62
+                        66
+                                                                                                    60
+                        64
+                                                                                                    58
+                        62
+                                                                                                    56
+                        60
+                                                                                                    54
+                                 1         2        3       4       5                                       1         2        3       4         5
+                                 0°       90° 105° 135°            180°                                     0°       90° 105° 135°              180°
+                                          Plot observer / angle                                                      Plot observer / angle
+                Figure 5: Original and corrected POC2 step4 OASPLs for all five observers, over 40–10 000 Hz. Every pair
+                                            differs by 1.7609 dB, including A-weighted levels.
+
+
+                             Table 1: POC2 step4 overall levels. Plot observer / zero-based CSV index are shown explicitly.
+
+           Plot / CSV                                                                               Angle   Old dB    New dB      Old dBA     New dBA
+
+           1/0                                                                                       0∘     67.20       65.44      62.72        60.96
+
+           2/1                                                                                       90∘    64.18       62.42      58.65        56.89
+
+           3/2                                                                                      105∘    66.89       65.13      62.82        61.06
+
+           4/3                                                                                      135∘    66.25       64.49      61.68        59.92
+
+           5/4                                                                                      180∘    67.36       65.60      62.02        60.26
+
+
+
+
+    For observer 3, integrated power in the selected band is 0.00130277 Pa2 . The original OASPL
+    is 66.8890 dB and the corrected result is 65.1281 dB. The corresponding A-weighted values are
+    62.8194 and 61.0585 dBA.
+
+    Third-octave and harmonic-band powers receive the same correction for identical bins. The spectral
+    shape and comparisons between simulations processed with the same convention are preserved.
+    Comparison against independent measurements changes because the measured levels do not con-
+    tain this particular computational bias.
+
+    These are direct recalculations from the CFD pressure file, not analytical values obtained only by
+    subtracting 1.76 dB. The original 𝑆𝑘 and corrected 𝐺𝑘 arrays were generated independently and
+    their ratio was checked. This verifies the normalization correction; it does not validate the CFD
+    model, observer geometry or measurement propagation basis.
+
+
+    Internal | Draft; not yet reviewed                                                                                               08 October 2026 | 6
+                                                                              Pressure history to spectra and OASPL
+                                                                                POC2-ACOUSTICS-2026-02 | Rev. A
+
+
+
+
+7 | Power checks and reproducibility
+
+A full-frequency Parseval check distinguishes a numerical normalization error from the intended
+window weighting. For the one-segment, mean-removed signal,
+                                         Nyquist
+                                                          ∑𝑛 𝑤𝑛2 (𝑝𝑛′ )2
+                                          ∑ 𝐺𝑘 Δ𝑓 =                      .
+                                          𝑘=0
+                                                           ∑𝑛 𝑤𝑛2
+
+The frequency-domain result is 0.00145304 Pa2 , and the corresponding time-domain result is
+0.00145304 Pa2 . They agree to numerical precision. This check includes DC and all frequencies up
+to Nyquist; the 40–10 000 Hz OASPL intentionally excludes power outside that band.
+
+The unwindowed fluctuation RMS is 0.038118 Pa; the full-band Hann-normalized RMS is 0.038119
+Pa. Their small difference in this record is expected. Equality with unwindowed RMS is not guaran-
+teed for a transient signal, even after correct spectral normalization.
+
+CSV timestamps are approximately uniform. Their maximum step deviation from the mean is about
+0.0253%, consistent with finite timestamp precision; the implemented calculation uses the mean
+interval. The retained absolute interval is 1.130448–1.302701 s, with sample indices 501–23468
+(zero-based CSV data rows). No resampling was performed.
+
+
+Reproduction package
+
+The accompanying package includes the original CSV and build_figures.py, LaTeX sources and cor-
+porate assets, analysis_results.json, per-observer OASPL and per-band CSV tables, standalone
+vector figures, source-script snapshots and poc2_observer3_processing.npz. The NPZ contains the
+actual retained dimensional pressure, time, Hann weights, PSD, amplitude spectrum and additive
+bin powers. Results are generated using Python 3.11.9, SciPy 1.16.3 and NumPy 2.4.4.
+
+Input CSV, relative to DUC/results_postprocessing:
+POC2/aeroacoustics/step4/
+case-fb40c043-c99a-4cce-95cf-de9630dba98d_total_acoustics_v3.csv
+
+Run build_figures.py with the project’s configured Python interpreter.
+Compile poc2_signal_processing.tex twice with XeLaTeX. SHA-256 hashes of the complete input
+CSV and current plotting script are recorded in analysis_results.json. The earlier generic script
+is included as historical evidence of the same Hann summation error.
+
+
+References
+
+[1] SciPy, scipy.signal.welch: spectral scaling, detrending, windowing and one-sided processing. Accessed 08
+October 2026.
+https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html
+
+[2] SciPy, Signal Processing: Spectral Analysis: interpretation of amplitude spectra and power spectral densities.
+Accessed 08 October 2026.
+https://docs.scipy.org/doc/scipy/tutorial/signal.html#spectral-analysis
+
+[3] Local sources: current plot_aeroacoustics.py; original spl_spectra_calculator.py from the Downloads
+directory; POC2 step4 case identified above. Sources are preserved with this report. No simulation settings or
+production postprocessing code were changed for this report.
+
+
+
+
+Internal | Draft; not yet reviewed                                                            08 October 2026 | 7
+

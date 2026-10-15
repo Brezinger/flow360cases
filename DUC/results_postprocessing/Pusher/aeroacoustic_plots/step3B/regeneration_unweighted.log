@@ -1,0 +1,64 @@
+Acoustic sources: C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustics\step3\case-ed80b35a-78a0-413a-a8a5-5c158fb87127_total_acoustics_v3.csv, C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustics\step3B\total_acoustics_v3.csv
+Skipping 150 cfd steps = 75 acoustic samples per observer.
+  Observer 1: 1757 retained samples, 0.054926 s
+  Observer 2: 1757 retained samples, 0.054926 s
+  Observer 3: 1763 retained samples, 0.055114 s
+  Observer 4: 1760 retained samples, 0.055020 s
+  Observer 5: 1756 retained samples, 0.054895 s
+Loaded case-ed80b35a-78a0-413a-a8a5-5c158fb87127_total_acoustics_v3.csv: 25806 samples, revolutions=all, rpm=2186.000, steps/rev=1756, sample_rate=31988.465 Hz, rho=1.183912 kg/m^3, T=298.150 K, a=346.148434 m/s, L_grid_unit=0.001 m, U_ref=242.652428 m/s, pressure_scale=gamma*p_inf=141854.900 Pa
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\case-ed80b35a-78a0-413a-a8a5-5c158fb87127_oaspl_unweighted_observers_1_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\a-weighted\case-ed80b35a-78a0-413a-a8a5-5c158fb87127_oaspl_a_weighted_observers_1_5.png
+OASPL values for case-ed80b35a-78a0-413a-a8a5-5c158fb87127 (40–10000 Hz):
+  Observer 1: 62.80 dB, 63.23 dBA
+  Observer 2: 65.37 dB, 62.35 dBA
+  Observer 3: 75.72 dB, 65.49 dBA
+  Observer 4: 71.89 dB, 62.76 dBA
+  Observer 5: 60.43 dB, 60.29 dBA
+  Observer 1 analysis: 2.00 rev, df=18.206 Hz, ENBW=27.309 Hz, 1 Welch segment(s); 1 empty and 5 sparsely sampled third-octave bands.
+  Observer 2 analysis: 2.00 rev, df=18.206 Hz, ENBW=27.309 Hz, 1 Welch segment(s); 1 empty and 5 sparsely sampled third-octave bands.
+  Observer 3 analysis: 2.01 rev, df=18.144 Hz, ENBW=27.217 Hz, 1 Welch segment(s); 1 empty and 5 sparsely sampled third-octave bands.
+  Observer 4 analysis: 2.00 rev, df=18.175 Hz, ENBW=27.263 Hz, 1 Welch segment(s); 1 empty and 5 sparsely sampled third-octave bands.
+  Observer 5 analysis: 2.00 rev, df=18.217 Hz, ENBW=27.325 Hz, 1 Welch segment(s); 1 empty and 5 sparsely sampled third-octave bands.
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrum_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\psd_spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\psd_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\psd_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\psd_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\psd_spectrum_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\harmonic_content_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\harmonic_content_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\harmonic_content_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\harmonic_content_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\harmonic_content_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\third_octave_spectrum_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\third_octave_spectrum_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\third_octave_spectrum_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\third_octave_spectrum_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\third_octave_spectrum_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\pressure_time_history_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\pressure_time_history_observer_5.png
+Skipping surface-resolved plots: combined total files have no combined surface dataset.
+Skipping surface-resolved plots: combined total files have no combined surface dataset.
+Skipping surface-resolved plots: combined total files have no combined surface dataset.
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\average_pressure_time_history_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\average_pressure_time_history_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\average_pressure_time_history_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\average_pressure_time_history_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\average_pressure_time_history_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_total_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_loading_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_1.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_total_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_loading_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_2.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_total_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_loading_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_3.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_total_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_loading_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_4.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_total_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_5.png
+Wrote C:\git\flow360cases\DUC\results_postprocessing\Pusher\aeroacoustic_plots\step3B\unweighted\spectrogram_loading_pressure_case-ed80b35a-78a0-413a-a8a5-5c158fb87127_observer_5.png
